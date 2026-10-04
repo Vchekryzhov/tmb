@@ -28,75 +28,66 @@ tmb <host> <command...>
 
 ### Всё вместе: кто где стоит
 
-```
-┌────────────────────────────── Mac ──────────────────────────────┐
-│                                                                  │
-│  opencode (агент)                                                │
-│      │                                                           │
-│      │  tmb nas systemctl restart …                             │
-│      ▼                                                           │
-│  ask-диалог ─── ты видишь ПОЛНУЮ команду ─── y                  │
-│      │                                                           │
-│      ▼                                                           │
-│  ssh-keygen -U ──► агент Secretive ──► Secure Enclave           │
-│  сертификат:           │                🔒 CA-ключ              │
-│  команда внутри,    🖐 Touch ID         (не покидает чип)        │
-│  TTL 60 c               │                                       │
-│      └────────────► журнал                                       │
-│                                                                  │
-│  локальный sudo: pam_tid ──► 🖐 Touch ID (на каждую команду)     │
-└──────────────┬──────────────────────────┬───────────────────────┘
-               │ ssh + сертификат         │ ssh + сертификат
-               ▼                          ▼
-┌──── omen_local ────┐      ┌──────── nas (DSM 7) ─────────┐
-│ sshd:              │      │ sshd:                        │
-│  доверяет CA        │      │  доверяет CA                 │
-│  PermitRootLogin    │      │  PermitRootLogin             │
-│  forced-commands-   │      │  forced-commands-only        │
-│  only               │      │  + Task Scheduler (boot):    │
-│  выполняет от root  │      │    восстанавливает конфиг    │
-│  1 раз              │      │    после обновлений DSM      │
-└────────────────────┘      └──────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph MAC["Mac"]
+        AGENT["opencode (агент)"]
+        ASK["ask-диалог<br/>👀 полная команда → y"]
+        TMB["tmb + ssh-keygen -U<br/>сертификат: команда внутри, TTL 60 с"]
+        SEC["Secretive (ssh-агент)"]
+        SE["🔒 Secure Enclave<br/>CA-ключ — не покидает чип"]
+        JOURNAL["журнал<br/>(дата · поверхность · команда · исход)"]
+        PAM["pam_tid — локальный sudo<br/>🖐 каждая команда = касание"]
+        AGENT -->|"tmb nas …"| ASK --> TMB
+        TMB -->|"подпиши"| SEC
+        SEC -->|"🖐 Touch ID на каждую подпись"| SE
+        TMB --> JOURNAL
+    end
+
+    subgraph OMEN["omen_local"]
+        SSHD1["sshd: доверяет CA<br/>PermitRootLogin forced-commands-only<br/>выполняет от root ровно 1 раз"]
+    end
+
+    subgraph NAS["nas (DSM 7)"]
+        SSHD2["sshd: как на omen_local<br/>+ Task Scheduler (boot):<br/>чинит конфиг после обновлений DSM"]
+    end
+
+    TMB -->|"ssh + сертификат"| SSHD1
+    TMB -->|"ssh + сертификат"| SSHD2
+    AGENT -.->|"sudo (локально)"| PAM
 ```
 
 ### Путь удалённой команды, по секундам
 
-```
-агент     opencode      tmb +          Secretive +       nas
-          (ask)         ssh-keygen     Secure Enclave    (sshd)
- │            │             │                │              │
- │─ tmb nas … │             │                │              │
- │───────────▶│             │                │              │
- │            │  показать   │                │              │
- │            │  команду ──▶│ 👀 ты          │              │
- │            │             │                │              │
- │            │      y ────▶│                │              │
- │            │             │─ подпишу ─────▶│              │
- │            │             │                │ 🖐 палец      │
- │            │             │◀─ подпись ─────│              │
- │            │             │ =сертификат    │              │
- │            │             │─ ssh + cert ─────────────────▶│
- │            │             │                │   выполнит    │
- │            │             │                │   ТОЛЬКО то,  │
- │            │             │                │   что внутри  │
- │            │             │◀─ вывод ───────┼───────────────│
- │◀─ результат─│             │                │              │
- │            │             └─► запись в журнал              │
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as агент
+    participant O as opencode (ask)
+    participant T as tmb + ssh-keygen
+    participant S as Secretive / Secure Enclave
+    participant N as nas (sshd)
+
+    A->>O: tmb nas systemctl restart …
+    O->>O: показывает ПОЛНУЮ команду
+    Note over O: 👀 ты смотришь — жмёшь y
+    T->>S: подпишу сертификат
+    Note over S: 🖐 Touch ID
+    S-->>T: подпись = сертификат<br/>(команда внутри, TTL 60 с)
+    T->>N: ssh + сертификат
+    Note over N: выполняет ТОЛЬКО то,<br/>что внутри конверта
+    N-->>T: вывод, код возврата
+    T-->>A: результат агенту
+    T->>T: запись в журнал
 ```
 
 ### Локальная команда на Mac
 
-```
-агент ── sudo whoami ──▶ opencode: показать команду ──▶ y
-                              │
-                              ▼
-                        macOS: pam_tid
-                              │
-                          🖐 Touch ID
-                              │
-                              ▼
-                        результат от root
-                (кэша нет: каждая команда = касание)
+```mermaid
+flowchart LR
+    A["агент:<br/>sudo whoami"] --> O["opencode:<br/>показать команду → y"]
+    O --> P["macOS: pam_tid"]
+    P -->|"🖐 Touch ID"| R["результат от root<br/>кэша нет: каждая команда = касание"]
 ```
 
 ## Поверхности
