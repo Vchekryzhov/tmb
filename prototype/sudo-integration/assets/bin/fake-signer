@@ -1,0 +1,64 @@
+#!/usr/bin/python3
+# PROTOTYPE fake trusted signer (throwaway): stand-in for the future Mac /
+# Touch ID signer (issues #2, #3). Transport is out of scope, so the approval
+# plugin invokes it as a local command. Behaviour is driven by
+# /usr/local/tmb/etc/signer-mode: approve | deny | timeout.
+# The crypto is real: it signs with the per-run ed25519 TEST private key.
+import base64
+import json
+import os
+import sys
+import time
+
+sys.path.insert(0, "/usr/local/tmb/lib")
+import tmb_common as tmb  # noqa: E402
+from cryptography.hazmat.primitives import serialization  # noqa: E402
+
+
+def log(msg):
+    print("[fake-signer] %s" % msg, file=sys.stderr, flush=True)
+
+
+def main():
+    if len(sys.argv) != 3 or sys.argv[1] != "decide":
+        print("usage: fake-signer decide '<request-json>'", file=sys.stderr)
+        sys.exit(2)
+    cfg = tmb.load_config()
+    request = json.loads(sys.argv[2])
+    with open(os.path.join(tmb.ETC, "signer-mode")) as f:
+        mode = f.read().strip()
+    tmb.audit(cfg, "signer-call", "mode=%s request=%s" % (mode, sys.argv[2]))
+    log("human decision pending (mode=%s); displayed request: %s" % (
+        mode, json.dumps(request, sort_keys=True)))
+
+    if mode == "approve":
+        time.sleep(1.5)  # simulate the human looking, then touching
+        payload = {
+            "request_id": "auto-%s" % os.urandom(4).hex(),
+            "hostname": request["hostname"],
+            "runas_user": request["runas_user"],
+            "program": request["program"],
+            "argv": request["argv"],
+            "issued_at": int(time.time()),
+            "expires_at": int(time.time()) + 120,
+        }
+        with open(cfg["signer_key"], "rb") as f:
+            key = serialization.load_pem_private_key(f.read(), password=None)
+        sig = key.sign(tmb.canonical(payload))
+        log("approved by human: signing permission for the exact request")
+        print(json.dumps(
+            {"payload": payload, "sig": base64.b64encode(sig).decode()}))
+        sys.exit(0)
+    if mode == "deny":
+        log("denied by human")
+        sys.exit(1)
+    if mode == "timeout":
+        time.sleep(6)
+        log("timed out: no human decision")
+        sys.exit(124)
+    log("unknown mode %r" % mode)
+    sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()

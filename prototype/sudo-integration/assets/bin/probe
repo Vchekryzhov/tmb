@@ -1,0 +1,17 @@
+#!/usr/bin/python3
+# PROTOTYPE probe (throwaway): prints exact argv elements, euid and stdin
+# status so the matrix can prove no-shell argv handling.
+import os
+import sys
+
+print("PROBE pid=%d euid=%d" % (os.getpid(), os.geteuid()))
+for i, a in enumerate(sys.argv):
+    print("argv[%d]=%r" % (i, a))
+try:
+    data = os.read(0, 1)
+    if data == b"":
+        print("stdin=EOF (closed/null)")
+    else:
+        print("stdin=DATA %r" % data)
+except OSError as e:
+    print("stdin=ERROR %s" % e)

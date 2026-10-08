@@ -1,0 +1,501 @@
+#!/usr/bin/python3
+# PROTOTYPE scenario matrix runner (throwaway, issue #1). The runner IS the
+# demo: it executes every scenario through REAL sudo, surfaces full state
+# after each one (permission JSON, redemption dir, audit tail, exit codes,
+# key output lines) and exits non-zero when any expected-reject unexpectedly
+# succeeds or any expected-allow fails.
+#
+# Usage: run-matrix phase1   (fresh container, scenarios 0-9)
+#        run-matrix phase2   (after `docker restart`, crash-resilience replay)
+import base64
+import json
+import os
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, "/usr/local/tmb/lib")
+import tmb_common as tmb  # noqa: E402
+
+BIN = "/usr/local/tmb/bin"
+STATE = "/var/lib/tmb-proto"
+RESULTS = []
+
+
+# ---------- plumbing ----------------------------------------------------------
+
+def banner(t):
+    print("\n" + "=" * 72 + "\n%s\n" % t + "=" * 72, flush=True)
+
+
+def record(name, ok, detail=""):
+    RESULTS.append((name, bool(ok)))
+    print("  [%s] %s%s" % ("PASS" if ok else "FAIL", name,
+                           (" - " + detail) if (detail and not ok) else ""))
+
+
+def sh(argv, *, input=None, env=None, timeout=120):
+    return subprocess.run(argv, input=input, capture_output=True, text=True,
+                          env=env, timeout=timeout,
+                          stdin=None if input is not None else subprocess.DEVNULL)
+
+
+def env_for(perm_b64=None):
+    e = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+         "HOME": "/root", "LANG": "C.UTF-8"}
+    if perm_b64:
+        e["TMB_PERMISSION"] = perm_b64
+    return e
+
+
+def sudo_agent(argv, perm_b64=None):
+    # the "agent" stand-in: unprivileged user, no password, no tty
+    return sh(["runuser", "-u", "agent", "--", "sudo", "-n", "--"] + argv,
+              env=env_for(perm_b64))
+
+
+def popen_agent(argv, perm_b64=None):
+    return subprocess.Popen(
+        ["runuser", "-u", "agent", "--", "sudo", "-n", "--"] + argv,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        stdin=subprocess.DEVNULL, env=env_for(perm_b64))
+
+
+def human_sudo(argv, password="human-pass-1"):
+    # the normal human path: classic password sudo (sudo -S, piped password)
+    return sh(["runuser", "-u", "viktor", "--", "sudo", "-S", "--"] + argv,
+              input=password + "\n")
+
+
+def mkperm(rid, **kw):
+    args = [BIN + "/tmb-mkperm", rid]
+    for k, v in kw.items():
+        args += ["--" + k.replace("_", "-"), str(v)]
+    r = sh(args)
+    if r.returncode != 0:
+        raise RuntimeError("tmb-mkperm failed: %s%s" % (r.stdout, r.stderr))
+    b64 = r.stdout.strip()
+    return b64, tmb.envelope_from_b64(b64)
+
+
+def audit_lines():
+    try:
+        with open(os.path.join(STATE, "audit.log")) as f:
+            return [l.rstrip("\n") for l in f]
+    except FileNotFoundError:
+        return []
+
+
+def audit_mark(name):
+    tmb.audit(tmb.load_config(), "scenario", name)
+    return len(audit_lines())
+
+
+def redeemed():
+    d = os.path.join(STATE, "redeemed")
+    return sorted(os.listdir(d)) if os.path.isdir(d) else []
+
+
+def show_state(extra=()):
+    print("  [redeemed] %s" % redeemed())
+    for f in extra:
+        print("  [%s] exists=%s" % (f, os.path.exists("/tmp/" + f)))
+    for l in audit_lines()[-8:]:
+        print("  [audit] %s" % l)
+
+
+def show_perm(name, env):
+    p = dict(env)
+    p["sig"] = env["sig"][:24] + "...<real-ed25519>"
+    print("  [perm %s] %s" % (name, json.dumps(p, sort_keys=True)))
+
+
+def run_res(r, label):
+    print("  [%s] exit=%d" % (label, r.returncode))
+    for l in (r.stdout or "").strip().splitlines()[:14]:
+        print("  [%s out] %s" % (label, l))
+    for l in (r.stderr or "").strip().splitlines()[:8]:
+        print("  [%s err] %s" % (label, l))
+
+
+def set_signer_mode(mode):
+    with open("/usr/local/tmb/etc/signer-mode", "w") as f:
+        f.write(mode + "\n")
+
+
+def now():
+    return int(time.time())
+
+
+# ---------- scenarios ---------------------------------------------------------
+
+def s0_environment():
+    banner("SCENARIO 0: real sudo version and available plugin mechanisms")
+    r = sh(["sudo", "--version"])
+    where = sh(["sh", "-c", "command -v sudo"]).stdout.strip()
+    print("  [sudo binary] %s" % where)
+    for l in r.stdout.splitlines()[:2]:
+        print("  [sudo] %s" % l)
+    q = sh(["dpkg-query", "-W", "-f=${Package}=${Version} ",
+            "sudo", "python3-cryptography"])
+    print("  [dpkg (distro baseline)] %s" % q.stdout.strip())
+    py = sh(["python3", "-c",
+             "import cryptography,sys;print('python=%s cryptography=%s'%("
+             "sys.version.split()[0],cryptography.__version__))"])
+    print("  [%s]" % py.stdout.strip())
+    distro_plugs = sorted(os.listdir("/usr/libexec/sudo"))
+    print("  [distro /usr/libexec/sudo] %s" % distro_plugs)
+    print("  [distro python plugin?] %s" % (
+        "python_plugin.so" in distro_plugs))
+    ours = sorted(os.listdir("/usr/local/libexec/sudo"))
+    print("  [source-built /usr/local/libexec/sudo] %s" % ours)
+    with open("/etc/sudo.conf") as f:
+        active = [l.strip() for l in f
+                  if l.strip() and not l.strip().startswith("#")]
+    print("  [sudo.conf active lines] %s" % active)
+    record("0: sudo >= 1.9 present",
+           r.stdout.startswith("Sudo version 1.9") or
+           r.stdout.startswith("Sudo version 2."), r.stdout[:40])
+    record("0: python plugin .so exists (source-built, --enable-python)",
+           "python_plugin.so" in ours)
+    record("0: approval plugin registered in sudo.conf",
+           any(l.startswith("Plugin python_approval ") for l in active))
+    print("  [setup] %s" % sh([BIN + "/tmbkeygen"]).stdout.strip())
+    cfg = tmb.load_config()
+    print("  [config] %s" % json.dumps(cfg, sort_keys=True))
+    for f in ("/tmp/pwned", "/tmp/tmb-dangerous-ran"):
+        if os.path.exists(f):
+            os.unlink(f)
+
+
+def s1_happy():
+    banner("SCENARIO 1: happy path - valid permission runs exact program+argv once")
+    mark = audit_mark("s1")
+    words = ["hello world", "two  spaces", "$(touch /tmp/pwned)"]
+    b64, env = mkperm("req-001", program=BIN + "/probe",
+                      argv_json=json.dumps(words), ttl=120)
+    show_perm("req-001", env)
+    with open(STATE + "/artifacts/req-001.perm", "w") as f:
+        f.write(b64)
+    t0 = time.time()
+    r = sudo_agent([BIN + "/probe"] + words, b64)
+    dt = time.time() - t0
+    run_res(r, "sudo")
+    out = r.stdout
+    record("1: runs once as root, exit 0",
+           r.returncode == 0 and "euid=0" in out)
+    record("1: spaces arg stays ONE argv element",
+           "argv[1]='hello world'" in out and "argv[2]='two  spaces'" in out)
+    record("1: no shell - metachar arg literal, /tmp/pwned absent",
+           "argv[3]='$(touch /tmp/pwned)'" in out and
+           not os.path.exists("/tmp/pwned"))
+    record("1: stdin closed for the child", "stdin=EOF" in out)
+    record("1: consumed before launch (claim exists)",
+           "req-001" in redeemed())
+    record("1: no signer roundtrip for presented permission",
+           not any("signer-call" in l for l in audit_lines()[mark:]))
+    record("1: no approval dialog (fast silent path)", dt < 10)
+    show_state(["pwned"])
+
+
+def s2_replay():
+    banner("SCENARIO 2: replay of consumed permission (same container)")
+    mark = audit_mark("s2")
+    with open(STATE + "/artifacts/req-001.perm") as f:
+        b64 = f.read()
+    before = redeemed()
+    r = sudo_agent([BIN + "/probe", "hello world", "two  spaces",
+                    "$(touch /tmp/pwned)"], b64)
+    run_res(r, "sudo")
+    record("2: replay rejected (non-zero exit)",
+           r.returncode != 0 and "PROBE" not in r.stdout)
+    record("2: reason is redemption, not sudoers",
+           any("already redeemed" in l for l in audit_lines()[mark:]))
+    record("2: redemption set unchanged", redeemed() == before)
+    show_state()
+
+
+def s3_tamper():
+    banner("SCENARIO 3: field tampering / forgery / expiry - each rejected")
+    mark = audit_mark("s3")
+    cases = []
+
+    b64, env = mkperm("t-host", program=BIN + "/probe", argv_json='["x"]',
+                      hostname="other-host")
+    cases.append(("wrong hostname", b64, env, [BIN + "/probe", "x"],
+                  "hostname mismatch"))
+
+    b64, env = mkperm("t-runas", program=BIN + "/probe", argv_json='["x"]',
+                      runas="nobody")
+    cases.append(("wrong run-as user", b64, env, [BIN + "/probe", "x"],
+                  "runas mismatch"))
+
+    b64, env = mkperm("t-prog", program="/usr/bin/true", argv_json='["x"]')
+    cases.append(("wrong program", b64, env, [BIN + "/probe", "x"],
+                  "program mismatch"))
+
+    b64, env = mkperm("t-extra", program=BIN + "/probe", argv_json='["x"]')
+    cases.append(("argv extra element", b64, env,
+                  [BIN + "/probe", "x", "EXTRA"], "argv mismatch"))
+
+    b64, env = mkperm("t-split", program=BIN + "/probe", argv_json='["a b"]')
+    cases.append(("argv split attempt (one signed arg vs two given)", b64, env,
+                  [BIN + "/probe", "a", "b"], "argv mismatch"))
+
+    b64, env = mkperm("t-sig", program=BIN + "/probe", argv_json='["x"]')
+    forged = json.loads(json.dumps(env))
+    forged["payload"]["argv"] = ["evil"]  # payload changed, signature kept
+    cases.append(("tampered payload (signature mismatch)",
+                  tmb.envelope_to_b64(forged), forged,
+                  [BIN + "/probe", "evil"], "signature mismatch"))
+
+    b64, env = mkperm("t-exp", program=BIN + "/probe", argv_json='["x"]',
+                      issued_at=now() - 3600, expires_at=now() - 5)
+    cases.append(("expired TTL", b64, env, [BIN + "/probe", "x"], "expired"))
+
+    for name, b64, env, cmd, reason in cases:
+        show_perm(name, env)
+        r = sudo_agent(cmd, b64)
+        run_res(r, "sudo")
+        audit_new = audit_lines()[mark:]
+        ok = (r.returncode != 0 and "PROBE" not in r.stdout and
+              any(reason in l for l in audit_new))
+        record("3: reject: %s (%s)" % (name, reason), ok)
+    record("3: no auto re-approval for invalid permissions",
+           not any("signer-call" in l for l in audit_lines()[mark:]))
+    show_state()
+
+
+def s4_concurrency():
+    banner("SCENARIO 4: two parallel sudo attempts with the same permission")
+    audit_mark("s4")
+    b64, env = mkperm("req-race", program=BIN + "/probe", argv_json='["race"]')
+    show_perm("req-race", env)
+    p1 = popen_agent([BIN + "/probe", "race"], b64)
+    p2 = popen_agent([BIN + "/probe", "race"], b64)
+    o1, e1 = p1.communicate()
+    o2, e2 = p2.communicate()
+    print("  [sudo A] exit=%d out=%r err=%r" % (p1.returncode, o1.strip()[:60], e1.strip()[-160:]))
+    print("  [sudo B] exit=%d out=%r err=%r" % (p2.returncode, o2.strip()[:60], e2.strip()[-160:]))
+    codes = sorted([p1.returncode, p2.returncode])
+    winners = sum("PROBE" in o for o in (o1, o2))
+    record("4: EXACTLY one attempt executes", codes[0] == 0 and codes[1] != 0 and winners == 1)
+    record("4: loser rejected by redemption",
+           "already redeemed" in (e1 + e2) or
+           any("already redeemed" in l for l in audit_lines()))
+    record("4: single claim for the permission id",
+           redeemed().count("req-race") == 1)
+    show_state()
+
+
+def s6_sudoers_preserved():
+    banner("SCENARIO 6: sudoers policy preserved; human password sudo intact")
+    mark = audit_mark("s6")
+    # 6a: command NOT in sudoers is rejected even with a VALID permission
+    b64, env = mkperm("req-danger", program=BIN + "/dangerous",
+                      argv_json=json.dumps(["should", "not", "run"]))
+    show_perm("req-danger (validly signed!)", env)
+    r = sudo_agent([BIN + "/dangerous", "should", "not", "run"], b64)
+    run_res(r, "sudo")
+    record("6: sudoers rejects forbidden command despite valid permission",
+           r.returncode != 0 and not os.path.exists("/tmp/tmb-dangerous-ran"))
+    record("6: approval plugin never consulted (policy rejected first)",
+           not any("dangerous" in l for l in audit_lines()[mark:]
+                   if " check " in l))
+    # 6b: normal human password sudo
+    r = human_sudo(["/usr/bin/id"])
+    run_res(r, "human sudo -S id")
+    record("6: human password sudo works (uid=0)", r.returncode == 0 and "uid=0(root)" in r.stdout)
+    # 6c: human runs a TMB-governed program WITHOUT any permission
+    r = human_sudo([BIN + "/probe", "human direct"])
+    run_res(r, "human sudo probe")
+    record("6: human path untouched by TMB gating (no permission needed)",
+           r.returncode == 0 and "argv[1]='human direct'" in r.stdout)
+    record("6: plugin logged skip for human invoker",
+           any("skip" in l and "viktor" in l for l in audit_lines()[mark:]))
+    # 6d: wrong human password rejected
+    r = human_sudo(["/usr/bin/id"], password="totally-wrong")
+    record("6: wrong password rejected", r.returncode != 0)
+    show_state(["tmb-dangerous-ran"])
+
+
+def s7_interpreter():
+    banner("SCENARIO 7: explicit interpreter runs as ordinary program+argv")
+    mark = audit_mark("s7")
+    argv = [BIN + "/script.py", "arg with spaces"]
+    b64, env = mkperm("req-py", program="/usr/bin/python3",
+                      argv_json=json.dumps(argv))
+    show_perm("req-py", env)
+    r = sudo_agent(["/usr/bin/python3"] + argv, b64)
+    run_res(r, "sudo")
+    # python sets sys.argv[0] to the script path; the interpreter itself is
+    # proven by sys.executable and by the plugin audit of run_argv
+    record("7: interpreter+script executes exactly",
+           r.returncode == 0 and
+           "executable=/usr/bin/python3" in r.stdout and
+           "argv[0]='" + BIN + "/script.py'" in r.stdout and
+           "argv[1]='arg with spaces'" in r.stdout and
+           "stdin=EOF" in r.stdout)
+    record("7: sudo ran interpreter+script as the exact run_argv",
+           any("approve req-py argv=['/usr/bin/python3'" in l
+               for l in audit_lines()[mark:]))
+    show_state()
+
+
+def s8_signer_paths():
+    banner("SCENARIO 8: no permission - wait for fake signer decision")
+    mark = audit_mark("s8")
+    # approve
+    set_signer_mode("approve")
+    t0 = time.time()
+    r = sudo_agent([BIN + "/probe", "from-signer-approve"])
+    dt = time.time() - t0
+    run_res(r, "sudo")
+    record("8: signer APPROVE -> command runs",
+           r.returncode == 0 and "argv[1]='from-signer-approve'" in r.stdout)
+    record("8: sudo actually waited for the human decision", dt >= 1.4)
+    record("8: auto permission redeemed",
+           any(c.startswith("auto-") for c in redeemed()))
+    # deny
+    set_signer_mode("deny")
+    r = sudo_agent([BIN + "/probe", "from-signer-deny"])
+    run_res(r, "sudo")
+    record("8: signer DENY -> reject",
+           r.returncode != 0 and "PROBE" not in r.stdout)
+    # timeout
+    set_signer_mode("timeout")
+    r = sudo_agent([BIN + "/probe", "from-signer-timeout"])
+    run_res(r, "sudo")
+    record("8: signer TIMEOUT -> reject",
+           r.returncode != 0 and "PROBE" not in r.stdout)
+    set_signer_mode("approve")
+    # invalid permission must NOT trigger a new approval request
+    mark2 = audit_mark("s8-expired")
+    b64, env = mkperm("t-exp2", program=BIN + "/probe", argv_json='["x"]',
+                      issued_at=now() - 600, expires_at=now() - 300)
+    r = sudo_agent([BIN + "/probe", "x"], b64)
+    new = audit_lines()[mark2:]
+    record("8: expired permission -> reject, never auto re-request",
+           r.returncode != 0 and "PROBE" not in r.stdout and
+           any("expired" in l and "reject" in l for l in new) and
+           not any("signer-call" in l for l in new))
+    show_state()
+
+
+def s9_dispatcher():
+    banner("SCENARIO 9: hook (b) NOPASSWD dispatcher - reduced matrix")
+    audit_mark("s9")
+    # happy path with spaces in argv
+    b64, env = mkperm("disp-001", program=BIN + "/probe",
+                      argv_json=json.dumps(["disp one", "disp  two"]))
+    show_perm("disp-001", env)
+    with open(STATE + "/artifacts/disp-001.perm", "w") as f:
+        f.write(b64)
+    r = sudo_agent([BIN + "/tmb-dispatch", b64])
+    run_res(r, "sudo tmb-dispatch")
+    record("9b: dispatcher exec's exact program+argv (single execution)",
+           r.returncode == 0 and
+           "argv[1]='disp one'" in r.stdout and
+           "argv[2]='disp  two'" in r.stdout)
+    record("9b: dispatcher closes stdin for the child", "stdin=EOF" in r.stdout)
+    # replay
+    r = sudo_agent([BIN + "/tmb-dispatch", b64])
+    record("9b: replay rejected",
+           r.returncode != 0 and "PROBE" not in r.stdout)
+    # concurrency
+    b64r, envr = mkperm("disp-race", program=BIN + "/probe", argv_json='["race"]')
+    p1 = popen_agent([BIN + "/tmb-dispatch", b64r])
+    p2 = popen_agent([BIN + "/tmb-dispatch", b64r])
+    o1, e1 = p1.communicate()
+    o2, e2 = p2.communicate()
+    print("  [dispatch A] exit=%d" % p1.returncode)
+    print("  [dispatch B] exit=%d" % p2.returncode)
+    codes = sorted([p1.returncode, p2.returncode])
+    record("9b: concurrency -> EXACTLY one executes",
+           codes[0] == 0 and codes[1] != 0 and
+           sum("PROBE" in o for o in (o1, o2)) == 1)
+    # expired
+    b64e, _ = mkperm("disp-exp", program=BIN + "/probe", argv_json='["x"]',
+                     issued_at=now() - 120, expires_at=now() - 60)
+    r = sudo_agent([BIN + "/tmb-dispatch", b64e])
+    record("9b: expired permission rejected",
+           r.returncode != 0 and "PROBE" not in r.stdout)
+    # THE documented tradeoff: sudoers cannot see the target command
+    b64d, envd = mkperm("disp-danger", program=BIN + "/dangerous",
+                        argv_json='["ran","via","dispatcher"]')
+    show_perm("disp-danger (validly signed, target NOT in sudoers)", envd)
+    r = sudo_agent([BIN + "/tmb-dispatch", b64d])
+    run_res(r, "sudo tmb-dispatch")
+    record("9b: TRADEOFF proven - sudoers sees only the dispatcher, "
+           "so a valid permission for a non-sudoers command runs",
+           r.returncode == 0 and os.path.exists("/tmp/tmb-dangerous-ran"))
+    if os.path.exists("/tmp/tmb-dangerous-ran"):
+        os.unlink("/tmp/tmb-dangerous-ran")
+    show_state()
+
+
+def phase1():
+    s0_environment()
+    s1_happy()
+    s2_replay()
+    s3_tamper()
+    s4_concurrency()
+    s6_sudoers_preserved()
+    s7_interpreter()
+    s8_signer_paths()
+    s9_dispatcher()
+    summary()
+
+
+def phase2():
+    banner("PHASE 2: after `docker restart` - crash resilience of redemption")
+    mark = audit_mark("phase2")
+    cfg = tmb.load_config()
+    print("  [host] configured=%s actual=%s" % (cfg["hostname"],
+                                                __import__("socket").gethostname()))
+    print("  [redeemed survived restart] %s" % redeemed())
+    record("P2: redemption state persisted across container restart",
+           "req-001" in redeemed() and "disp-001" in redeemed())
+    with open(STATE + "/artifacts/req-001.perm") as f:
+        b64 = f.read()
+    r = sudo_agent([BIN + "/probe", "hello world", "two  spaces",
+                    "$(touch /tmp/pwned)"], b64)
+    run_res(r, "replay req-001")
+    record("P2: replay after restart rejected",
+           r.returncode != 0 and "PROBE" not in r.stdout and
+           any("already redeemed" in l for l in audit_lines()[mark:]))
+    with open(STATE + "/artifacts/disp-001.perm") as f:
+        b64d = f.read()
+    r = sudo_agent([BIN + "/tmb-dispatch", b64d])
+    record("P2: dispatcher replay after restart rejected",
+           r.returncode != 0 and "PROBE" not in r.stdout)
+    # a NEW permission still works after restart (store is alive, not bricked)
+    b64n, envn = mkperm("req-post-restart", program=BIN + "/probe",
+                        argv_json='["fresh after restart"]')
+    show_perm("req-post-restart", envn)
+    r = sudo_agent([BIN + "/probe", "fresh after restart"], b64n)
+    run_res(r, "sudo")
+    record("P2: fresh permission works after restart",
+           r.returncode == 0 and "argv[1]='fresh after restart'" in r.stdout)
+    show_state()
+    summary()
+
+
+def summary():
+    banner("SUMMARY: %d checks, %d passed, %d failed" % (
+        len(RESULTS), sum(1 for _, ok in RESULTS if ok),
+        sum(1 for _, ok in RESULTS if not ok)))
+    width = max(len(n) for n, _ in RESULTS) if RESULTS else 0
+    for name, ok in RESULTS:
+        print("  [%s] %s" % ("PASS" if ok else "FAIL", name.ljust(width)))
+    failed = [n for n, ok in RESULTS if not ok]
+    if failed:
+        print("\nFAILED CHECKS: %s" % failed)
+        sys.exit(1)
+    print("\nALL CHECKS PASSED")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2 or sys.argv[1] not in ("phase1", "phase2"):
+        raise SystemExit("usage: run-matrix phase1|phase2")
+    (phase1 if sys.argv[1] == "phase1" else phase2)()

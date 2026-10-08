@@ -1,0 +1,48 @@
+#!/usr/bin/python3
+# PROTOTYPE helper (throwaway): mint a signed permission envelope with the
+# per-run TEST key. The matrix uses the override flags to build tamper cases.
+import argparse
+import base64
+import json
+import sys
+import time
+
+sys.path.insert(0, "/usr/local/tmb/lib")
+import tmb_common as tmb  # noqa: E402
+from cryptography.hazmat.primitives import serialization  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("request_id")
+    ap.add_argument("--program", required=True)
+    ap.add_argument("--argv-json", default="[]")
+    ap.add_argument("--hostname")
+    ap.add_argument("--runas")
+    ap.add_argument("--ttl", type=int, default=120)
+    ap.add_argument("--issued-at", type=int)
+    ap.add_argument("--expires-at", type=int)
+    a = ap.parse_args()
+    cfg = tmb.load_config()
+    now = int(time.time())
+    payload = {
+        "request_id": a.request_id,
+        "hostname": a.hostname or cfg["hostname"],
+        "runas_user": a.runas or cfg["runas_user"],
+        "program": a.program,
+        "argv": json.loads(a.argv_json),
+        "issued_at": a.issued_at if a.issued_at is not None else now,
+        "expires_at": a.expires_at if a.expires_at is not None else now + a.ttl,
+    }
+    with open(cfg["signer_key"], "rb") as f:
+        key = serialization.load_pem_private_key(f.read(), password=None)
+    if not isinstance(key, Ed25519PrivateKey):
+        raise SystemExit("test key is not ed25519")
+    sig = key.sign(tmb.canonical(payload))
+    envelope = {"payload": payload, "sig": base64.b64encode(sig).decode()}
+    print(tmb.envelope_to_b64(envelope))
+
+
+if __name__ == "__main__":
+    main()

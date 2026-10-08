@@ -1,0 +1,10 @@
+#!/usr/bin/python3
+# PROTOTYPE stand-in for a forbidden privileged command (throwaway): it must
+# stay unreachable through the agent's sudoers rules, and (only) reachable
+# through the dispatcher tradeoff demo.
+import os
+import sys
+
+print("DANGEROUS executed as euid=%d argv=%r" % (os.geteuid(), sys.argv))
+with open("/tmp/tmb-dangerous-ran", "w") as f:
+    f.write("ran\n")

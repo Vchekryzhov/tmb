@@ -1,0 +1,18 @@
+# PROTOTYPE sudoers (throwaway, test-only, lives only inside the disposable
+# container). Sudoers stays THE policy for both paths: hook (a) approval
+# plugin layers TMB checks on top of real target-command rules; hook (b)
+# dispatcher hides the target behind a single wrapper entry.
+# /usr/local/tmb/bin/dangerous is deliberately NOT allowed here.
+Defaults !lecture
+Defaults !fqdn
+Defaults env_keep += "TMB_PERMISSION"
+
+# normal human path: classic password sudo, kept intact by TMB
+viktor ALL=(ALL:ALL) ALL
+
+# agent path, hook (a): sudoers sees the real target commands
+agent ALL=(root) NOPASSWD: /usr/local/tmb/bin/probe *
+agent ALL=(root) NOPASSWD: /usr/bin/python3 /usr/local/tmb/bin/script.py *
+
+# agent path, hook (b): sudoers sees only the dispatcher wrapper
+agent ALL=(root) NOPASSWD: /usr/local/tmb/bin/tmb-dispatch *

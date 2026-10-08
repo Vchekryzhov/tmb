@@ -1,0 +1,313 @@
+
+========================================================================
+SCENARIO 0: real sudo version and available plugin mechanisms
+========================================================================
+  [sudo binary] /usr/local/bin/sudo
+  [sudo] Sudo version 1.9.17p1
+  [sudo] Configure options: --enable-python --sysconfdir=/etc --without-sendmail
+  [dpkg (distro baseline)] python3-cryptography=41.0.7-4ubuntu0.4 sudo=1.9.15p5-3ubuntu5.24.04.4
+  [python=3.12.3 cryptography=41.0.7]
+  [distro /usr/libexec/sudo] ['audit_json.so', 'group_file.so', 'libsudo_util.so', 'libsudo_util.so.0', 'libsudo_util.so.0.0.0', 'sesh', 'sudo_intercept.so', 'sudo_noexec.so', 'sudoers.so', 'system_group.so']
+  [distro python plugin?] False
+  [source-built /usr/local/libexec/sudo] ['audit_json.la', 'audit_json.so', 'group_file.la', 'group_file.so', 'libsudo_util.la', 'libsudo_util.so', 'libsudo_util.so.0', 'libsudo_util.so.0.0.0', 'python_plugin.la', 'python_plugin.so', 'sudo_intercept.la', 'sudo_intercept.so', 'sudo_noexec.la', 'sudo_noexec.so', 'sudoers.la', 'sudoers.so', 'system_group.la', 'system_group.so']
+  [sudo.conf active lines] ['Plugin python_approval /usr/local/libexec/sudo/python_plugin.so ModulePath=/usr/local/tmb/lib/tmb_approval.py ClassName=TmbApprovalPlugin']
+  [PASS] 0: sudo >= 1.9 present
+  [PASS] 0: python plugin .so exists (source-built, --enable-python)
+  [PASS] 0: approval plugin registered in sudo.conf
+  [setup] [keygen] per-run ed25519 test keypair generated in /usr/local/tmb/etc
+[keygen] config: agent=agent human=viktor runas=root hostname=tmbproto
+  [config] {"agent_user": "agent", "dispatcher_path": "/usr/local/tmb/bin/tmb-dispatch", "hostname": "tmbproto", "human_user": "viktor", "runas_user": "root", "signer_key": "/usr/local/tmb/etc/signer_key.pem", "signer_path": "/usr/local/tmb/bin/fake-signer", "signer_timeout_s": 20, "state_dir": "/var/lib/tmb-proto", "trusted_pubkey": "/usr/local/tmb/etc/signer_pub.pem"}
+
+========================================================================
+SCENARIO 1: happy path - valid permission runs exact program+argv once
+========================================================================
+  [perm req-001] {"payload": {"argv": ["hello world", "two  spaces", "$(touch /tmp/pwned)"], "expires_at": 1791487853, "hostname": "tmbproto", "issued_at": 1791487733, "program": "/usr/local/tmb/bin/probe", "request_id": "req-001", "runas_user": "root"}, "sig": "sya1s+IDa6562peIXWLgwlyq...<real-ed25519>"}
+  [sudo] exit=0
+  [sudo out] PROBE pid=21 euid=0
+  [sudo out] argv[0]='/usr/local/tmb/bin/probe'
+  [sudo out] argv[1]='hello world'
+  [sudo out] argv[2]='two  spaces'
+  [sudo out] argv[3]='$(touch /tmp/pwned)'
+  [sudo out] stdin=EOF (closed/null)
+  [PASS] 1: runs once as root, exit 0
+  [PASS] 1: spaces arg stays ONE argv element
+  [PASS] 1: no shell - metachar arg literal, /tmp/pwned absent
+  [PASS] 1: stdin closed for the child
+  [PASS] 1: consumed before launch (claim exists)
+  [PASS] 1: no signer roundtrip for presented permission
+  [PASS] 1: no approval dialog (fast silent path)
+  [redeemed] ['req-001']
+  [pwned] exists=False
+  [audit] 1791487733.679 scenario s1
+  [audit] 1791487733.775 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'hello world', 'two  spaces', '$(touch /tmp/pwned)'] runas=root perm=present
+  [audit] 1791487733.829 redeem-ok req-001 consumed before launch
+  [audit] 1791487733.829 approve req-001 argv=['/usr/local/tmb/bin/probe', 'hello world', 'two  spaces', '$(touch /tmp/pwned)']
+
+========================================================================
+SCENARIO 2: replay of consumed permission (same container)
+========================================================================
+  [sudo] exit=1
+  [PASS] 2: replay rejected (non-zero exit)
+  [PASS] 2: reason is redemption, not sudoers
+  [PASS] 2: redemption set unchanged
+  [redeemed] ['req-001']
+  [audit] 1791487733.679 scenario s1
+  [audit] 1791487733.775 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'hello world', 'two  spaces', '$(touch /tmp/pwned)'] runas=root perm=present
+  [audit] 1791487733.829 redeem-ok req-001 consumed before launch
+  [audit] 1791487733.829 approve req-001 argv=['/usr/local/tmb/bin/probe', 'hello world', 'two  spaces', '$(touch /tmp/pwned)']
+  [audit] 1791487733.862 scenario s2
+  [audit] 1791487733.914 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'hello world', 'two  spaces', '$(touch /tmp/pwned)'] runas=root perm=present
+  [audit] 1791487733.965 redeem-deny req-001 already redeemed
+  [audit] 1791487733.965 reject redemption: already redeemed
+
+========================================================================
+SCENARIO 3: field tampering / forgery / expiry - each rejected
+========================================================================
+  [perm wrong hostname] {"payload": {"argv": ["x"], "expires_at": 1791487854, "hostname": "other-host", "issued_at": 1791487734, "program": "/usr/local/tmb/bin/probe", "request_id": "t-host", "runas_user": "root"}, "sig": "LH8qvMR+iEnepT19oqvgSc37...<real-ed25519>"}
+  [sudo] exit=1
+  [PASS] 3: reject: wrong hostname (hostname mismatch)
+  [perm wrong run-as user] {"payload": {"argv": ["x"], "expires_at": 1791487854, "hostname": "tmbproto", "issued_at": 1791487734, "program": "/usr/local/tmb/bin/probe", "request_id": "t-runas", "runas_user": "nobody"}, "sig": "BcHAhGilzBqbf1qbGVyGtdFb...<real-ed25519>"}
+  [sudo] exit=1
+  [PASS] 3: reject: wrong run-as user (runas mismatch)
+  [perm wrong program] {"payload": {"argv": ["x"], "expires_at": 1791487854, "hostname": "tmbproto", "issued_at": 1791487734, "program": "/usr/bin/true", "request_id": "t-prog", "runas_user": "root"}, "sig": "EAx7P6DscygtmZA+MJ7wl7rx...<real-ed25519>"}
+  [sudo] exit=1
+  [PASS] 3: reject: wrong program (program mismatch)
+  [perm argv extra element] {"payload": {"argv": ["x"], "expires_at": 1791487854, "hostname": "tmbproto", "issued_at": 1791487734, "program": "/usr/local/tmb/bin/probe", "request_id": "t-extra", "runas_user": "root"}, "sig": "waEc/vDuAMtClUI26fW7xznx...<real-ed25519>"}
+  [sudo] exit=1
+  [PASS] 3: reject: argv extra element (argv mismatch)
+  [perm argv split attempt (one signed arg vs two given)] {"payload": {"argv": ["a b"], "expires_at": 1791487854, "hostname": "tmbproto", "issued_at": 1791487734, "program": "/usr/local/tmb/bin/probe", "request_id": "t-split", "runas_user": "root"}, "sig": "f5lC8wNe2y+v5dtQDn6JxO1W...<real-ed25519>"}
+  [sudo] exit=1
+  [PASS] 3: reject: argv split attempt (one signed arg vs two given) (argv mismatch)
+  [perm tampered payload (signature mismatch)] {"payload": {"argv": ["evil"], "expires_at": 1791487854, "hostname": "tmbproto", "issued_at": 1791487734, "program": "/usr/local/tmb/bin/probe", "request_id": "t-sig", "runas_user": "root"}, "sig": "DratsBAdlXNzRySBulmsXs8V...<real-ed25519>"}
+  [sudo] exit=1
+  [PASS] 3: reject: tampered payload (signature mismatch) (signature mismatch)
+  [perm expired TTL] {"payload": {"argv": ["x"], "expires_at": 1791487729, "hostname": "tmbproto", "issued_at": 1791484134, "program": "/usr/local/tmb/bin/probe", "request_id": "t-exp", "runas_user": "root"}, "sig": "rLST0DhPz4dEl0U530P3v+FB...<real-ed25519>"}
+  [sudo] exit=1
+  [PASS] 3: reject: expired TTL (expired)
+  [PASS] 3: no auto re-approval for invalid permissions
+  [redeemed] ['req-001']
+  [audit] 1791487734.787 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'x', 'EXTRA'] runas=root perm=present
+  [audit] 1791487734.819 reject verification: argv mismatch: perm=['x'] actual=['x', 'EXTRA']
+  [audit] 1791487734.859 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'a', 'b'] runas=root perm=present
+  [audit] 1791487734.887 reject verification: argv mismatch: perm=['a b'] actual=['a', 'b']
+  [audit] 1791487734.927 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'evil'] runas=root perm=present
+  [audit] 1791487734.961 reject verification: signature mismatch
+  [audit] 1791487735.005 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'x'] runas=root perm=present
+  [audit] 1791487735.040 reject verification: expired (now=1791487735 exp=1791487729)
+
+========================================================================
+SCENARIO 4: two parallel sudo attempts with the same permission
+========================================================================
+  [perm req-race] {"payload": {"argv": ["race"], "expires_at": 1791487855, "hostname": "tmbproto", "issued_at": 1791487735, "program": "/usr/local/tmb/bin/probe", "request_id": "req-race", "runas_user": "root"}, "sig": "30GLy7DB1BHrwxO10xFh8+MT...<real-ed25519>"}
+  [sudo A] exit=1 out='' err=''
+  [sudo B] exit=0 out="PROBE pid=50 euid=0\nargv[0]='/usr/local/tmb/bin/probe'\nargv[" err=''
+  [PASS] 4: EXACTLY one attempt executes
+  [PASS] 4: loser rejected by redemption
+  [PASS] 4: single claim for the permission id
+  [redeemed] ['req-001', 'req-race']
+  [audit] 1791487735.040 reject verification: expired (now=1791487735 exp=1791487729)
+  [audit] 1791487735.055 scenario s4
+  [audit] 1791487735.311 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'race'] runas=root perm=present
+  [audit] 1791487735.311 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'race'] runas=root perm=present
+  [audit] 1791487735.398 redeem-deny req-race already redeemed
+  [audit] 1791487735.398 reject redemption: already redeemed
+  [audit] 1791487735.415 redeem-ok req-race consumed before launch
+  [audit] 1791487735.415 approve req-race argv=['/usr/local/tmb/bin/probe', 'race']
+
+========================================================================
+SCENARIO 6: sudoers policy preserved; human password sudo intact
+========================================================================
+  [perm req-danger (validly signed!)] {"payload": {"argv": ["should", "not", "run"], "expires_at": 1791487855, "hostname": "tmbproto", "issued_at": 1791487735, "program": "/usr/local/tmb/bin/dangerous", "request_id": "req-danger", "runas_user": "root"}, "sig": "kOZq7x7XPUo7axw3Hi5OvGI1...<real-ed25519>"}
+  [sudo] exit=1
+  [sudo err] sudo: a password is required
+  [PASS] 6: sudoers rejects forbidden command despite valid permission
+  [PASS] 6: approval plugin never consulted (policy rejected first)
+  [human sudo -S id] exit=0
+  [human sudo -S id out] uid=0(root) gid=0(root) groups=0(root)
+  [human sudo -S id err] Password:
+  [PASS] 6: human password sudo works (uid=0)
+  [human sudo probe] exit=0
+  [human sudo probe out] PROBE pid=59 euid=0
+  [human sudo probe out] argv[0]='/usr/local/tmb/bin/probe'
+  [human sudo probe out] argv[1]='human direct'
+  [human sudo probe out] stdin=EOF (closed/null)
+  [human sudo probe err] Password:
+  [PASS] 6: human path untouched by TMB gating (no permission needed)
+  [PASS] 6: plugin logged skip for human invoker
+  [PASS] 6: wrong password rejected
+  [redeemed] ['req-001', 'req-race']
+  [tmb-dangerous-ran] exists=False
+  [audit] 1791487735.311 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'race'] runas=root perm=present
+  [audit] 1791487735.398 redeem-deny req-race already redeemed
+  [audit] 1791487735.398 reject redemption: already redeemed
+  [audit] 1791487735.415 redeem-ok req-race consumed before launch
+  [audit] 1791487735.415 approve req-race argv=['/usr/local/tmb/bin/probe', 'race']
+  [audit] 1791487735.526 scenario s6
+  [audit] 1791487735.745 skip invoker 'viktor' is not the TMB agent user
+  [audit] 1791487735.799 skip invoker 'viktor' is not the TMB agent user
+
+========================================================================
+SCENARIO 7: explicit interpreter runs as ordinary program+argv
+========================================================================
+  [perm req-py] {"payload": {"argv": ["/usr/local/tmb/bin/script.py", "arg with spaces"], "expires_at": 1791487855, "hostname": "tmbproto", "issued_at": 1791487735, "program": "/usr/bin/python3", "request_id": "req-py", "runas_user": "root"}, "sig": "7/rppRTsjjB1ZNes2faOJhZb...<real-ed25519>"}
+  [sudo] exit=0
+  [sudo out] SCRIPT pid=65 euid=0 executable=/usr/bin/python3
+  [sudo out] argv[0]='/usr/local/tmb/bin/script.py'
+  [sudo out] argv[1]='arg with spaces'
+  [sudo out] stdin=EOF (closed/null)
+  [PASS] 7: interpreter+script executes exactly
+  [PASS] 7: sudo ran interpreter+script as the exact run_argv
+  [redeemed] ['req-001', 'req-py', 'req-race']
+  [audit] 1791487735.415 approve req-race argv=['/usr/local/tmb/bin/probe', 'race']
+  [audit] 1791487735.526 scenario s6
+  [audit] 1791487735.745 skip invoker 'viktor' is not the TMB agent user
+  [audit] 1791487735.799 skip invoker 'viktor' is not the TMB agent user
+  [audit] 1791487735.839 scenario s7
+  [audit] 1791487735.944 check invoker=agent argv=['/usr/bin/python3', '/usr/local/tmb/bin/script.py', 'arg with spaces'] runas=root perm=present
+  [audit] 1791487735.983 redeem-ok req-py consumed before launch
+  [audit] 1791487735.983 approve req-py argv=['/usr/bin/python3', '/usr/local/tmb/bin/script.py', 'arg with spaces']
+
+========================================================================
+SCENARIO 8: no permission - wait for fake signer decision
+========================================================================
+  [sudo] exit=0
+  [sudo out] PROBE pid=69 euid=0
+  [sudo out] argv[0]='/usr/local/tmb/bin/probe'
+  [sudo out] argv[1]='from-signer-approve'
+  [sudo out] stdin=EOF (closed/null)
+  [PASS] 8: signer APPROVE -> command runs
+  [PASS] 8: sudo actually waited for the human decision
+  [PASS] 8: auto permission redeemed
+  [sudo] exit=1
+  [PASS] 8: signer DENY -> reject
+  [sudo] exit=1
+  [PASS] 8: signer TIMEOUT -> reject
+  [PASS] 8: expired permission -> reject, never auto re-request
+  [redeemed] ['auto-d61bca55', 'req-001', 'req-py', 'req-race']
+  [audit] 1791487738.211 reject signer decision: no permission (deny/timeout)
+  [audit] 1791487738.348 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'from-signer-timeout'] runas=root perm=absent
+  [audit] 1791487738.452 signer-call mode=timeout request={"hostname": "tmbproto", "runas_user": "root", "program": "/usr/local/tmb/bin/probe", "argv": ["from-signer-timeout"]}
+  [audit] 1791487744.505 signer-deny rc=124 stderr='[fake-signer] human decision pending (mode=timeout); displayed request: {"argv": ["from-signer-timeout"], "hostname": "tmbproto", "program": "/usr/local/tmb/bin/probe", "runas_user": "root"}\n[fake-sig'
+  [audit] 1791487744.507 reject signer decision: no permission (deny/timeout)
+  [audit] 1791487744.533 scenario s8-expired
+  [audit] 1791487744.643 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'x'] runas=root perm=present
+  [audit] 1791487744.669 reject verification: expired (now=1791487744 exp=1791487444)
+
+========================================================================
+SCENARIO 9: hook (b) NOPASSWD dispatcher - reduced matrix
+========================================================================
+  [perm disp-001] {"payload": {"argv": ["disp one", "disp  two"], "expires_at": 1791487864, "hostname": "tmbproto", "issued_at": 1791487744, "program": "/usr/local/tmb/bin/probe", "request_id": "disp-001", "runas_user": "root"}, "sig": "XVABTtYhs8gRz/+vokj/cLjH...<real-ed25519>"}
+  [sudo tmb-dispatch] exit=0
+  [sudo tmb-dispatch out] PROBE pid=82 euid=0
+  [sudo tmb-dispatch out] argv[0]='/usr/local/tmb/bin/probe'
+  [sudo tmb-dispatch out] argv[1]='disp one'
+  [sudo tmb-dispatch out] argv[2]='disp  two'
+  [sudo tmb-dispatch out] stdin=EOF (closed/null)
+  [sudo tmb-dispatch err] [tmb-dispatch] approved /usr/local/tmb/bin/probe ['disp one', 'disp  two']; exec'ing (single execution)
+  [PASS] 9b: dispatcher exec's exact program+argv (single execution)
+  [PASS] 9b: dispatcher closes stdin for the child
+  [PASS] 9b: replay rejected
+  [dispatch A] exit=1
+  [dispatch B] exit=0
+  [PASS] 9b: concurrency -> EXACTLY one executes
+  [PASS] 9b: expired permission rejected
+  [perm disp-danger (validly signed, target NOT in sudoers)] {"payload": {"argv": ["ran", "via", "dispatcher"], "expires_at": 1791487865, "hostname": "tmbproto", "issued_at": 1791487745, "program": "/usr/local/tmb/bin/dangerous", "request_id": "disp-danger", "runas_user": "root"}, "sig": "AifqrYahr5B5N5C/HF5tyX++...<real-ed25519>"}
+  [sudo tmb-dispatch] exit=0
+  [sudo tmb-dispatch out] DANGEROUS executed as euid=0 argv=['/usr/local/tmb/bin/dangerous', 'ran', 'via', 'dispatcher']
+  [sudo tmb-dispatch err] [tmb-dispatch] approved /usr/local/tmb/bin/dangerous ['ran', 'via', 'dispatcher']; exec'ing (single execution)
+  [PASS] 9b: TRADEOFF proven - sudoers sees only the dispatcher, so a valid permission for a non-sudoers command runs
+  [redeemed] ['auto-d61bca55', 'disp-001', 'disp-danger', 'disp-race', 'req-001', 'req-py', 'req-race']
+  [audit] 1791487744.895 redeem-deny disp-001 already redeemed
+  [audit] 1791487745.008 skip dispatcher-mode invocation
+  [audit] 1791487745.008 skip dispatcher-mode invocation
+  [audit] 1791487745.060 redeem-ok disp-race consumed before launch
+  [audit] 1791487745.065 redeem-deny disp-race already redeemed
+  [audit] 1791487745.188 skip dispatcher-mode invocation
+  [audit] 1791487745.315 skip dispatcher-mode invocation
+  [audit] 1791487745.354 redeem-ok disp-danger consumed before launch
+
+========================================================================
+SUMMARY: 44 checks, 44 passed, 0 failed
+========================================================================
+  [PASS] 0: sudo >= 1.9 present                                                                                      
+  [PASS] 0: python plugin .so exists (source-built, --enable-python)                                                 
+  [PASS] 0: approval plugin registered in sudo.conf                                                                  
+  [PASS] 1: runs once as root, exit 0                                                                                
+  [PASS] 1: spaces arg stays ONE argv element                                                                        
+  [PASS] 1: no shell - metachar arg literal, /tmp/pwned absent                                                       
+  [PASS] 1: stdin closed for the child                                                                               
+  [PASS] 1: consumed before launch (claim exists)                                                                    
+  [PASS] 1: no signer roundtrip for presented permission                                                             
+  [PASS] 1: no approval dialog (fast silent path)                                                                    
+  [PASS] 2: replay rejected (non-zero exit)                                                                          
+  [PASS] 2: reason is redemption, not sudoers                                                                        
+  [PASS] 2: redemption set unchanged                                                                                 
+  [PASS] 3: reject: wrong hostname (hostname mismatch)                                                               
+  [PASS] 3: reject: wrong run-as user (runas mismatch)                                                               
+  [PASS] 3: reject: wrong program (program mismatch)                                                                 
+  [PASS] 3: reject: argv extra element (argv mismatch)                                                               
+  [PASS] 3: reject: argv split attempt (one signed arg vs two given) (argv mismatch)                                 
+  [PASS] 3: reject: tampered payload (signature mismatch) (signature mismatch)                                       
+  [PASS] 3: reject: expired TTL (expired)                                                                            
+  [PASS] 3: no auto re-approval for invalid permissions                                                              
+  [PASS] 4: EXACTLY one attempt executes                                                                             
+  [PASS] 4: loser rejected by redemption                                                                             
+  [PASS] 4: single claim for the permission id                                                                       
+  [PASS] 6: sudoers rejects forbidden command despite valid permission                                               
+  [PASS] 6: approval plugin never consulted (policy rejected first)                                                  
+  [PASS] 6: human password sudo works (uid=0)                                                                        
+  [PASS] 6: human path untouched by TMB gating (no permission needed)                                                
+  [PASS] 6: plugin logged skip for human invoker                                                                     
+  [PASS] 6: wrong password rejected                                                                                  
+  [PASS] 7: interpreter+script executes exactly                                                                      
+  [PASS] 7: sudo ran interpreter+script as the exact run_argv                                                        
+  [PASS] 8: signer APPROVE -> command runs                                                                           
+  [PASS] 8: sudo actually waited for the human decision                                                              
+  [PASS] 8: auto permission redeemed                                                                                 
+  [PASS] 8: signer DENY -> reject                                                                                    
+  [PASS] 8: signer TIMEOUT -> reject                                                                                 
+  [PASS] 8: expired permission -> reject, never auto re-request                                                      
+  [PASS] 9b: dispatcher exec's exact program+argv (single execution)                                                 
+  [PASS] 9b: dispatcher closes stdin for the child                                                                   
+  [PASS] 9b: replay rejected                                                                                         
+  [PASS] 9b: concurrency -> EXACTLY one executes                                                                     
+  [PASS] 9b: expired permission rejected                                                                             
+  [PASS] 9b: TRADEOFF proven - sudoers sees only the dispatcher, so a valid permission for a non-sudoers command runs
+
+ALL CHECKS PASSED
+
+========================================================================
+PHASE 2: after `docker restart` - crash resilience of redemption
+========================================================================
+  [host] configured=tmbproto actual=tmbproto
+  [redeemed survived restart] ['auto-d61bca55', 'disp-001', 'disp-danger', 'disp-race', 'req-001', 'req-py', 'req-race']
+  [PASS] P2: redemption state persisted across container restart
+  [replay req-001] exit=1
+  [PASS] P2: replay after restart rejected
+  [PASS] P2: dispatcher replay after restart rejected
+  [perm req-post-restart] {"payload": {"argv": ["fresh after restart"], "expires_at": 1791487866, "hostname": "tmbproto", "issued_at": 1791487746, "program": "/usr/local/tmb/bin/probe", "request_id": "req-post-restart", "runas_user": "root"}, "sig": "Nz9/s3ethHPeuFe0kUmSPVwJ...<real-ed25519>"}
+  [sudo] exit=0
+  [sudo out] PROBE pid=21 euid=0
+  [sudo out] argv[0]='/usr/local/tmb/bin/probe'
+  [sudo out] argv[1]='fresh after restart'
+  [sudo out] stdin=EOF (closed/null)
+  [PASS] P2: fresh permission works after restart
+  [redeemed] ['auto-d61bca55', 'disp-001', 'disp-danger', 'disp-race', 'req-001', 'req-post-restart', 'req-py', 'req-race']
+  [audit] 1791487746.770 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'hello world', 'two  spaces', '$(touch /tmp/pwned)'] runas=root perm=present
+  [audit] 1791487746.811 redeem-deny req-001 already redeemed
+  [audit] 1791487746.811 reject redemption: already redeemed
+  [audit] 1791487746.869 skip dispatcher-mode invocation
+  [audit] 1791487746.934 redeem-deny disp-001 already redeemed
+  [audit] 1791487747.057 check invoker=agent argv=['/usr/local/tmb/bin/probe', 'fresh after restart'] runas=root perm=present
+  [audit] 1791487747.094 redeem-ok req-post-restart consumed before launch
+  [audit] 1791487747.094 approve req-post-restart argv=['/usr/local/tmb/bin/probe', 'fresh after restart']
+
+========================================================================
+SUMMARY: 4 checks, 4 passed, 0 failed
+========================================================================
+  [PASS] P2: redemption state persisted across container restart
+  [PASS] P2: replay after restart rejected                      
+  [PASS] P2: dispatcher replay after restart rejected           
+  [PASS] P2: fresh permission works after restart               
+
+ALL CHECKS PASSED

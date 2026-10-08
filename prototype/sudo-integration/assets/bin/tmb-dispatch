@@ -1,0 +1,50 @@
+#!/usr/bin/python3
+# PROTOTYPE hook (b): NOPASSWD dispatcher (throwaway, issue #1).
+#
+# sudoers allows ONLY this wrapper for the agent user, so sudoers cannot see
+# the target command (the documented tradeoff of this hook). The dispatcher
+# verifies the signed permission with real crypto, redeems it atomically and
+# durably BEFORE launch, then exec()s the requested program+argv - single
+# execution: os.execv replaces this process, no gateway double-run, no shell.
+# stdin is closed for the child; env/cwd are explicitly out of scope.
+import os
+import sys
+
+sys.path.insert(0, "/usr/local/tmb/lib")
+import tmb_common as tmb  # noqa: E402
+
+
+def fail(reason):
+    print("[tmb-dispatch] REJECT: %s" % reason, file=sys.stderr)
+    sys.exit(1)
+
+
+def main():
+    if os.geteuid() != 0:
+        fail("dispatcher must be started via sudo")
+    if len(sys.argv) != 2:
+        fail("usage: tmb-dispatch <base64-envelope>")
+    cfg = tmb.load_config()
+    ok, reason, payload = tmb.verify_envelope_b64(sys.argv[1], cfg)
+    if not ok:
+        fail("verification: %s" % reason)
+    # payload defines the target itself; run-as binding is config-driven and
+    # sudoers pins this wrapper to (root)
+    import pwd
+    if pwd.getpwuid(os.geteuid()).pw_name != cfg["runas_user"]:
+        fail("dispatcher euid does not match configured run-as user")
+    ok, reason = tmb.redeem(cfg, payload["request_id"])
+    if not ok:
+        fail("redemption: %s" % reason)
+    print("[tmb-dispatch] approved %s %r; exec'ing (single execution)" % (
+        payload["program"], payload["argv"]), file=sys.stderr)
+    # stdin closed for the child (contract)
+    fd = os.open("/dev/null", os.O_RDONLY)
+    os.dup2(fd, 0)
+    os.close(fd)
+    argv = [payload["program"]] + list(payload["argv"])
+    os.execv(argv[0], argv)
+
+
+if __name__ == "__main__":
+    main()

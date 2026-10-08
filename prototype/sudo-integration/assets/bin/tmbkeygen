@@ -1,0 +1,53 @@
+#!/usr/bin/python3
+# PROTOTYPE per-run ed25519 test keypair + TMB config (throwaway).
+# Keys are generated fresh inside the disposable container for every run of
+# ./run.sh and never leave it. Hosts/users come from this config, not hardcoded.
+import json
+import os
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+ETC = "/usr/local/tmb/etc"
+
+
+def write(path, data, mode):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    os.write(fd, data)
+    os.close(fd)
+
+
+def main():
+    os.makedirs(ETC, exist_ok=True)
+    key = Ed25519PrivateKey.generate()
+    priv = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption())
+    pub = key.public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo)
+    write(os.path.join(ETC, "signer_key.pem"), priv, 0o600)
+    write(os.path.join(ETC, "signer_pub.pem"), pub, 0o644)
+    config = {
+        "agent_user": "agent",
+        "human_user": "viktor",
+        "runas_user": "root",
+        "hostname": "tmbproto",
+        "trusted_pubkey": os.path.join(ETC, "signer_pub.pem"),
+        "signer_key": os.path.join(ETC, "signer_key.pem"),
+        "state_dir": "/var/lib/tmb-proto",
+        "signer_path": "/usr/local/tmb/bin/fake-signer",
+        "signer_timeout_s": 20,
+        "dispatcher_path": "/usr/local/tmb/bin/tmb-dispatch",
+    }
+    write(os.path.join(ETC, "tmb.json"), json.dumps(config, indent=2).encode(), 0o644)
+    write(os.path.join(ETC, "signer-mode"), b"approve\n", 0o644)
+    print("[keygen] per-run ed25519 test keypair generated in %s" % ETC)
+    print("[keygen] config: agent=%s human=%s runas=%s hostname=%s" % (
+        config["agent_user"], config["human_user"], config["runas_user"],
+        config["hostname"]))
+
+
+if __name__ == "__main__":
+    main()
