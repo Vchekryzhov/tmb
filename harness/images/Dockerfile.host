@@ -7,8 +7,10 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/tmb-broker ./cmd/tmb-broker
 
 FROM ubuntu:24.04
 RUN apt-get update \
- && apt-get install -y --no-install-recommends sudo procps \
+ && apt-get install -y --no-install-recommends sudo procps netcat-openbsd \
  && rm -rf /var/lib/apt/lists/*
+# netcat-openbsd: O1 control listener (`nc -l -p 19999`) raised by
+# run-openshell.sh inside host-sim (ticket #9); harmless for run-pair.sh.
 # dedicated group matching the sandbox user gid (socket group perms)
 RUN groupadd -g 4242 tmb
 # human user with normal password sudo - used to prove sudo stays untouched

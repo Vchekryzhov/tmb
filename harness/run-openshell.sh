@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # PROTOTYPE runner - throwaway PoC, not production.
 #
-# run-openshell.sh: ticket #8 - raises the FULL OpenShell topology from
-# scratch on macOS + Docker Desktop:
+# run-openshell.sh: tickets #8 + #9 - raises the FULL OpenShell topology
+# from scratch on macOS + Docker Desktop:
 #
 #   Mac (gateway, native binary, :17670)
 #    -> Docker Desktop VM
@@ -31,6 +31,14 @@
 # Everything is logged to last-openshell-run.log (tee'd). Certificates are
 # generated per run into a temp dir; the CA key never enters any image.
 # Idempotent: pre-clean removes leftovers from previous runs first.
+#
+# Ticket #9 adds the policy-as-a-switch scenarios on the SAME live sandbox:
+# O1 (a/b/c) egress denied to an unpublished port with a positive control
+# (one-shot `nc -l -p $NC_PORT` inside host-sim, port published like the
+# broker's), O2 (b/c) the single rule removed/restored by hot-reload, O4 the
+# gateway restarted (brew services) - the policy and the deny-by-default
+# posture must survive; a restart that drops the sandbox is handled by
+# recreating it (container identity is not the property under test).
 
 set -u
 cd "$(dirname "$0")"
@@ -45,6 +53,7 @@ OPENCODE_IMAGE_REF=ghcr.io/anomalyco/opencode@sha256:6911572e4a9b3ead5e4086b40e2
 SERVER_NAME=host.openshell.internal
 TLS_PORT=17600                 # broker TLS listener (published on 0.0.0.0 of the VM)
 GW_REACH_PORT=17671            # VM-loopback forwarder port -> Mac gateway :17670
+NC_PORT=19999                  # O1: one-shot control listener, published like TLS_PORT
 TTL=3
 
 RUNID=$(date +%s)-$$
@@ -127,7 +136,7 @@ sbx_exec() {
 }
 
 # =============================================================================
-log "TMB OPENSHELL RUNNER: ticket #8 topology ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+log "TMB OPENSHELL RUNNER: tickets #8 + #9 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
 docker version --format 'docker {{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})' || fatal "docker not reachable"
 command -v openssl >/dev/null || fatal "openssl is required on the harness host"
 command -v python3 >/dev/null || fatal "python3 is required (Docker Desktop settings + policy merge)"
@@ -380,9 +389,10 @@ docker run --rm --entrypoint sh "$IMG_SBX" -c 'command -v tmb && tmb -h >/dev/nu
 # -----------------------------------------------------------------------------
 log "STAGE 5: topology up (host-sim broker + sandbox + single rule)"
 
-echo "-- host-sim: broker host, TLS port $TLS_PORT published on ALL VM interfaces"
+echo "-- host-sim: broker host, TLS port $TLS_PORT + O1 control port $NC_PORT published on ALL VM interfaces"
 retry docker run -d --name "$HOST" \
   -p "${TLS_PORT}:${TLS_PORT}" \
+  -p "${NC_PORT}:${NC_PORT}" \
   -v "$SOCK_VOL":/run/tmb \
   -v "$STATE_VOL":/var/lib/tmb-proto \
   -v "$TD/ca.crt":/etc/tmb/certs/ca.crt:ro \
@@ -526,6 +536,210 @@ if [ "$(cat "$OUT_FILE" 2>/dev/null)" = "0" ]; then
 else
   bad "O3: /run/tmb mount count is '$(cat "$OUT_FILE" 2>/dev/null)', want 0"
 fi
+
+# =============================================================================
+# Ticket #9: policy as a switch. Every scenario below runs on the SAME live
+# sandbox raised above; the only knob turned in between is its network policy
+# (hot-reload via `openshell policy set --wait`). Broker stays mock-approve.
+
+stderr_has() { if grep -q "$2" "$ERR_FILE" 2>/dev/null; then ok "$1"; else bad "$1 (stderr lacks '$2')"; fi; }
+
+# policy_set_net MODE : hot-reload network_policies on $SBX, preserving the
+# runtime filesystem section (full-replacement `policy set`, same recipe as
+# the initial hot-add). Modes: "single" -> only the broker rule (steady
+# state), "two" -> broker rule + the $NC_PORT control endpoint (O1b),
+# "none" -> empty network section = deny-by-default everywhere (O2b).
+policy_set_net() {
+  local mode=$1
+  timeout 30 openshell policy get "$SBX" --full -o json > "$TD/policy-live.json" 2>/dev/null || return 1
+  python3 - "$TD/policy-live.json" "$TD/policy-next.json" "$mode" "$TLS_PORT" "$NC_PORT" <<'PYEOF' || return 1
+import json, sys
+src, dst, mode, port, ncport = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5])
+doc = json.load(open(src))["policy"]
+eps = [{"host": "host.openshell.internal", "port": port, "protocol": "tcp", "tls": "skip"}]
+if mode == "two":
+    eps.append({"host": "host.openshell.internal", "port": ncport, "protocol": "tcp", "tls": "skip"})
+doc["network_policies"] = {} if mode == "none" else {
+    "tmb": {"endpoints": eps, "binaries": [{"path": "/usr/local/bin/tmb"}]}}
+json.dump(doc, open(dst, "w"), indent=1)
+PYEOF
+  timeout 90 openshell policy set "$SBX" --policy "$TD/policy-next.json" --wait >/dev/null 2>&1 || return 1
+  sleep 1   # let enforcement settle before the next attempt
+}
+
+# start_nc NAME : one-shot `nc -l -p $NC_PORT` inside host-sim (published on
+# the VM interfaces exactly like the broker port, so the sandbox path reaches
+# it via host.openshell.internal). Received bytes land in /tmp/NAME.bin in
+# host-sim; returns once the LISTEN socket is visible in /proc/net/tcp*.
+# netcat-openbsd accepts exactly one connection and exits on peer close.
+start_nc() {
+  local name=$1 i hex
+  docker exec "$HOST" sh -c "pkill -x nc; rm -f /tmp/$name.bin" >/dev/null 2>&1
+  sleep 0.3
+  docker exec -d "$HOST" sh -c "nc -l -p $NC_PORT > /tmp/$name.bin" || return 1
+  hex=$(printf '%04X' "$NC_PORT")
+  for i in $(seq 1 50); do
+    docker exec "$HOST" grep -Eq ":$hex 00000000:0000 0A " /proc/net/tcp /proc/net/tcp6 2>/dev/null && return 0
+    sleep 0.1
+  done
+  echo "-- nc listener on :$NC_PORT never reached LISTEN (nc missing in host-sim?)"
+  return 1
+}
+
+# nc_bytes NAME : size of the capture file inside host-sim (-1 if missing)
+nc_bytes() { docker exec "$HOST" sh -c "wc -c < /tmp/$1.bin 2>/dev/null || echo -1" | tr -d '[:space:]'; }
+
+# nc_wait_bytes NAME : wait until the capture file settles non-empty (the
+# one-shot nc flushes as the peer streams, then exits on close)
+nc_wait_bytes() {
+  local i
+  for i in $(seq 1 50); do
+    [ "$(nc_bytes "$1")" -gt 0 ] 2>/dev/null && return 0
+    sleep 0.1
+  done
+  return 0
+}
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O1a: egress to a port without a rule is denied (nc gets zero bytes)"
+
+start_nc o1a || fatal "O1a: nc listener never came up on :$NC_PORT"
+sbx_exec tmb exec --addr "$SERVER_NAME:$NC_PORT" --root -- /usr/bin/id -u
+assert_rc   "O1a: tmb exec --addr :$NC_PORT (no rule) -> exit 3" 3
+stderr_has  "O1a: stderr carries FAIL CLOSED" "FAIL CLOSED"
+sleep 1
+if [ "$(nc_bytes o1a)" = "0" ]; then
+  ok "O1a: nc received ZERO bytes (no connection reached host-sim)"
+else
+  bad "O1a: nc received $(nc_bytes o1a) bytes, want 0"
+fi
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O1b: positive control - temporary rule on :$NC_PORT lets the ClientHello through"
+
+policy_set_net two || fatal "O1b: policy set (two endpoints) failed"
+echo "-- live policy now: broker rule + $SERVER_NAME:$NC_PORT (same tmb rule, two endpoints)"
+start_nc o1b || fatal "O1b: nc listener never came up on :$NC_PORT"
+sbx_exec tmb exec --addr "$SERVER_NAME:$NC_PORT" --root -- /usr/bin/id -u
+assert_rc  "O1b: same call under the temporary rule -> still exit 3 (nc is not the broker: TLS handshake dies = transport error)" 3
+stderr_has "O1b: stderr carries FAIL CLOSED" "FAIL CLOSED"
+nc_wait_bytes o1b
+if [ "$(nc_bytes o1b)" -gt 0 ] 2>/dev/null; then
+  ok "O1b: nc received $(nc_bytes o1b) bytes (TLS ClientHello passed the rule)"
+else
+  bad "O1b: nc received 0 bytes - the temporary rule did not open the port"
+fi
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O1c: temporary rule removed -> port closed again (back to O1a posture)"
+
+policy_set_net single || fatal "O1c: policy set (back to single rule) failed"
+start_nc o1c || fatal "O1c: nc listener never came up on :$NC_PORT"
+sbx_exec tmb exec --addr "$SERVER_NAME:$NC_PORT" --root -- /usr/bin/id -u
+assert_rc   "O1c: same call after rule removal -> exit 3 again" 3
+stderr_has  "O1c: stderr carries FAIL CLOSED" "FAIL CLOSED"
+sleep 1
+if [ "$(nc_bytes o1c)" = "0" ]; then
+  ok "O1c: nc received ZERO bytes again"
+else
+  bad "O1c: nc received $(nc_bytes o1c) bytes, want 0"
+fi
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O2b: the single rule removed -> the entry point itself is gone"
+
+REQ_BEFORE=$(broker_log_count '"event":"request"')
+echo "-- broker JSONL request events before the attempt: ${REQ_BEFORE:-0}"
+policy_set_net none || fatal "O2b: policy set (empty network section) failed"
+echo "-- live policy now: network_policies empty (fs section intact)"
+sbx_exec tmb exec --root -- /usr/bin/touch /tmp/o2-marker
+assert_rc  "O2b: tmb exec with the rule removed -> exit 3" 3
+stderr_has "O2b: stderr carries FAIL CLOSED" "FAIL CLOSED"
+docker exec "$HOST" test -e /tmp/o2-marker >/dev/null 2>&1; RUNC=$?
+assert_rc "O2b: /tmp/o2-marker absent in host-sim (nothing was executed)" 1
+REQ_AFTER=$(broker_log_count '"event":"request"')
+if [ "${REQ_AFTER:-0}" = "${REQ_BEFORE:-0}" ]; then
+  ok "O2b: broker JSONL gained no request event (${REQ_BEFORE:-0} -> ${REQ_AFTER:-0})"
+else
+  bad "O2b: broker JSONL request count moved ${REQ_BEFORE:-0} -> ${REQ_AFTER:-0}"
+fi
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O2c: rule hot-added back on the SAME live sandbox -> O2a again"
+
+policy_set_net single || fatal "O2c: policy set (single rule restored) failed"
+sbx_exec tmb exec --root -- /usr/bin/id -u
+assert_rc    "O2c: tmb exec --root id -u -> exit 0 (rule restored without recreation)" 0
+assert_out_eq "O2c: stdout is exactly '0'" "0"
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O4: gateway restart - policy and deny-by-default survive"
+
+echo "-- restarting the gateway the clean way (brew service, no kill -9)"
+brew services restart openshell >/dev/null 2>&1 || fatal "O4: brew services restart failed"
+GW_OK=0
+for i in $(seq 1 12); do
+  timeout 30 openshell status 2>/dev/null | grep -q "Status: Connected" && { GW_OK=1; break; }
+  sleep 5
+done
+if [ "$GW_OK" = 1 ]; then
+  ok "O4: gateway re-Connected after brew services restart (forwarder $GWREACH kept)"
+else
+  fatal "O4: gateway never reconnected after restart"
+fi
+
+# A gateway restart may DROP running sandboxes (#8 report). If ours is gone,
+# recreate it with the SAME procedure (create + hot-add single rule): the
+# property under test is that the POLICY posture survives the restart, not
+# the container identity.
+sbx_ready() {
+  timeout 30 openshell sandbox get "$1" -o json 2>/dev/null | python3 -c 'import json,sys
+try:
+    d=json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+raise SystemExit(0 if any(c.get("type")=="Ready" and c.get("status")=="True" for c in d.get("conditions",[])) else 1)'
+}
+if sbx_ready "$SBX"; then
+  SBX_RESTART_OUTCOME="survived"
+  ok "O4: sandbox $SBX still Ready after the gateway restart"
+else
+  SBX_RESTART_OUTCOME="dropped+recreated"
+  SBX_BASE="${SBX%-r[0-9]}"
+  echo "-- sandbox $SBX was dropped by the restart - recreating (same procedure: create + hot-add single rule)"
+  NEW=""
+  for cand in "${SBX_BASE}-r3" "${SBX_BASE}-r4"; do
+    if sandbox_create "$cand"; then NEW="$cand"; break; fi
+  done
+  [ -n "$NEW" ] || fatal "O4: sandbox recreation failed"
+  timeout 60 openshell sandbox delete "$SBX" >/dev/null 2>&1 || true
+  SBX_CREATED="$NEW"; SBX="$NEW"
+  policy_set_net single || fatal "O4: policy set on the recreated sandbox failed"
+  ok "O4: sandbox recreated as $SBX (+ single rule hot-added)"
+fi
+echo "-- observed gateway-restart behavior: sandbox $SBX_RESTART_OUTCOME; policy source of truth = gateway-side sandbox state"
+
+echo "-- O4: O1a repeat - a port without a rule stays denied after the restart"
+start_nc o4a || fatal "O4: nc listener never came up on :$NC_PORT"
+sbx_exec tmb exec --addr "$SERVER_NAME:$NC_PORT" --root -- /usr/bin/id -u
+assert_rc  "O4: O1a repeat after restart -> exit 3" 3
+stderr_has "O4: O1a repeat stderr carries FAIL CLOSED" "FAIL CLOSED"
+sleep 1
+if [ "$(nc_bytes o4a)" = "0" ]; then
+  ok "O4: O1a repeat - nc received ZERO bytes"
+else
+  bad "O4: O1a repeat - nc received $(nc_bytes o4a) bytes, want 0"
+fi
+
+echo "-- O4: O2a repeat - the single rule still carries exec"
+sbx_exec tmb exec --root -- /usr/bin/id -u
+assert_rc    "O4: O2a repeat after restart -> exit 0" 0
+assert_out_eq "O4: O2a repeat stdout is exactly '0'" "0"
+
+echo "-- O4: rule removal still closes the entry point"
+policy_set_net none || fatal "O4: policy set (removal) failed"
+sbx_exec tmb exec --root -- /usr/bin/id -u
+assert_rc "O4: rule removed after restart -> exit 3 again" 3
 
 # =============================================================================
 log "SUMMARY"
