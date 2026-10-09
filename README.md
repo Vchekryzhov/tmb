@@ -154,10 +154,34 @@ sequenceDiagram
 Реестр проверок PoC (56/56): happy-путь, replay, TTL, мутация после одобрения, `sh -c`, env-контрабанда, не-абсолютный путь, чужой uid, рестарт брокера, N9.
 Подробный вердикт и остаточные риски: [VERDICT-BROKER.md](https://github.com/Vchekryzhov/tmb/blob/prototype/tmb-broker/prototype/tmb-broker/VERDICT-BROKER.md) на ветке PoC.
 
+## Вердикт OpenShell-майлстоуна
+
+Связка «песочница OpenShell → mTLS-брокер» построена и доказана живыми прогонами
+на macOS + Docker Desktop: реестр O0–O9 (политика как выключатель, изоляция
+хоста, чужие сертификат/брокер/одобрение, fail-closed при смерти брокера,
+живое одобрение с идентичностью просителя на консоли) — зелёный.
+Итог и остаточные риски: [VERDICT-OPENSHELL.md](VERDICT-OPENSHELL.md);
+решение — [ADR 0003](docs/adr/0003-sandbox-transport-tcp-mtls.md), спека —
+[issue #5](https://github.com/Vchekryzhov/tmb/issues/5).
+
+Воспроизведение одним прогоном (N-серия + docker-pair + OpenShell-риг,
+суммарный вердикт в `harness/last-full-run.log`):
+
+```bash
+bash harness/run-all.sh
+```
+
+Точечные прогоны: `harness/run.sh` (N-серия, unix-сокет),
+`harness/run-pair.sh` (docker-pair mTLS), `harness/run-openshell.sh`
+(полный OpenShell-риг). Пререквизиты и наблюдаемые детали каждого — в
+[harness/ref/README-PROTOTYPE.md](harness/ref/README-PROTOTYPE.md).
+
 ## Документы и задачи
 
 - [CONTEXT.md](CONTEXT.md) - словарь домена.
 - [ADR 0002](docs/adr/0002-standalone-tmb-broker.md) - принятое архитектурное решение.
+- [ADR 0003](docs/adr/0003-sandbox-transport-tcp-mtls.md) - транспорт песочницы: TCP endpoint + mTLS-идентичность.
+- [VERDICT-OPENSHELL.md](VERDICT-OPENSHELL.md) - вердикт OpenShell-майлстоуна (реестр O0-O9).
 - [Итоги грила](docs/design/grill-results.md) - исторический первоисточник, суперседено ADR 0002.
 - [#4: MVP брокера](https://github.com/Vchekryzhov/tmb/issues/4).
 - [#2: подписант и Touch ID, будущий этап](https://github.com/Vchekryzhov/tmb/issues/2).

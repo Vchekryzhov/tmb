@@ -39,6 +39,12 @@
 # gateway restarted (brew services) - the policy and the deny-by-default
 # posture must survive; a restart that drops the sandbox is handled by
 # recreating it (container identity is not the property under test).
+#
+# Ticket #10 closes the milestone: O5 SIGKILLs the broker inside host-sim
+# (agent path fails closed, human sudo untouched) and O6 drives a live
+# `-approval manual` broker through a python3 pty - y executes and streams
+# stdout back, n denies with approval_denied_by_human; the console text and
+# the JSONL requester_fp binding are asserted from the capture.
 
 set -u
 cd "$(dirname "$0")"
@@ -136,7 +142,7 @@ sbx_exec() {
 }
 
 # =============================================================================
-log "TMB OPENSHELL RUNNER: tickets #8 + #9 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+log "TMB OPENSHELL RUNNER: tickets #8 + #9 + #10 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
 docker version --format 'docker {{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})' || fatal "docker not reachable"
 command -v openssl >/dev/null || fatal "openssl is required on the harness host"
 command -v python3 >/dev/null || fatal "python3 is required (Docker Desktop settings + policy merge)"
@@ -740,6 +746,234 @@ echo "-- O4: rule removal still closes the entry point"
 policy_set_net none || fatal "O4: policy set (removal) failed"
 sbx_exec tmb exec --root -- /usr/bin/id -u
 assert_rc "O4: rule removed after restart -> exit 3 again" 3
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O5: broker SIGKILL -> agent path FAILS CLOSED; human sudo untouched"
+
+#  O4 ends with the rule removed; restore the single rule so the O5 failure
+#  below is attributable to the dead broker, not to policy posture (N9
+#  mechanics: kill -9 inside the container, broker is NOT the main process).
+echo "-- O5: restore the single rule (O4 ended with the rule removed)"
+policy_set_net single || fatal "O5: policy set (single rule restore) failed"
+sbx_exec tmb exec --root -- /usr/bin/id -u
+assert_rc     "O5: pre-kill smoke - broker alive, exec exit 0" 0
+assert_out_eq "O5: pre-kill smoke - stdout exactly '0'" "0"
+
+echo "-- O5: SIGKILL the broker inside host-sim (pidfile first, pkill fallback)"
+docker exec "$HOST" sh -c 'pid=$(cat /var/run/tmb-broker.pid 2>/dev/null); if [ -n "$pid" ]; then kill -9 "$pid"; else pkill -KILL -x tmb-broker; fi'
+sleep 0.3
+if docker exec "$HOST" sh -c 'pgrep -x tmb-broker >/dev/null'; then
+  bad "O5: broker still running after kill -9"
+else
+  ok "O5: broker process dead (SIGKILL via pidfile)"
+fi
+
+docker exec "$HOST" rm -f /tmp/marker
+sbx_exec tmb exec --root -- /usr/bin/touch /tmp/marker
+assert_rc     "O5: broker dead -> client exits 3 (fail closed)" 3
+stderr_has    "O5: stderr carries FAIL CLOSED" "FAIL CLOSED"
+stderr_has    "O5: stderr carries 'nothing executed'" "nothing executed"
+docker exec "$HOST" test -e /tmp/marker >/dev/null 2>&1; RUNC=$?
+assert_rc "O5: /tmp/marker absent in host-sim (nothing was executed)" 1
+
+echo "-- O5: human password sudo INSIDE host-sim still works, uid=0"
+OUT_FILE=$TD/o5-sudo.out; ERR_FILE=$TD/o5-sudo.err
+docker exec -u human "$HOST" sh -c 'echo human | sudo -S id' >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc     "O5: sudo -S id as human -> exit 0" 0
+if grep -q "uid=0(root)" "$OUT_FILE" 2>/dev/null; then
+  ok "O5: sudo -S id returns uid=0(root)"
+else
+  bad "O5: sudo -S id stdout lacks 'uid=0(root)' (got '$(cat "$OUT_FILE" 2>/dev/null)')"
+fi
+PLUGIN_N=$(docker exec "$HOST" sh -c 'grep -c "^Plugin" /etc/sudo.conf; true' | tr -d '[:space:]')
+if [ "$PLUGIN_N" = "0" ]; then
+  ok "O5: /etc/sudo.conf has ZERO Plugin lines (no TMB sudo plugin)"
+else
+  bad "O5: /etc/sudo.conf has $PLUGIN_N Plugin lines"
+fi
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O6: live manual approval - pty drives y/n, no human involved"
+
+#  The broker is restarted in -approval manual mode with its console wired to
+#  a pty held by THIS harness (python3 pty module, no deps). The driver:
+#  spawns `docker exec -i <host-sim> tmb-broker -approval manual` with the
+#  pty slave as its stdin/stdout, captures every console byte to a file,
+#  polls the capture until the approval prompt appears, then writes the
+#  answer - so the y/n NEVER races the prompt and no human is needed.
+#  Round 1: /usr/bin/id -u answered y -> executed. Round 2: /usr/bin/id -G
+#  answered n -> approval_denied_by_human.
+FP16=${FP1:0:16}
+O6_CONSOLE=$TD/o6-console.log
+O6_LOG_BEFORE=$(docker exec "$HOST" sh -c 'wc -l < /var/log/tmb/broker.log' 2>/dev/null | tr -d '[:space:]')
+echo "-- O6: JSONL lines before the manual broker: ${O6_LOG_BEFORE:-0}"
+O6_TTL=15   # generous approval window; the pty answers within milliseconds anyway
+
+python3 - "$SBX" "$HOST" "$O6_CONSOLE" "$TD/o6" "$O6_TTL" <<'PYEOF'
+import os, pty, select, subprocess, sys, threading, time
+
+sbx, host, conlog, base, ttl = sys.argv[1:6]
+
+def die(msg):
+    print(f"O6-DRIVER FATAL: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+def dexec(*args):
+    return subprocess.run(['docker', 'exec', host, *args],
+                          capture_output=True, text=True)
+
+def tls_listen_count():
+    out = dexec('sh', "-c",
+                "grep -c '\"event\":\"tls_listen\"' /var/log/tmb/broker.log || true").stdout.strip()
+    try:
+        return int(out or '0')
+    except ValueError:
+        return 0
+
+before = tls_listen_count()
+master, slave = pty.openpty()
+con_fd = os.open(conlog, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+chunks = []
+
+def reader():
+    while True:
+        try:
+            r, _, _ = select.select([master], [], [], 0.2)
+        except OSError:
+            return
+        if not r:
+            continue
+        try:
+            data = os.read(master, 4096)
+        except OSError:
+            return
+        if not data:
+            return
+        os.write(con_fd, data)
+        chunks.append(data.decode('utf-8', 'replace'))
+
+threading.Thread(target=reader, daemon=True).start()
+
+broker = subprocess.Popen(
+    ['docker', 'exec', '-i', host, 'tmb-broker',
+     '-config', '/etc/tmb/config-osh.json', '-approval', 'manual', '-ttl', ttl],
+    stdin=slave, stdout=slave, stderr=slave)
+os.close(slave)
+
+PROMPT = 'Approve exactly this command?'
+
+def console():
+    return ''.join(chunks)
+
+def broker_alive():
+    return broker.poll() is None
+
+def wait_listener(timeout=30):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if tls_listen_count() > before:
+            return True
+        if not broker_alive():
+            die('manual broker exited before its TLS listener came up')
+        time.sleep(0.2)
+    return False
+
+def wait_prompt(n, timeout=60):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if console().count(PROMPT) >= n:
+            return True
+        if not broker_alive():
+            die(f'manual broker died while waiting for prompt #{n}')
+        time.sleep(0.05)
+    return False
+
+def client_round(tag, argv, answer):
+    # count prompts BEFORE starting the client so the wait target is stable
+    n = console().count(PROMPT) + 1
+    out = open(f'{base}-{tag}.out', 'wb')
+    err = open(f'{base}-{tag}.err', 'wb')
+    cli = subprocess.Popen(
+        ['timeout', '90', 'openshell', 'sandbox', 'exec', sbx,
+         '--no-login-shell', '--'] + argv,
+        stdout=out, stderr=err)
+    if not wait_prompt(n):
+        die(f'prompt #{n} never appeared on the console')
+    os.write(master, (answer + '\n').encode())
+    try:
+        rc = cli.wait(timeout=120)
+    except subprocess.TimeoutExpired:
+        cli.kill()
+        die(f'client {tag} never finished after answer {answer!r}')
+    out.close(); err.close()
+    with open(f'{base}-{tag}.rc', 'w') as f:
+        f.write(f'{rc}\n')
+    return rc
+
+if not wait_listener():
+    die('manual broker TLS listener never came up')
+print(f'-- O6 driver: manual broker up (approval manual, ttl={ttl}s), console -> {conlog}')
+
+rc1 = client_round('1', ['tmb', 'exec', '--root', '--', '/usr/bin/id', '-u'], 'y')
+print(f'-- O6 driver: request 1 (id -u) answered y, client rc={rc1}')
+rc2 = client_round('2', ['tmb', 'exec', '--root', '--', '/usr/bin/id', '-G'], 'n')
+print(f'-- O6 driver: request 2 (id -G) answered n, client rc={rc2}')
+
+# stop the manual broker (SIGTERM path removes socket + pidfile)
+dexec('pkill', '-TERM', '-x', 'tmb-broker')
+try:
+    broker.wait(timeout=15)
+except subprocess.TimeoutExpired:
+    dexec('pkill', '-KILL', '-x', 'tmb-broker')
+    try:
+        broker.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+print('-- O6 driver: done (console captured, manual broker stopped)')
+PYEOF
+if [ $? -eq 0 ]; then
+  ok "O6: pty driver completed unattended (broker manual, y then n fed through the pty)"
+else
+  bad "O6: pty driver failed"
+fi
+
+echo "---- O6: manual approval console capture (exact bytes, CR stripped) ----"
+tr -d '\r' < "$O6_CONSOLE" | sed 's/^/  | /'
+
+# client-side outcomes
+read_rc() { cat "$1" 2>/dev/null | tr -d '[:space:]'; }
+RUNC=$(read_rc "$TD/o6-1.rc"); OUT_FILE=$TD/o6-1.out; ERR_FILE=$TD/o6-1.err
+show_io
+assert_rc     "O6: answered y -> command executed, exit 0" 0
+assert_out_eq "O6: answered y -> stdout is exactly '0' (streamed back to the sandbox)" "0"
+RUNC=$(read_rc "$TD/o6-2.rc"); OUT_FILE=$TD/o6-2.out; ERR_FILE=$TD/o6-2.err
+show_io
+assert_rc     "O6: answered n -> exit 125" 125
+stderr_has    "O6: deny reason approval_denied_by_human" "approval_denied_by_human"
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err   # restore plumbing for any later use
+
+# console-side: the human saw the EXACT request and WHO asks
+O6C=$(tr -d '\r' < "$O6_CONSOLE")
+console_has() { if printf '%s' "$O6C" | grep -qF -- "$2"; then ok "$1"; else bad "$1 (console lacks '$2')"; fi; }
+console_has "O6: console shows the requester identity line cert fp=$FP16" "requester : cert fp=$FP16"
+console_has "O6: console shows EXACT argv of the y-request" '"/usr/bin/id","-u"'
+console_has "O6: console shows EXACT argv of the n-request" '"/usr/bin/id","-G"'
+console_has "O6: console shows the approval prompt" "Approve exactly this command? [y/N]:"
+
+# broker JSONL: every request/approval/claim/exec_start/exec_exit event in the
+# O6 window carries requester_fp=<full fp1>
+docker exec "$HOST" sh -c "tail -n +$(( ${O6_LOG_BEFORE:-0} + 1 )) /var/log/tmb/broker.log" > "$TD/o6-broker.jsonl" 2>/dev/null
+echo "-- O6: JSONL events in the O6 window ($(wc -l < "$TD/o6-broker.jsonl" 2>/dev/null | tr -d '[:space:]') lines):"
+sed 's/^/  | /' "$TD/o6-broker.jsonl"
+for ev in request approval claim exec_start exec_exit; do
+  n=$(grep -c "\"event\":\"$ev\"" "$TD/o6-broker.jsonl" 2>/dev/null || true)
+  fpn=$(grep "\"event\":\"$ev\"" "$TD/o6-broker.jsonl" 2>/dev/null | grep -c '"requester_fp":"'"$FP1"'"' || true)
+  if [ "${n:-0}" -ge 1 ] && [ "$n" = "$fpn" ]; then
+    ok "O6: JSONL $ev events ($n) all carry requester_fp=fp1"
+  else
+    bad "O6: JSONL $ev events: $n total, $fpn with requester_fp=fp1 (want all, at least 1)"
+  fi
+done
 
 # =============================================================================
 log "SUMMARY"
