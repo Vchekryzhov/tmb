@@ -37,6 +37,68 @@ flowchart TB
 
 Слой песочницы - вопрос MVP. Целевой кандидат - NVIDIA OpenShell: исследование на ветке PoC ([RESEARCH-OPENSHELL.md](https://github.com/Vchekryzhov/tmb/blob/prototype/tmb-broker/prototype/tmb-broker/RESEARCH-OPENSHELL.md)) подтвердило совместимость, OpenCode - его задокументированный первый агент. Рекомендован вариант B: единственный TCP/MCP endpoint, разрешённый одним правилом `network_policies`; вариант A с bind-mount одного unix-сокета остаётся запасным. MVP-стенд PoC проще: непривилегированный контейнер без сети.
 
+Детализация целевой схемы: обычный трафик агента уходит через OpenShell policy, привилегированный запрос - только через tmb-клиент к брокеру.
+
+```mermaid
+flowchart LR
+    subgraph OS["OpenShell sandbox"]
+        A["Agent / OpenCode"]
+
+        P["OpenShell policy / proxy<br/>network • credentials • filesystem"]
+
+        C["tmb-client"]
+
+        X["❌ root<br/>❌ sudo<br/>❌ direct host access"]
+
+        A -->|"обычный трафик"| P
+        A -->|"privileged request"| C
+    end
+
+    subgraph EXT["Внешние сервисы"]
+        LLM["LLM API"]
+        GIT["Git / GitHub API"]
+        REG["Registry / Docs"]
+    end
+
+    P -->|"разрешено policy"| LLM
+    P -->|"разрешено policy"| GIT
+    P -->|"разрешено policy"| REG
+
+    subgraph HOST["Host"]
+        B["TMB broker<br/>root"]
+
+        V["Проверка запроса<br/>path • argv • cwd • uid • nonce"]
+
+        H["Human approval<br/>Approve / Deny"]
+
+        T["One-shot token<br/>TTL + request hash"]
+
+        E["direct execve()<br/>без shell и PATH lookup"]
+
+        R["Привилегированная<br/>операция"]
+
+        B --> V
+        V --> H
+        H -->|"approve"| T
+        T --> E
+        E --> R
+    end
+
+    C ==>|"точка входа TMB"| B
+
+    H -.->|"deny"| D["❌ Не выполнять"]
+
+    R ==>|"stdout / stderr / exit code"| C
+
+    style OS fill:#eaf4ff,stroke:#2684ff
+    style HOST fill:#fff4e5,stroke:#f59e0b
+    style EXT fill:#edf9f0,stroke:#22a06b
+    style C fill:#ffe9e7,stroke:#e5484d
+    style B fill:#fff0d6,stroke:#e07800
+    style R fill:#fff0d6,stroke:#e07800
+    style D fill:#ffe7e7,stroke:#d92d20
+```
+
 ## Запрос и выполнение
 
 - Запрос - структурированное сообщение брокеру: абсолютный путь программы, упорядоченный `argv`, cwd, целевой uid, nonce.
