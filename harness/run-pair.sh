@@ -6,6 +6,11 @@
 # listener; sandbox-sim reaches it over a dedicated docker network as
 # host.openshell.internal.
 #
+# Ticket #7 adds the channel denials on the same pair: O7a (client cert fp2,
+# same CA, not in allowlist), O7b (openssl s_client without a client cert),
+# O7c (TMB_ADDR without cert env), O8 (foreign-CA broker endpoint) and O9
+# (approval bound to the certificate identity).
+#
 # Certificates: harness CA + server cert (SAN host.openshell.internal) +
 # client certs for fp1/fp2/fp3 are generated into a TEMP dir per run and
 # never committed. The CA KEY never enters any container: only the crt/key
@@ -22,11 +27,13 @@ cd "$(dirname "$0")"
 HOST=tmb-pair-host
 SBX=tmb-pair-sandbox
 NET=tmb-pair-net
+FAKE=tmb-pair-fakebroker # O8: throwaway foreign-CA TLS server (sandbox image has openssl, host-sim does not)
 IMG_HOST=tmb-poc/host-sim
 IMG_SBX=tmb-poc/sandbox-sim
 SOCK_VOL=tmb-pair-sock-wipe-me
 STATE_VOL=tmb-pair-state-wipe-me
 TLS_PORT=17600
+TLS_PUBLISH_PORT=${TLS_PUBLISH_PORT:-17600} # mac-side publish of the TLS port; scenarios go over the docker network, override when 17600 is taken on the host
 SERVER_NAME=host.openshell.internal
 TTL=3
 TD=$(mktemp -d /tmp/tmb-pair.XXXXXX)
@@ -41,7 +48,7 @@ exec > >(tee "$LOG") 2>&1
 cleanup() {
   echo "=== cleanup ==="
   exec 9>&- 2>/dev/null
-  docker rm -f "$HOST" "$SBX" >/dev/null 2>&1
+  docker rm -f "$HOST" "$SBX" "$FAKE" >/dev/null 2>&1
   docker network rm "$NET" >/dev/null 2>&1
   docker volume rm -f "$SOCK_VOL" "$STATE_VOL" >/dev/null 2>&1
   rm -rf "$TD"
@@ -79,8 +86,26 @@ run_tls_client() {
     "$SBX" "$@" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 }
 
+# run_tls_client_addr ADDR CLIENT TMB-ARGS... : same, but dials an arbitrary
+# TMB_ADDR (O8 points the client at the foreign-CA endpoint).
+run_tls_client_addr() {
+  local addr=$1 cl=$2; shift 2
+  docker exec \
+    -e TMB_ADDR="$addr" \
+    -e TMB_CA=/certs/ca.crt \
+    -e TMB_CERT=/certs/$cl.crt \
+    -e TMB_KEY=/certs/$cl.key \
+    "$SBX" "$@" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+}
+
+pair_token_of() { sed -n 's/.*"token":"\([0-9a-f]\{16\}\)".*/\1/p' "$ERR_FILE" | head -1; }
+
 broker_log_count() { # PATTERN -> count of matching lines in broker.log
   docker exec "$HOST" sh -c "grep -c '$1' /var/log/tmb/broker.log" 2>/dev/null | tr -d '[:space:]'
+}
+
+broker_log_lines() { # total line count of broker.log (proves "nothing new")
+  docker exec "$HOST" sh -c 'wc -l < /var/log/tmb/broker.log' 2>/dev/null | tr -d '[:space:]'
 }
 
 wait_broker_log_count() { # PATTERN N -> wait until count >= N
@@ -95,6 +120,15 @@ wait_broker_log_count() { # PATTERN N -> wait until count >= N
 start_broker() { # MODE TTL
   echo "-- starting tmb-broker (mode=$1 ttl=$2s, config=/etc/tmb/config-pair.json)"
   docker exec -d "$HOST" tmb-broker -approval "$1" -ttl "$2" -config /etc/tmb/config-pair.json
+}
+
+# start_broker_console MODE TTL LOGFILE : detached broker whose console is
+# captured to a file INSIDE host-sim (stdin detached, so a prompt that
+# leaked through would fail closed into the log and be visible to grep).
+start_broker_console() { # MODE TTL LOGFILE
+  echo "-- starting tmb-broker with captured console (mode=$1 ttl=$2s, console=$3)"
+  docker exec -d "$HOST" sh -c \
+    "exec tmb-broker -approval '$1' -ttl '$2' -config /etc/tmb/config-pair.json >'$3' 2>&1"
 }
 
 stop_broker() {
@@ -243,7 +277,7 @@ docker network create "$NET" >/dev/null || { echo "FATAL: network create failed"
 echo "-- starting host-sim (broker host; TLS port published, network alias $SERVER_NAME)"
 docker run -d --name "$HOST" \
   --network "$NET" --network-alias "$SERVER_NAME" \
-  -p "127.0.0.1:${TLS_PORT}:${TLS_PORT}" \
+  -p "127.0.0.1:${TLS_PUBLISH_PORT}:${TLS_PORT}" \
   -v "$SOCK_VOL":/run/tmb \
   -v "$STATE_VOL":/var/lib/tmb-proto \
   -v "$TD/ca.crt":/etc/tmb/certs/ca.crt:ro \
@@ -407,6 +441,219 @@ fi
 stop_broker
 wait $MAN_PID 2>/dev/null
 exec 9>&-
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O7-A: foreign client cert fp2 (same CA, NOT in allowlist) -> denied BEFORE approval"
+
+# One manual-mode broker serves all of O7-A/O7-B/O7-C with its console
+# captured inside host-sim: a denial that leaked to the approval stage would
+# print 'TMB APPROVAL REQUIRED' into the console log (stdin is detached, so
+# it would then fail closed with 'CLOSED (no human input)'), which every
+# console check below would catch.
+TLN=$(broker_log_count '"event":"tls_listen"'); TLN=${TLN:-0}
+RD2_BEFORE=$(broker_log_count "\"event\":\"requester_denied\".*\"requester_fp\":\"$FP2\"")
+RD2_BEFORE=${RD2_BEFORE:-0}
+start_broker_console manual 30 /tmp/o7-console.log
+wait_broker_log_count '"event":"tls_listen"' $((TLN+1))
+
+run_tls_client client2 tmb exec --root -- /usr/bin/id -u
+assert_rc      "O7-A: fp2 exec -> exit 125" 125
+assert_err_has "O7-A: deny reason requester_not_allowed" "requester_not_allowed"
+
+RD2_AFTER=$(broker_log_count "\"event\":\"requester_denied\".*\"requester_fp\":\"$FP2\"")
+if [ "${RD2_AFTER:-0}" -gt "$RD2_BEFORE" ]; then
+  ok "O7-A: JSONL requester_denied with requester_fp=fp2 ($RD2_BEFORE -> $RD2_AFTER)"
+  docker exec "$HOST" grep '"event":"requester_denied"' /var/log/tmb/broker.log | tail -1 | sed 's/^/  | /'
+else
+  bad "O7-A: no requester_denied event with requester_fp=fp2 ($RD2_BEFORE -> ${RD2_AFTER:-?})"
+fi
+
+if docker exec "$HOST" grep -q 'TMB APPROVAL REQUIRED' /tmp/o7-console.log 2>/dev/null; then
+  bad "O7-A: approval console WAS bothered (prompt printed)"
+else
+  ok "O7-A: approval console NOT bothered (denied before approval display)"
+fi
+if docker exec "$HOST" grep -q 'cert fp=' /tmp/o7-console.log 2>/dev/null; then
+  bad "O7-A: console showed a requester line"
+else
+  ok "O7-A: console shows no 'requester : cert fp=' line"
+fi
+echo "-- manual broker console so far --"
+docker exec "$HOST" cat /tmp/o7-console.log 2>/dev/null | sed 's/^/  | /'
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O7-B: openssl s_client WITHOUT a client cert -> TLS alert, handshake failed"
+
+HSF_BEFORE=$(broker_log_count '"event":"tls_handshake_failed"'); HSF_BEFORE=${HSF_BEFORE:-0}
+docker exec "$SBX" openssl s_client -connect "$SERVER_NAME:$TLS_PORT" -CAfile /certs/ca.crt </dev/null \
+  >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+cat "$OUT_FILE" "$ERR_FILE" >"$TD/sclient-o7b.all"
+if [ "$RUNC" -ne 0 ]; then
+  ok "O7-B: s_client exited non-zero (rc=$RUNC, handshake failed)"
+else
+  bad "O7-B: s_client exited 0 despite the failed handshake"
+fi
+if grep -qi 'alert' "$TD/sclient-o7b.all"; then
+  ok "O7-B: output shows a TLS alert"
+else
+  bad "O7-B: no TLS alert evidence in s_client output"
+fi
+if grep -Eqi 'certificate[ _-]?required' "$TD/sclient-o7b.all"; then
+  ok "O7-B: alert is 'certificate required' (server demands the client cert)"
+else
+  bad "O7-B: expected 'certificate required' alert text not found"
+fi
+
+HSF_AFTER=$(broker_log_count '"event":"tls_handshake_failed"')
+if [ "${HSF_AFTER:-0}" -gt "$HSF_BEFORE" ]; then
+  ok "O7-B: JSONL tls_handshake_failed logged ($HSF_BEFORE -> $HSF_AFTER)"
+  HSF_LINE=$(docker exec "$HOST" grep '"event":"tls_handshake_failed"' /var/log/tmb/broker.log | tail -1)
+  echo "  | $HSF_LINE"
+  if printf '%s' "$HSF_LINE" | grep -q 'requester_fp'; then
+    bad "O7-B: tls_handshake_failed carries a fingerprint (must have none)"
+  else
+    ok "O7-B: tls_handshake_failed has NO fingerprint field"
+  fi
+else
+  bad "O7-B: no new tls_handshake_failed event ($HSF_BEFORE -> ${HSF_AFTER:-?})"
+fi
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O7-C: TMB_ADDR set but TMB_CERT/TMB_KEY unset -> exit 2, no connection"
+
+LINES_BEFORE=$(broker_log_lines)
+docker exec -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" "$SBX" tmb exec --root -- /usr/bin/id -u \
+  >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc      "O7-C: exit code 2 (usage, no cert material)" 2
+assert_err_has "O7-C: client refused to connect" "no connection attempted"
+LINES_AFTER=$(broker_log_lines)
+if [ "${LINES_BEFORE:-x}" = "${LINES_AFTER:-y}" ]; then
+  ok "O7-C: broker JSONL unchanged ($LINES_AFTER lines) - nothing reached the broker"
+else
+  bad "O7-C: broker JSONL changed $LINES_BEFORE -> ${LINES_AFTER:-?} lines"
+fi
+if docker exec "$HOST" grep -q 'TMB APPROVAL REQUIRED' /tmp/o7-console.log 2>/dev/null; then
+  bad "O7-C: approval console was bothered somewhere in O7-A/B/C"
+else
+  ok "O7-C: approval console never bothered across O7-A/O7-B/O7-C"
+fi
+stop_broker
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O8: foreign-CA broker endpoint -> client fail-closed (x509), no frame sent"
+
+# host-sim has no openssl (its image is intentionally minimal and its
+# Dockerfile is out of scope here), so the fake broker runs as a throwaway
+# container from the SAME sandbox image on the same network, on the SAME
+# port number as the real endpoint, alias fake.openshell.internal. Its
+# certificate is signed by a SECOND, untrusted CA generated into the same
+# temp-dir lifecycle as the harness CA; the SAN is valid for the fake alias
+# on purpose, so the ONLY thing wrong is the trust chain.
+cat >"$TD/foreign-openssl.cnf" <<'EOF'
+[req]
+distinguished_name = dn
+[dn]
+[foreign_ca]
+basicConstraints = critical, CA:TRUE
+keyUsage = critical, keyCertSign, cRLSign
+[ext_foreign_server]
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = DNS:fake.openshell.internal
+EOF
+openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 2 \
+  -keyout "$TD/foreign-ca.key" -out "$TD/foreign-ca.crt" \
+  -subj "/CN=TMB Pair Foreign CA (untrusted)" \
+  -config "$TD/foreign-openssl.cnf" -extensions foreign_ca >/dev/null 2>&1 \
+  || { echo "FATAL: foreign CA generation failed"; exit 1; }
+openssl req -new -newkey rsa:2048 -nodes -sha256 \
+  -keyout "$TD/foreign-server.key" -out "$TD/foreign-server.csr" \
+  -subj "/CN=fake.openshell.internal" -config "$TD/foreign-openssl.cnf" >/dev/null 2>&1
+openssl x509 -req -sha256 -days 2 -in "$TD/foreign-server.csr" \
+  -CA "$TD/foreign-ca.crt" -CAkey "$TD/foreign-ca.key" -CAcreateserial \
+  -out "$TD/foreign-server.crt" -extfile "$TD/foreign-openssl.cnf" -extensions ext_foreign_server >/dev/null 2>&1 \
+  || { echo "FATAL: foreign server certificate failed"; exit 1; }
+chmod 644 "$TD/foreign-server.crt" "$TD/foreign-server.key"
+
+docker rm -f "$FAKE" >/dev/null 2>&1
+docker run -d --name "$FAKE" --network "$NET" \
+  --network-alias fake.openshell.internal "$IMG_SBX" >/dev/null \
+  || { echo "FATAL: fake broker container run failed"; exit 1; }
+docker cp "$TD/foreign-server.crt" "$FAKE":/tmp/foreign-server.crt >/dev/null
+docker cp "$TD/foreign-server.key" "$FAKE":/tmp/foreign-server.key >/dev/null
+# tail -f holds s_server's stdin open forever (no EOF exit) and every byte
+# s_server ever receives is echoed into the captured log.
+docker exec -d "$FAKE" sh -c \
+  "tail -f /dev/null | openssl s_server -accept $TLS_PORT -cert /tmp/foreign-server.crt -key /tmp/foreign-server.key >/tmp/fake-broker.log 2>&1"
+FAKE_UP=0
+for i in $(seq 1 100); do
+  docker exec "$FAKE" bash -c "exec 3<>/dev/tcp/127.0.0.1/$TLS_PORT" 2>/dev/null && { FAKE_UP=1; break; }
+  sleep 0.1
+done
+[ "$FAKE_UP" = 1 ] || { echo "FATAL: fake TLS server never listened on :$TLS_PORT"; exit 1; }
+ok "O8: foreign-CA TLS server listening on fake.openshell.internal:$TLS_PORT"
+
+run_tls_client_addr "fake.openshell.internal:$TLS_PORT" client1 tmb exec --root -- /usr/bin/id -u
+assert_rc      "O8: client to foreign broker -> exit 3 (fail closed)" 3
+assert_err_has "O8: stderr shows x509 verification failure" "x509"
+assert_err_has "O8: verification reason is unknown authority" "certificate signed by unknown authority"
+assert_err_has "O8: stderr says FAIL CLOSED" "FAIL CLOSED"
+
+echo "-- fake broker log (handshake noise only; must contain NO request payload) --"
+docker exec "$FAKE" cat /tmp/fake-broker.log 2>/dev/null | sed 's/^/  | /'
+if docker exec "$FAKE" grep -Eq 'executable|nonce|argv|/usr/bin/id' /tmp/fake-broker.log 2>/dev/null; then
+  bad "O8: fake broker RECEIVED application data (request frame leaked)"
+else
+  ok "O8: fake broker received NO application-data frame (aborted during handshake)"
+fi
+docker rm -f "$FAKE" >/dev/null 2>&1
+
+# -----------------------------------------------------------------------------
+log "SCENARIO O9: approval bound to cert identity (fp1 approves; fp3 is allowlisted but must not redeem)"
+
+TLN=$(broker_log_count '"event":"tls_listen"'); TLN=${TLN:-0}
+start_broker mock-approve 30
+wait_broker_log_count '"event":"tls_listen"' $((TLN+1))
+cat >"$TD/o9.json" <<'EOF'
+{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"o9-nonce-fixed-000007"}
+EOF
+
+echo "-- approve under fp1 (allowlisted)"
+docker exec -i \
+  -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" -e TMB_CA=/certs/ca.crt \
+  -e TMB_CERT=/certs/client1.crt -e TMB_KEY=/certs/client1.key \
+  "$SBX" tmb approve --json - <"$TD/o9.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc "O9: approve under fp1 -> exit 0" 0
+T9=$(pair_token_of)
+echo "-- token from fp1 approve: ${T9:-<none>}"
+if [ -n "$T9" ]; then ok "O9: got one-shot token $T9"; else bad "O9: no token parsed from approve"; fi
+
+echo "-- claim under fp3 (allowlisted, but NOT the approver)"
+docker exec -i \
+  -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" -e TMB_CA=/certs/ca.crt \
+  -e TMB_CERT=/certs/client3.crt -e TMB_KEY=/certs/client3.key \
+  "$SBX" tmb claim --token "$T9" --json - <"$TD/o9.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc      "O9: claim under fp3 -> exit 125" 125
+assert_err_has "O9: deny reason requester_mismatch" "requester_mismatch"
+assert_err_has "O9: token NOT consumed by the mismatch" "token not consumed"
+if docker exec "$HOST" grep '"reason":"requester_mismatch"' /var/log/tmb/broker.log 2>/dev/null \
+  | grep -q "\"requester_fp\":\"$FP3\""; then
+  ok "O9: JSONL deny requester_mismatch carries requester_fp=fp3"
+else
+  bad "O9: JSONL lacks requester_mismatch deny with requester_fp=fp3"
+fi
+
+echo "-- claim again under fp1 (the approver): token must still be alive"
+docker exec -i \
+  -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" -e TMB_CA=/certs/ca.crt \
+  -e TMB_CERT=/certs/client1.crt -e TMB_KEY=/certs/client1.key \
+  "$SBX" tmb claim --token "$T9" --json - <"$TD/o9.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc     "O9: token NOT consumed; claim under fp1 -> exit 0" 0
+assert_out_eq "O9: stdout is exactly '0'" "0"
+stop_broker
 state_dump
 
 # -----------------------------------------------------------------------------
