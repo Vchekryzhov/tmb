@@ -107,6 +107,9 @@ log() { printf '\n==============================================================
 
 ok()  { PASS=$((PASS+1)); ROWS+=("PASS | $1"); printf 'CHECK PASS: %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); ROWS+=("FAIL | $1"); printf 'CHECK FAIL: %s\n' "$1"; }
+# warn: prominent, non-counting row (run stays green) - used when a scenario's
+# PASS proves LESS than its name claims (e.g. the O4 dropped-sandbox branch).
+warn() { ROWS+=("WARN | $1"); printf 'CHECK WARN: %s\n' "$1"; }
 
 fatal() { echo "FATAL: $*"; exit 1; }
 
@@ -722,6 +725,7 @@ else
   SBX_CREATED="$NEW"; SBX="$NEW"
   policy_set_net single || fatal "O4: policy set on the recreated sandbox failed"
   ok "O4: sandbox recreated as $SBX (+ single rule hot-added)"
+  warn "O4: sandbox dropped by gateway restart — policy persistence NOT PROVEN this run (recreated; repeat checks still executed)"
 fi
 echo "-- observed gateway-restart behavior: sandbox $SBX_RESTART_OUTCOME; policy source of truth = gateway-side sandbox state"
 

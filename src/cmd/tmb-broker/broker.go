@@ -131,11 +131,7 @@ func (b *Broker) handleConn(conn *net.UnixConn) {
 		return
 	}
 	if !b.allowedRequester(id) {
-		ev := id.LogFields()
-		ev["reason"] = "requester_not_allowed"
-		b.log.Event("requester_denied", ev)
-		proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "requester_not_allowed",
-			Detail: id.NotAllowedDetail()})
+		b.denyRequesterNotAllowed(conn, id)
 		return
 	}
 	b.serveRequest(conn, id, "unix")
@@ -201,6 +197,18 @@ func (b *Broker) deny(req *proto.Request, id RequesterID, reason, detail string,
 	ev["detail"] = detail
 	b.log.Event("deny", ev)
 	proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: reason, Detail: detail})
+}
+
+// denyRequesterNotAllowed rejects a connection whose identity failed the
+// allowlist check: requester_denied JSONL event, then the denied frame with
+// the identity's detail. Shared by the unix and TLS listeners (which is why
+// it takes net.Conn); the caller's defer closes the connection.
+func (b *Broker) denyRequesterNotAllowed(conn net.Conn, id RequesterID) {
+	ev := id.LogFields()
+	ev["reason"] = "requester_not_allowed"
+	b.log.Event("requester_denied", ev)
+	proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "requester_not_allowed",
+		Detail: id.NotAllowedDetail()})
 }
 
 // --- validation -----------------------------------------------------------

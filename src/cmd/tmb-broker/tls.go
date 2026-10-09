@@ -10,8 +10,6 @@ import (
 	"net"
 	"os"
 	"time"
-
-	"tmb-poc/internal/proto"
 )
 
 // loadTLSConfig builds the server-side TLS config for the mTLS listener:
@@ -87,11 +85,7 @@ func (b *Broker) handleTLSConn(conn *tls.Conn) {
 	id := CertRequester(certFingerprint(st.PeerCertificates[0].Raw))
 
 	if !b.allowedRequester(id) {
-		ev := id.LogFields()
-		ev["reason"] = "requester_not_allowed"
-		b.log.Event("requester_denied", ev)
-		proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "requester_not_allowed",
-			Detail: id.NotAllowedDetail()})
+		b.denyRequesterNotAllowed(conn, id)
 		return
 	}
 	b.serveRequest(conn, id, "tls")

@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -157,6 +158,62 @@ func TestAllowedRequesterPerKind(t *testing.T) {
 	}
 	if b.allowedRequester(CertRequester(strings.Repeat("cc", 32))) {
 		t.Error("non-allowlisted fingerprint must fail")
+	}
+}
+
+// The shared deny path (both listeners) must send, per identity kind, the
+// exact denied frame and a requester_denied JSONL event carrying the identity
+// fields + reason - and no transport field (stable event shape).
+func TestDenyRequesterNotAllowed(t *testing.T) {
+	dir := t.TempDir()
+	log, err := NewLogger(filepath.Join(dir, "broker.log"))
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	claims, err := NewClaimStore(dir)
+	if err != nil {
+		t.Fatalf("claim store: %v", err)
+	}
+	b := NewBroker(&Config{}, log, claims, ModeMockApprove, 30*time.Second)
+
+	fp := strings.Repeat("cc", 32)
+	for _, tc := range []struct {
+		id     RequesterID
+		detail string
+		idJSON string
+	}{
+		{UIDRequester(1000, 7), "uid 1000 is not in the broker allowlist",
+			`"requester_pid":7,"requester_uid":1000`},
+		{CertRequester(fp), "cert fp " + fp + " is not in the broker allowlist",
+			`"requester_fp":"` + fp + `"`},
+	} {
+		server, client := net.Pipe()
+		go func() { defer server.Close(); b.denyRequesterNotAllowed(server, tc.id) }()
+		f, err := proto.ReadFrame(client)
+		client.Close()
+		if err != nil {
+			t.Fatalf("%s: read frame: %v", tc.id.Key(), err)
+		}
+		if f.Type != "denied" || f.Reason != "requester_not_allowed" || f.Detail != tc.detail {
+			t.Errorf("%s: frame = %+v, want denied requester_not_allowed (%s)", tc.id.Key(), f, tc.detail)
+		}
+	}
+
+	logBytes, err := os.ReadFile(filepath.Join(dir, "broker.log"))
+	if err != nil {
+		t.Fatalf("read broker.log: %v", err)
+	}
+	got := string(logBytes)
+	for _, idJSON := range []string{`"requester_pid":7,"requester_uid":1000`, `"requester_fp":"` + fp + `"`} {
+		if !lineHasBoth(got, `"event":"requester_denied"`, idJSON) {
+			t.Errorf("requester_denied event missing %s in log:\n%s", idJSON, got)
+		}
+	}
+	if !lineHasBoth(got, `"event":"requester_denied"`, `"reason":"requester_not_allowed"`) {
+		t.Errorf("requester_denied event missing reason in log:\n%s", got)
+	}
+	if lineHasBoth(got, `"event":"requester_denied"`, `"transport":`) {
+		t.Errorf("requester_denied event must not carry a transport field:\n%s", got)
 	}
 }
 
