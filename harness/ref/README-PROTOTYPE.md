@@ -119,3 +119,138 @@ claim store) после каждого сценария. Выход ненуле
 - `images/` — Dockerfile.host (ubuntu:24.04 + нетронутый sudo + `human`-юзер),
   Dockerfile.sandbox (ubuntu:24.04, uid 4242, без sudo), config.json (политики).
 - `run.sh` — раннер; `last-run.log` — последний полный прогон.
+
+## OpenShell-обвязка (#8): песочница с одним правилом достаёт брокер
+
+`harness/run-openshell.sh` поднимает связку с нуля одним скриптом на
+macOS + Docker Desktop и прогоняет O2a + O3 (18 проверок, последний лог —
+`harness/last-openshell-run.log`). Полный сценарный план O-серии — в спеке
+#5; горячая перезагрузка правил (O1/O2b/O2c/O4) — тикет #9.
+
+### Топология
+
+```
+Mac (host)
+ └─ openshell gateway — нативный бинарник brew, слушает *:17670 (mTLS),
+     конфиг ~/.config/openshell/gateway.toml
+ └─ Docker Desktop VM (linux/arm64)
+     ├─ host-sim (tmb-osh-host): tmb-broker as root
+     │    TLS-листенер :17600, порт опубликован -p 17600:17600
+     │    на ВСЕХ интерфейсах VM (docker-proxy на 0.0.0.0)
+     ├─ supervisor-контейнер песочницы (host network, uid 65534):
+     │    медирует ВЕСЬ egress песочницы
+     ├─ tmb-osh-gwreach (host network): socat 127.0.0.1:17671
+     │    -> host.docker.internal:17670 (дверь супервизоров к gateway на Mac)
+     └─ sandbox-контейнер (NET=none, uid 1000, Landlock, deny-by-default):
+          образ opencode (digest) + openssl + статический tmb
+          единственное сетевое правило: protocol: tcp, tls: skip
+          -> host.openshell.internal:17600
+```
+
+### Почему `host.openshell.internal` резолвится и попадает на брокер
+
+Docker-драйвер OpenShell пинит зарезервированный алиас
+`host.openshell.internal` в адрес, выведенный из `grpc_endpoint`, и этот
+endpoint обязан быть IPv4/localhost-строкой — именной endpoint (как
+`host.docker.internal`) оставляет алиас без пина, и policy DNS отказывает с
+`policy_dns_trusted_gateway_unavailable`. Нативный gateway живёт на Mac, а
+супервизоры — в VM, поэтому между ними нужен форвардер:
+
+- `~/.config/openshell/gateway.toml`: `grpc_endpoint = "https://127.0.0.1:17671"`
+  (скрипт патчит сам, бэкап — `gateway.toml.pre-tmb8.bak`; SAN `127.0.0.1`
+  уже есть в локальном сертификате gateway);
+- форвардер `tmb-osh-gwreach` (socat) слушает loopback VM :17671 и ходит на
+  `host.docker.internal:17670` = gateway на Mac. Живёт на другом порту
+  (17671), потому что Docker Desktop проксирует host-networked слушатели
+  VM на localhost Mac — форвардер на :17670 зациклился бы сам на себя.
+
+Итог: policy DNS песочницы отвечает на `host.openshell.internal` адресом
+loopback VM (супервизор сам открывает соединение — получатель видит адрес
+супервизора), а опубликованный `-p 17600:17600` порт брокера отвечает на
+loopback VM. Egress песочницы закрыт deny-by-default, кроме ровно одного
+правила.
+
+### Пререквизиты и пины
+
+- Docker Desktop: host networking ВКЛ, Enhanced Container Isolation ВЫКЛ
+  (скрипт проверяет оба флага в `settings-store.json`, провал = прогон не
+  стартует);
+- openshell 0.1.3 (`OPENSHELL_VERSION` в скрипте);
+- базовый образ агента — `ghcr.io/anomalyco/opencode` пиннем DIGEST'ом
+  (`OPENCODE_IMAGE_REF`, linux/arm64-манифест `:latest`, резолвлен
+  2026-10-09; тот же digest в `FROM` images/Dockerfile.opensbx; скрипт
+  сверяет локальный образ с пином);
+- gateway запущен один на Mac (brew services; скрипт его не дублирует,
+  при необходимости перезапускает после патча конфига).
+
+### Доставка сертификатов в песочницу
+
+Способ (фиксируем один): клиентский сертификат+ключ и CA **выпекаются в
+кастомный образ песочницы** (второй build-этап с контекстом из временного
+каталога прогона, файлы в `/usr/share/tmb/certs/`, режим 0644), а `--env`
+при create передаёт только ПУТИ: `TMB_ADDR=host.openshell.internal:17600`,
+`TMB_CA=/usr/share/tmb/certs/ca.crt`, `TMB_CERT=.../client1.crt`,
+`TMB_KEY=.../client1.key`. CA-ключ никогда не попадает ни в образ, ни в
+контейнер.
+
+Риск (осознанный, прототип): клиентский ключ проката живёт в локальном
+образе Docker до конца прогона (cleanup делает `docker rmi` per-run тега);
+однокомнатная песочница (uid 1000, файлов certs читает любой локальный
+процесс песочницы — их там один). Альтернатива `--upload` держала бы ключ
+вне слоёв образа, но связывает доставку с filesystem-политикой рабочей
+директории; для PoC выбрана простота. Продакшен-решение (секрет-стор /
+короткоживущие сертификаты) — вне скоупа.
+
+### Отклонения от спеки/ADR (и почему)
+
+1. **Песочница создаётся БЕЗ политики, правило добавляется горячей
+   загрузкой** (`openshell policy set` сразу после create). Причина:
+   `sandbox create --policy <файл>` на OpenShell 0.1.3 + Docker Desktop
+   ломается upstream (workload spawn `Permission denied` в proxy-режиме,
+   воспроизводится минимальной политикой `version: 1`). Hot-add — путь,
+   который ADR 0003 прямо предвидит («TCP-endpoint добавляется в живую
+   песочницу без пересоздания»); deny-by-default сохраняется: до загрузки
+   правила egress полностью закрыт встроенной политикой.
+2. **Правило применяется полной заменой политики** (`policy set` с
+   сохранённой filesystem-секцией), а не `policy update --add-endpoint`,
+   потому что CLI-строка endpoint не выражает `tls: skip` (в опциях CLI
+   его нет), а ADR требует именно `tcp` + `tls: skip`.
+3. **Форвардер `tmb-osh-gwreach`** (см. выше) — локальная инфраструктура
+   стенда, не часть TMB; существовала бы и при create-time политике.
+
+### Как воспроизвести
+
+```bash
+# пререквизиты: Docker Desktop (host networking on, ECI off), openshell
+# 0.1.3, запущенный gateway (brew services start openshell)
+bash harness/run-openshell.sh     # всё с нуля; лог: harness/last-openshell-run.log
+```
+
+Скрипт идемпотентный: перед прогоном сносит остатки прошлых прогонов
+(sandboxes `tmb8-*`/`tmb-osh-sbx-*`, контейнер host-sim, per-run образ),
+поднимает сертификаты/образы/топологику, гоняет сценарии, печатает таблицу
+PASS/FAIL, выходит 0 только при полном зелёном. Cleanup-ловушка удаляет:
+песочницу, host-sim, named-тома, per-run образ с сертификатами,
+форвардер. Между прогонами gateway.toml остаётся с
+`grpc_endpoint = "https://127.0.0.1:17671"` — следующий прогон (и #9)
+поднимает форвардер заново; откат к исходному состоянию — вернуть
+`gateway.toml.pre-tmb8.bak` и `brew services restart openshell`.
+
+Ключевые команды топологии (для чтения, не для ручного повтора):
+
+```bash
+# песочница (блок-режим; окружение передаётся путями к файлам в образе)
+openshell sandbox create --name tmb8-... --from tmb-osh-sbx:<run> \
+  --env TMB_ADDR=host.openshell.internal:17600 \
+  --env TMB_CA=/usr/share/tmb/certs/ca.crt \
+  --env TMB_CERT=/usr/share/tmb/certs/client1.crt \
+  --env TMB_KEY=/usr/share/tmb/certs/client1.key \
+  --detach -- sleep infinity
+# единственное правило (полная политика с сохранённой fs-секцией):
+#   network_policies: { tmb: { endpoints: [ { host: host.openshell.internal,
+#     port: 17600, protocol: tcp, tls: skip } ],
+#     binaries: [ { path: /usr/local/bin/tmb } ] } }
+openshell policy set tmb8-... --policy policy-tmb.json --wait
+# сценарный seam O-серии:
+openshell sandbox exec tmb8-... --no-login-shell -- tmb exec --root -- /usr/bin/id -u
+```
