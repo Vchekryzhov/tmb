@@ -188,15 +188,18 @@ func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
 		req.ClaimToken = proto.TokenID(hash) // broker-side binding
 		b.claimStage(&req, id, conn)
 	default:
-		b.deny(&req, "unknown_request_type", req.Type, conn)
+		b.deny(&req, id, "unknown_request_type", req.Type, conn)
 	}
 }
 
-func (b *Broker) deny(req *proto.Request, reason, detail string, conn net.Conn) {
-	b.log.Event("deny", map[string]any{
-		"executable": req.Executable, "argv": req.Argv,
-		"nonce": short(req.Nonce, 12), "reason": reason, "detail": detail,
-	})
+func (b *Broker) deny(req *proto.Request, id RequesterID, reason, detail string, conn net.Conn) {
+	ev := id.LogFields()
+	ev["executable"] = req.Executable
+	ev["argv"] = req.Argv
+	ev["nonce"] = short(req.Nonce, 12)
+	ev["reason"] = reason
+	ev["detail"] = detail
+	b.log.Event("deny", ev)
 	proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: reason, Detail: detail})
 }
 
@@ -283,17 +286,21 @@ func (b *Broker) doApprove(req *proto.Request, id RequesterID, conn net.Conn) {
 func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn) bool {
 	exeReal, cwdReal, dev, ino, deny, detail := b.validateRequest(req)
 	if deny != "" {
-		b.deny(req, deny, detail, conn)
+		b.deny(req, id, deny, detail, conn)
 		return false
 	}
 
 	granted, reason := b.runApprovalInteraction(req, id, exeReal, dev, ino)
-	b.log.Event("approval", map[string]any{
-		"mode": b.mode, "result": boolRes(granted), "reason": reason,
-		"executable": req.Executable, "argv": req.Argv, "nonce": short(req.Nonce, 12),
-	})
+	aev := id.LogFields()
+	aev["mode"] = b.mode
+	aev["result"] = boolRes(granted)
+	aev["reason"] = reason
+	aev["executable"] = req.Executable
+	aev["argv"] = req.Argv
+	aev["nonce"] = short(req.Nonce, 12)
+	b.log.Event("approval", aev)
 	if !granted {
-		b.deny(req, reason, "nothing was executed", conn)
+		b.deny(req, id, reason, "nothing was executed", conn)
 		return false
 	}
 
@@ -392,7 +399,7 @@ func (b *Broker) takePending(hash string) (*pendingApproval, bool) {
 func (b *Broker) claimStage(req *proto.Request, id RequesterID, conn net.Conn) {
 	exeReal, cwdReal, dev, ino, deny, detail := b.validateRequest(req)
 	if deny != "" {
-		b.deny(req, deny, detail, conn)
+		b.deny(req, id, deny, detail, conn)
 		return
 	}
 
@@ -402,7 +409,7 @@ func (b *Broker) claimStage(req *proto.Request, id RequesterID, conn net.Conn) {
 
 	// 1. token must bind to THIS exact request (mutation after approval)
 	if req.ClaimToken != tokenID {
-		b.deny(req, "token_binding_mismatch",
+		b.deny(req, id, "token_binding_mismatch",
 			fmt.Sprintf("presented token %q does not bind to hash of this request (%s)", req.ClaimToken, tokenID), conn)
 		return
 	}
@@ -411,7 +418,7 @@ func (b *Broker) claimStage(req *proto.Request, id RequesterID, conn net.Conn) {
 	// from a DIFFERENT identity is refused BEFORE any token/nonce
 	// consumption, so the original requester can still redeem it.
 	if p, has := b.peekPending(hash); has && !p.Requester.Equal(id) {
-		b.deny(req, "requester_mismatch",
+		b.deny(req, id, "requester_mismatch",
 			fmt.Sprintf("approval was granted to requester %s, token not consumed", p.Requester.Key()), conn)
 		return
 	}
@@ -419,31 +426,31 @@ func (b *Broker) claimStage(req *proto.Request, id RequesterID, conn net.Conn) {
 	// 3. exactly-once on disk (survives broker restart)
 	ok, err := b.claims.ClaimToken(hash, tokenID, rkey)
 	if err != nil {
-		b.deny(req, "claim_store_error", err.Error(), conn)
+		b.deny(req, id, "claim_store_error", err.Error(), conn)
 		return
 	}
 	if !ok {
-		b.deny(req, "token_consumed_replay", "token already redeemed exactly once before", conn)
+		b.deny(req, id, "token_consumed_replay", "token already redeemed exactly once before", conn)
 		return
 	}
 	ok, err = b.claims.ClaimNonce(req.Nonce, rkey)
 	if err != nil {
-		b.deny(req, "claim_store_error", err.Error(), conn)
+		b.deny(req, id, "claim_store_error", err.Error(), conn)
 		return
 	}
 	if !ok {
-		b.deny(req, "nonce_consumed_replay", "nonce already redeemed exactly once before", conn)
+		b.deny(req, id, "nonce_consumed_replay", "nonce already redeemed exactly once before", conn)
 		return
 	}
 
 	// 4. pending approval must exist, be unexpired, and pin the same inode
 	p, has := b.takePending(hash)
 	if !has {
-		b.deny(req, "no_pending_approval", "no live approval for this exact request (expired, consumed, or broker restarted)", conn)
+		b.deny(req, id, "no_pending_approval", "no live approval for this exact request (expired, consumed, or broker restarted)", conn)
 		return
 	}
 	if p.ExePath != exeReal || p.ExeDev != dev || p.ExeIno != ino {
-		b.deny(req, "executable_changed",
+		b.deny(req, id, "executable_changed",
 			fmt.Sprintf("approved %s (dev=%d ino=%d), now %s (dev=%d ino=%d)", p.ExePath, p.ExeDev, p.ExeIno, exeReal, dev, ino), conn)
 		return
 	}

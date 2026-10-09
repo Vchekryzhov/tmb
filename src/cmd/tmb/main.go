@@ -10,6 +10,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -60,7 +62,11 @@ usage:
   tmb approve --json FILE|-                                                  debug: approval phase only
   tmb claim --token TOKEN --json FILE|-                                      debug: claim phase only
   tmb raw --json FILE|-                                                      debug: raw request verbatim
-flags (all): --socket PATH (default %s, env TMB_SOCK)
+endpoint selection (all subcommands):
+  unix socket (default): --socket PATH (default %s, env TMB_SOCK)
+  TLS (mTLS endpoint):   --addr HOST:PORT (env TMB_ADDR) plus --ca/--cert/--key
+                        (env TMB_CA/TMB_CERT/TMB_KEY); TMB_ADDR set without the
+                        client cert material is a usage error (exit 2)
 `, defaultSocket)
 }
 
@@ -89,6 +95,7 @@ func (e *deniedErr) Error() string {
 	return "DENIED: " + e.reason
 }
 
+// dial connects to a unix-socket broker with the PoC retry loop.
 func dial(path string) (net.Conn, error) {
 	deadline := time.Now().Add(3 * time.Second)
 	for {
@@ -102,6 +109,102 @@ func dial(path string) (net.Conn, error) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+// endpoint collects the broker endpoint selection for one subcommand. Empty
+// fields fall back to env (TMB_SOCK / TMB_ADDR / TMB_CA / TMB_CERT /
+// TMB_KEY); a set addr selects the TLS path, otherwise the unix path.
+type endpoint struct {
+	socket, addr, ca, cert, key string
+}
+
+func (e *endpoint) addFlags(fs *flag.FlagSet) {
+	fs.StringVar(&e.socket, "socket", "", "broker socket path (env TMB_SOCK)")
+	fs.StringVar(&e.addr, "addr", "", "broker TLS address host:port (env TMB_ADDR)")
+	fs.StringVar(&e.ca, "ca", "", "CA certificate verifying the broker (env TMB_CA)")
+	fs.StringVar(&e.cert, "cert", "", "client certificate (env TMB_CERT)")
+	fs.StringVar(&e.key, "key", "", "client key (env TMB_KEY)")
+}
+
+func orEnv(v, env string) string {
+	if v != "" {
+		return v
+	}
+	return os.Getenv(env)
+}
+
+// dialEndpoint connects to the broker: TLS when a TMB_ADDR endpoint is set
+// (flag or env), the unix socket exactly as before otherwise.
+func dialEndpoint(e endpoint) (net.Conn, error) {
+	addr := orEnv(e.addr, "TMB_ADDR")
+	if addr == "" {
+		sock := orEnv(e.socket, "TMB_SOCK")
+		if sock == "" {
+			sock = defaultSocket
+		}
+		return dial(sock)
+	}
+	ca := orEnv(e.ca, "TMB_CA")
+	cert := orEnv(e.cert, "TMB_CERT")
+	key := orEnv(e.key, "TMB_KEY")
+	if ca == "" || cert == "" || key == "" {
+		return nil, fmt.Errorf(
+			"tls endpoint %s: TMB_CA, TMB_CERT and TMB_KEY (or --ca/--cert/--key) are required when TMB_ADDR is set - no connection attempted", addr)
+	}
+	return dialTLS(addr, ca, cert, key)
+}
+
+// tlsClientConfig builds the client-side TLS config: the broker chain is
+// verified against the TMB_CA root pool with ServerName taken from the host
+// part of the address. InsecureSkipVerify is forbidden by design and never
+// set.
+func tlsClientConfig(addr, caPath, certPath, keyPath string) (*tls.Config, error) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("bad address %q (want host:port): %v", addr, err)
+	}
+	caPEM, err := os.ReadFile(caPath)
+	if err != nil {
+		return nil, fmt.Errorf("read --ca/TMB_CA %s: %v", caPath, err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("--ca/TMB_CA %s: no certificates parsed", caPath)
+	}
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("load --cert/--key (TMB_CERT/TMB_KEY): %v", err)
+	}
+	return &tls.Config{
+		ServerName:   host,
+		RootCAs:      pool,
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS13,
+	}, nil
+}
+
+// dialTLS dials the TLS endpoint and completes the handshake. Config errors
+// are plain errors (exit 2); connection and verification failures are
+// transport errors (exit 3, FAIL CLOSED).
+func dialTLS(addr, caPath, certPath, keyPath string) (net.Conn, error) {
+	cfg, err := tlsClientConfig(addr, caPath, certPath, keyPath)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := net.DialTimeout("tcp", addr, 3*time.Second)
+	if err != nil {
+		return nil, &transportErr{fmt.Errorf(
+			"broker unreachable at %s: %v - FAIL CLOSED, nothing executed", addr, err)}
+	}
+	tc := tls.Client(raw, cfg)
+	_ = raw.SetDeadline(time.Now().Add(5 * time.Second))
+	if err := tc.Handshake(); err != nil {
+		raw.Close()
+		return nil, &transportErr{fmt.Errorf(
+			"TLS handshake with %s failed: %v - FAIL CLOSED, nothing executed", addr, err)}
+	}
+	_ = raw.SetDeadline(time.Time{})
+	return tc, nil
 }
 
 func isRetryable(err error) bool {
@@ -187,8 +290,8 @@ func cmdExec(args []string) error {
 	fs := flag.NewFlagSet("exec", flag.ExitOnError)
 	root := fs.Bool("root", false, "request uid 0 (only uid supported in PoC)")
 	cwd := fs.String("cwd", "/tmp", "working directory for the command")
-	socketRef := ""
-	fs.StringVar(&socketRef, "socket", "", "broker socket path")
+	var ep endpoint
+	ep.addFlags(fs)
 	var envFlags multiFlag
 	fs.Var(&envFlags, "env", "request env K=V (must be in broker allowlist); repeatable")
 	if err := fs.Parse(args); err != nil {
@@ -226,12 +329,8 @@ func cmdExec(args []string) error {
 		Env:        env,
 		Nonce:      proto.NewNonce(),
 	}
-	sock := socketRef
-	if sock == "" {
-		sock = envSock()
-	}
 	fmt.Fprintf(os.Stderr, "REQ: %s\n", req.Canonical())
-	conn, err := dial(sock)
+	conn, err := dialEndpoint(ep)
 	if err != nil {
 		return err
 	}
@@ -248,20 +347,13 @@ func cmdExec(args []string) error {
 	return nil
 }
 
-func envSock() string {
-	if s := os.Getenv("TMB_SOCK"); s != "" {
-		return s
-	}
-	return defaultSocket
-}
-
 // --- debug subcommands ------------------------------------------------------
 
 func cmdApprove(args []string) error {
 	fs := flag.NewFlagSet("approve", flag.ExitOnError)
 	jsonPath := fs.String("json", "-", "request JSON file ('-' = stdin)")
-	socketRef := ""
-	fs.StringVar(&socketRef, "socket", "", "broker socket path")
+	var ep endpoint
+	ep.addFlags(fs)
 	fs.Parse(args)
 	raw, err := readJSONFile(*jsonPath)
 	if err != nil {
@@ -273,15 +365,15 @@ func cmdApprove(args []string) error {
 	}
 	req.Type = "approve"
 	fmt.Fprintf(os.Stderr, "REQ: %s\n", req.Canonical())
-	return roundtrip(socketRef, &req)
+	return roundtrip(ep, &req)
 }
 
 func cmdClaim(args []string) error {
 	fs := flag.NewFlagSet("claim", flag.ExitOnError)
 	jsonPath := fs.String("json", "-", "request JSON file ('-' = stdin)")
 	token := fs.String("token", "", "token to present")
-	socketRef := ""
-	fs.StringVar(&socketRef, "socket", "", "broker socket path")
+	var ep endpoint
+	ep.addFlags(fs)
 	fs.Parse(args)
 	if *token == "" {
 		return errors.New("claim: --token is required")
@@ -297,7 +389,7 @@ func cmdClaim(args []string) error {
 	req.Type = "claim"
 	req.ClaimToken = *token
 	fmt.Fprintf(os.Stderr, "REQ: %s\n", req.Canonical())
-	code, err := roundtripCode(socketRef, &req)
+	code, err := roundtripCode(ep, &req)
 	if err != nil {
 		return err
 	}
@@ -308,8 +400,8 @@ func cmdClaim(args []string) error {
 func cmdRaw(args []string) error {
 	fs := flag.NewFlagSet("raw", flag.ExitOnError)
 	jsonPath := fs.String("json", "-", "request JSON file ('-' = stdin)")
-	socketRef := ""
-	fs.StringVar(&socketRef, "socket", "", "broker socket path")
+	var ep endpoint
+	ep.addFlags(fs)
 	fs.Parse(args)
 	raw, err := readJSONFile(*jsonPath)
 	if err != nil {
@@ -320,22 +412,18 @@ func cmdRaw(args []string) error {
 		return fmt.Errorf("bad request JSON: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "REQ-RAW: %s\n", raw)
-	return roundtrip(socketRef, &req)
+	return roundtrip(ep, &req)
 }
 
 // roundtrip sends the request and prints every frame as JSON (no stream
 // decoding) - used by debug subcommands.
-func roundtrip(socketRef string, req *proto.Request) error {
-	_, err := roundtripCode(socketRef, req)
+func roundtrip(ep endpoint, req *proto.Request) error {
+	_, err := roundtripCode(ep, req)
 	return err
 }
 
-func roundtripCode(socketRef string, req *proto.Request) (int, error) {
-	sock := socketRef
-	if sock == "" {
-		sock = envSock()
-	}
-	conn, err := dial(sock)
+func roundtripCode(ep endpoint, req *proto.Request) (int, error) {
+	conn, err := dialEndpoint(ep)
 	if err != nil {
 		return -1, err
 	}

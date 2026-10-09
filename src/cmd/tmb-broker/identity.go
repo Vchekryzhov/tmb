@@ -76,13 +76,18 @@ func (id RequesterID) LogFields() map[string]any {
 }
 
 // ConsoleLine renders the requester for the manual approval console. The
-// uid rendering is byte-stable (the N-series scenario registry checks it).
+// uid rendering is byte-stable (the N-series scenario registry checks it);
+// the cert rendering shows the first 16 hex chars of the fingerprint.
 func (id RequesterID) ConsoleLine() string {
 	switch id.Kind {
 	case KindUID:
 		return fmt.Sprintf("uid=%d pid=%d (kernel SO_PEERCRED)", id.UID, id.PID)
 	case KindCertFP:
-		return fmt.Sprintf("cert fp=%s", id.FP)
+		fp := id.FP
+		if len(fp) > 16 {
+			fp = fp[:16]
+		}
+		return fmt.Sprintf("cert fp=%s", fp)
 	}
 	return "unknown"
 }

@@ -25,6 +25,13 @@ type Config struct {
 	ShellDenyList        []string          `json:"shell_deny_list"`
 	TokenTTLSeconds      int               `json:"token_ttl_seconds"`
 	ApprovalDefault      string            `json:"approval_default"`
+	// TLS listener (second listener, mTLS only). When tls_addr is set (config
+	// or -tls-addr flag), all three files must be set as well; empty
+	// tls_addr keeps the broker unix-socket-only.
+	TLSAddr     string `json:"tls_addr"`
+	TLSCAFile   string `json:"tls_ca_file"`
+	TLSCertFile string `json:"tls_cert_file"`
+	TLSKeyFile  string `json:"tls_key_file"`
 }
 
 func loadConfig(path string) (*Config, error) {

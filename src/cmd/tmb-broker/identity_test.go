@@ -107,10 +107,10 @@ func TestRequesterIDRendering(t *testing.T) {
 		t.Errorf("uid key = %q, want %q", id.Key(), "uid:4242")
 	}
 
-	fp := strings.Repeat("ab", 32)
+	fp := "0123456789abcdef" + strings.Repeat("ab", 24) // 64 hex chars; console shows the first 16
 	cert := CertRequester(fp)
-	if got, want := cert.ConsoleLine(), "cert fp="+fp; got != want {
-		t.Errorf("cert console line = %q, want %q", got, want)
+	if got, want := cert.ConsoleLine(), "cert fp=0123456789abcdef"; got != want {
+		t.Errorf("cert console line = %q, want %q (first 16 hex)", got, want)
 	}
 	clf := cert.LogFields()
 	if clf["requester_fp"] != fp {

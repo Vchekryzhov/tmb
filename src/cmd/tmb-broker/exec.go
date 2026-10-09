@@ -31,7 +31,7 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 
 	devNull, err := os.OpenFile("/dev/null", os.O_RDONLY, 0)
 	if err != nil {
-		b.deny(req, "exec_error", "open /dev/null: "+err.Error(), conn)
+		b.deny(req, id, "exec_error", "open /dev/null: "+err.Error(), conn)
 		return
 	}
 	defer devNull.Close()
@@ -50,12 +50,12 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		b.deny(req, "exec_error", err.Error(), conn)
+		b.deny(req, id, "exec_error", err.Error(), conn)
 		return
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		b.deny(req, "exec_error", err.Error(), conn)
+		b.deny(req, id, "exec_error", err.Error(), conn)
 		return
 	}
 
@@ -70,7 +70,7 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 
 	if err := cmd.Start(); err != nil {
 		b.log.Event("exec_fail", map[string]any{"token": tokenID, "error": err.Error()})
-		b.deny(req, "exec_start_failed", err.Error(), conn)
+		b.deny(req, id, "exec_start_failed", err.Error(), conn)
 		return
 	}
 
@@ -112,10 +112,12 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 			code = 255
 		}
 	}
-	b.log.Event("exec_exit", map[string]any{
-		"token": tokenID, "executable": p.ExePath,
-		"exit_status": code, "duration_ms": time.Since(start).Milliseconds(),
-	})
+	evExit := id.LogFields()
+	evExit["token"] = tokenID
+	evExit["executable"] = p.ExePath
+	evExit["exit_status"] = code
+	evExit["duration_ms"] = time.Since(start).Milliseconds()
+	b.log.Event("exec_exit", evExit)
 	writeFrame(&proto.Frame{Type: "exit", Code: &code})
 }
 
