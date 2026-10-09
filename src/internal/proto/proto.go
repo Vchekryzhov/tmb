@@ -1,0 +1,153 @@
+// Package proto defines the wire protocol between the tmb client and the
+// tmb-broker: length-prefixed JSON frames, the request object, and the
+// canonical request hash that approvals/tokens bind to.
+//
+// PROTOTYPE CODE - throwaway PoC, not production.
+package proto
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+)
+
+// MaxFrame is the hard cap on one wire frame (1 MiB).
+const MaxFrame = 1 << 20
+
+// Request is the structured execution request sent by the client.
+// The broker NEVER executes anything except the fields of this object.
+type Request struct {
+	Type       string            `json:"type"` // "exec" | "approve" | "claim"
+	Executable string            `json:"executable"`
+	Argv       []string          `json:"argv"`
+	Cwd        string            `json:"cwd"`
+	UID        int               `json:"uid"`
+	Env        map[string]string `json:"env,omitempty"`
+	Nonce      string            `json:"nonce"`
+	ClaimToken string            `json:"claim_token,omitempty"`
+}
+
+// canonicalRequest is the exact tuple an approval binds to. Type and
+// ClaimToken are transport/protocol fields and are deliberately excluded.
+type canonicalRequest struct {
+	Executable string            `json:"executable"`
+	Argv       []string          `json:"argv"`
+	Cwd        string            `json:"cwd"`
+	UID        int               `json:"uid"`
+	Env        map[string]string `json:"env"`
+	Nonce      string            `json:"nonce"`
+}
+
+// Canonical returns the deterministic JSON encoding of the request tuple.
+// Go marshals struct fields in declaration order and map keys sorted, so
+// this is stable across processes.
+func (r *Request) Canonical() []byte {
+	env := r.Env
+	if env == nil {
+		env = map[string]string{}
+	}
+	b, err := json.Marshal(canonicalRequest{
+		Executable: r.Executable,
+		Argv:       r.Argv,
+		Cwd:        r.Cwd,
+		UID:        r.UID,
+		Env:        env,
+		Nonce:      r.Nonce,
+	})
+	if err != nil {
+		// cannot happen for string/slice/map-of-string data
+		panic(fmt.Sprintf("proto: canonical marshal: %v", err))
+	}
+	return b
+}
+
+// Hash returns sha256 over the canonical request, hex encoded.
+func (r *Request) Hash() string {
+	sum := sha256.Sum256(r.Canonical())
+	return hex.EncodeToString(sum[:])
+}
+
+// TokenID derives the short, human-showable token id for a request hash.
+// The full hash is used for on-disk claim filenames.
+func TokenID(hash string) string { return hash[:16] }
+
+// NewNonce returns a fresh client-generated unique nonce (32 hex chars).
+func NewNonce() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic("proto: rand: " + err.Error())
+	}
+	return hex.EncodeToString(b)
+}
+
+// Frame is a broker->client response frame.
+type Frame struct {
+	Type   string `json:"type"` // approved|denied|stdout|stderr|exit|error
+	Token  string `json:"token,omitempty"`
+	Reason string `json:"reason,omitempty"`
+	Detail string `json:"detail,omitempty"`
+	Data   string `json:"data,omitempty"` // base64 payload for stdout/stderr
+	Code   *int   `json:"code,omitempty"`
+}
+
+// Stdout/Stderr build chunk frames.
+func Chunk(kind string, p []byte) *Frame {
+	return &Frame{Type: kind, Data: base64.StdEncoding.EncodeToString(p)}
+}
+
+// ErrFrameTooLarge is returned when a frame exceeds MaxFrame.
+var ErrFrameTooLarge = errors.New("frame too large")
+
+// WriteFrame writes one length-prefixed (4-byte big-endian) JSON frame.
+func WriteFrame(w io.Writer, v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	if len(b) > MaxFrame {
+		return ErrFrameTooLarge
+	}
+	var hdr [4]byte
+	binary.BigEndian.PutUint32(hdr[:], uint32(len(b)))
+	if _, err := w.Write(hdr[:]); err != nil {
+		return err
+	}
+	_, err = w.Write(b)
+	return err
+}
+
+// ReadRawFrame reads one frame and returns the raw JSON bytes.
+func ReadRawFrame(r io.Reader) ([]byte, error) {
+	var hdr [4]byte
+	if _, err := io.ReadFull(r, hdr[:]); err != nil {
+		return nil, err
+	}
+	n := binary.BigEndian.Uint32(hdr[:])
+	if n > MaxFrame {
+		return nil, ErrFrameTooLarge
+	}
+	buf := make([]byte, n)
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+// ReadFrame reads one frame into a *Frame.
+func ReadFrame(r io.Reader) (*Frame, error) {
+	buf, err := ReadRawFrame(r)
+	if err != nil {
+		return nil, err
+	}
+	var f Frame
+	if err := json.Unmarshal(buf, &f); err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
