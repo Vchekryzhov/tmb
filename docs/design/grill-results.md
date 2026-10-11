@@ -71,4 +71,4 @@
 - [Issue #1](https://github.com/Vchekryzhov/tmb/issues/1): спека прототипа интеграции с sudo.
 - [Issue #2](https://github.com/Vchekryzhov/tmb/issues/2): доверенный подписант.
 - [Issue #3](https://github.com/Vchekryzhov/tmb/issues/3): будущий канал удалённого одобрения.
-- Словарь домена: [CONTEXT.md](../../CONTEXT.md). Актуальные постановки этапов находятся в issues; README описывает цели ещё не реализованного прототипа.
+- Словарь домена: [CONTEXT.md](../../CONTEXT.md). Актуальные постановки этапов находятся в issues; на момент этой записи README описывал цели ещё не реализованного прототипа.

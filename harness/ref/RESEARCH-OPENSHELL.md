@@ -1,5 +1,11 @@
 # RESEARCH: NVIDIA OpenShell as TMB sandbox layer
 
+> Historical research snapshot (2026-10-09), not the current implementation
+> guide. OpenCode is the example agent in the researched tutorial; the TMB
+> protocol does not depend on that agent. [ADR 0003](../../docs/adr/0003-sandbox-transport-tcp-mtls.md)
+> selects OpenShell + TCP/mTLS with length-prefixed JSON, not MCP. The
+> implemented rig and its limits are described in [VERDICT-OPENSHELL.md](../../VERDICT-OPENSHELL.md).
+
 **Verdict: OpenShell exists, is real, active, and fits the TMB PoC.** Recommended: wrap OpenCode in OpenShell; expose the TMB broker either as (A) a single bind-mounted Unix socket (direct, unmediated) or — cleaner — (B) a single TCP/MCP endpoint allowed by exactly one `network_policies` rule (mediated, audited, hot-reloadable). TMB approval stays separate from OpenShell's network-policy approvals.
 
 - Product: **NVIDIA/OpenShell** — "safe, private runtime for autonomous AI agents", Apache-2.0, Rust. Repo: https://github.com/NVIDIA/OpenShell · Docs: https://docs.nvidia.com/openshell/latest/

@@ -1,7 +1,12 @@
 # Вердикт по брокер-прототипу TMB — PROTOTYPE, throwaway PoC
 
+> Исторический вердикт исходного Unix-PoC на ветке `prototype/tmb-broker`.
+> Выбор OpenShell и mTLS выполнен последующим майлстоуном; текущий итог —
+> [VERDICT-OPENSHELL.md](../../VERDICT-OPENSHELL.md).
+
 Прогон: `./run.sh` от 2026-10-08, Docker 29.6.1 (macOS arm64, контейнеры —
-нативный Linux). Полный лог: [last-run.log](last-run.log).
+нативный Linux). Полный лог исходного прогона:
+[last-run.log](https://github.com/Vchekryzhov/tmb/blob/prototype/tmb-broker/prototype/tmb-broker/last-run.log).
 Итог: **56 PASS / 0 FAIL, RESULT: GREEN, runner exit 0.**
 
 Архитектура подтверждена: привилегированное выполнение через отдельный брокер

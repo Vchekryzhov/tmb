@@ -18,6 +18,12 @@ JSONL-журнал, approval-консоль, привязка одобрения
 агентный путь, человеческий password-sudo нетронут. mTLS двусторонний: клиент
 верифицирует брокера против CA и имени из `TMB_ADDR`.
 
+Роли в связке: OpenShell обеспечивает изоляцию и сетевую политику,
+`tmb`-клиент передаёт запрос, TMB-брокер получает одобрение и выполняет
+команду на host-sim. OpenCode здесь — базовый образ песочницы: сценарии
+вызывают `tmb` через `openshell sandbox exec`, не проверяют автономную
+работу OpenCode с LLM и не доказывают совместимость других агентов.
+
 ## Реестр O-серии (из реального прогона)
 
 O7/O8/O9 гоняются на docker-pair (`harness/run-pair.sh`, без OpenShell —
@@ -163,7 +169,8 @@ Touch ID (#2), удалённое одобрение (#3), TOCTOU-хардени
   (транспорт + mTLS-идентичность).
 - [Спека #5](https://github.com/Vchekryzhov/tmb/issues/5) и тикеты
   #6–#11 (реестр O-серии определён в спеке).
-- [VERDICT-BROKER.md](harness/ref/VERDICT-BROKER.md): вердикт PoC-брокера
-  (N-серия, 62/62).
+- [VERDICT-BROKER.md](harness/ref/VERDICT-BROKER.md): исторический вердикт
+  исходного Unix-PoC (56/56); текущая N-серия 62/62 зафиксирована выше
+  и в `harness/last-run.log`.
 - [harness/ref/README-PROTOTYPE.md](harness/ref/README-PROTOTYPE.md):
   топология стенда, пререквизиты, отклонения.
