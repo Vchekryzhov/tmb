@@ -338,6 +338,89 @@ assert_out_eq "N10: stdout is exactly '0'" "0"
 state_dump
 
 # -----------------------------------------------------------------------------
+log "SCENARIO N11: exe replaced between claim validation and exec -> the APPROVED inode runs"
+# /tmp/n11/prog = copy of /bin/echo (prints its argv: "A"); the replacement is
+# a #!/bin/sh script printing B at the SAME path (new inode). The swap is
+# timed to land INSIDE the claim processing: a watcher in host-sim busy-polls
+# the claim store; the moment the token claim file appears the broker is
+# between validateRequest and execute, so the watcher SIGSTOPs the broker,
+# renames the replacement over the approved path, and SIGCONTs. The kernel
+# must then still execute the inode the human approved (fd pinning), not
+# whatever now lives at the path.
+stop_broker
+start_broker mock-approve 10
+docker exec "$HOST" sh -c 'rm -rf /tmp/n11 && mkdir -p /tmp/n11 && cp /bin/echo /tmp/n11/prog && chmod 0755 /tmp/n11/prog && printf "#!/bin/sh\necho B\n" > /tmp/n11/prog.b && chmod 0755 /tmp/n11/prog.b && rm -f /tmp/n11/swapped'
+cat >"$TD/n11.json" <<'EOF'
+{"type":"approve","executable":"/tmp/n11/prog","argv":["/tmp/n11/prog","A"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n11-nonce-fixed-000011"}
+EOF
+run_client_json tmb approve "$TD/n11.json"
+assert_rc "N11: approve phase ok" 0
+T11=$(token_of)
+if [ -n "$T11" ]; then ok "N11: got one-shot token $T11"; else bad "N11: no token parsed"; fi
+echo "-- arming in-window swapper (SIGSTOP broker at claim-file creation)"
+docker exec "$HOST" sh -c '
+  BEFORE=0
+  for f in /var/lib/tmb-proto/claims/*; do [ -e "$f" ] && BEFORE=$((BEFORE+1)); done
+  BPID=$(pgrep -x tmb-broker)
+  I=0
+  while [ "$I" -lt 400000 ]; do
+    N=0
+    for f in /var/lib/tmb-proto/claims/*; do [ -e "$f" ] && N=$((N+1)); done
+    if [ "$N" -gt "$BEFORE" ]; then
+      kill -STOP "$BPID"
+      mv -f /tmp/n11/prog.b /tmp/n11/prog
+      kill -CONT "$BPID"
+      touch /tmp/n11/swapped
+      exit 0
+    fi
+    I=$((I+1))
+  done
+  exit 3
+' &
+N11_WATCH=$!
+run_client_json tmb claim --token "$T11" "$TD/n11.json"
+assert_rc "N11: claim exit 0 (a program ran)" 0
+wait "$N11_WATCH"; N11_WRC=$?
+if [ "$N11_WRC" = 0 ] && docker exec "$HOST" test -e /tmp/n11/swapped; then ok "N11: swap landed inside the claim window (broker frozen, exe path replaced)"; else bad "N11: swapper never fired (window not exercised)"; fi
+assert_out_eq "N11: stdout 'A' - the APPROVED inode ran, not the replacement" "A"
+if docker exec "$HOST" grep -q '"event":"exec_start".*"exe_via_fd":true' /var/log/tmb/broker.log 2>/dev/null; then
+  ok "N11: JSONL exec_start has exe_via_fd=true (exec via pinned fd)"
+else
+  bad "N11: JSONL exec_start lacks exe_via_fd=true"
+fi
+run_client "$SBX" tmb exec --root -- /bin/ls /proc/self/fd
+assert_rc     "N11: fd listing via pinned exec ran" 0
+assert_out_eq "N11: child sees only fds 0,1,2 (+ls own dirfd) - pin fd closed at exec" "$(printf '0\n1\n2\n3')"
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N12: cwd directory replaced between approve and claim -> deny cwd_changed"
+# The approved cwd is moved aside and a NEW directory is created at the same
+# path. The path string is identical, so path-only validation cannot tell;
+# the broker must compare directory identity (dev/ino) at exec time and deny
+# instead of silently running the command in the replacement directory.
+docker exec "$HOST" sh -c 'rm -rf /tmp/n12-dir /tmp/n12-dir.old && mkdir /tmp/n12-dir && touch /tmp/n12-dir/old-marker'
+cat >"$TD/n12.json" <<'EOF'
+{"type":"approve","executable":"/bin/ls","argv":["/bin/ls"],"cwd":"/tmp/n12-dir","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n12-nonce-fixed-000012"}
+EOF
+run_client_json tmb approve "$TD/n12.json"
+assert_rc "N12: approve phase ok" 0
+T12=$(token_of)
+if [ -n "$T12" ]; then ok "N12: got one-shot token $T12"; else bad "N12: no token parsed"; fi
+docker exec "$HOST" sh -c 'mv /tmp/n12-dir /tmp/n12-dir.old && mkdir /tmp/n12-dir && touch /tmp/n12-dir/new-marker'
+if docker exec "$HOST" test -e /tmp/n12-dir.old/old-marker; then ok "N12: cwd really replaced (old dir moved aside, new inode at the same path)"; else bad "N12: cwd replacement did not happen"; fi
+run_client_json tmb claim --token "$T12" "$TD/n12.json"
+assert_rc      "N12: claim after cwd swap -> exit 125" 125
+assert_err_has "N12: deny reason cwd_changed" "cwd_changed"
+assert_out_eq  "N12: no command output (nothing executed)" ""
+if docker exec "$HOST" grep -q '"event":"deny".*"reason":"cwd_changed"' /var/log/tmb/broker.log 2>/dev/null; then
+  ok "N12: JSONL deny event with reason cwd_changed"
+else
+  bad "N12: JSONL deny event with reason cwd_changed missing"
+fi
+state_dump
+
+# -----------------------------------------------------------------------------
 log "SCENARIO N3a: mock-deny -> deny, nothing runs"
 stop_broker
 start_broker mock-deny "$TTL"

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -18,15 +19,29 @@ import (
 //
 // Hygiene rules enforced here:
 //   - direct execve via os/exec (fork+exec): NO sh -c, NO PATH lookup
-//     (Path is the realpath pinned at approval, absolute)
+//     (on linux the exec target is /proc/self/fd/N pinned to the inode
+//     approved by the human; off-linux it is the absolute realpath)
 //   - argv is the request's argv verbatim
 //   - env is rebuilt by the broker from the fixed env + allowlisted keys;
 //     the child NEVER inherits the broker env or the request env wholesale
 //   - stdin is /dev/null; only fds 0,1,2 exist in the child (Go opens all
 //     fds O_CLOEXEC / SOCK_CLOEXEC and ExtraFiles is nil, so the client
-//     socket cannot leak into the child)
-//   - cwd is the realpath'd request cwd
+//     socket cannot leak into the child; the pinned exe fd is O_CLOEXEC
+//     too and execve resolves it before the close)
+//   - cwd is the realpath'd request cwd, re-verified by directory identity
+//     (dev/ino) at exec time: a replaced cwd denies with cwd_changed
 func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string, id RequesterID, conn net.Conn, cwdReal string) {
+	// the pending was consumed by the claim: whatever happens below, its
+	// pin goes away with this execution attempt
+	defer p.closePins()
+
+	if p.CwdPinned && !cwdStillPinned(cwdReal, p.CwdDev, p.CwdIno) {
+		b.deny(req, id, "cwd_changed",
+			fmt.Sprintf("approved cwd %s (dev=%d ino=%d) was replaced before exec", cwdReal, p.CwdDev, p.CwdIno), conn)
+		return
+	}
+	exeTarget, viaFd := p.execTarget()
+
 	env := b.buildEnv(req)
 
 	devNull, err := os.OpenFile("/dev/null", os.O_RDONLY, 0)
@@ -38,7 +53,7 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 
 	start := time.Now()
 	cmd := &exec.Cmd{
-		Path:   p.ExePath, // absolute realpath, pinned dev+ino at approval
+		Path:   exeTarget, // linux: /proc/self/fd/N = the approved inode; else the absolute realpath
 		Args:   req.Argv,  // EXACT argv, verbatim from the approved request
 		Dir:    cwdReal,
 		Env:    env,
@@ -66,6 +81,10 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 	evStart["cwd"] = cwdReal
 	evStart["uid"] = req.UID
 	evStart["env_count"] = len(env)
+	evStart["exe_via_fd"] = viaFd
+	evStart["exe_dev"] = p.ExeDev
+	evStart["exe_ino"] = p.ExeIno
+	evStart["cwd_verified"] = p.CwdPinned
 	b.log.Event("exec_start", evStart)
 
 	if err := cmd.Start(); err != nil {

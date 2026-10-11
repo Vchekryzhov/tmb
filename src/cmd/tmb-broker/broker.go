@@ -37,8 +37,21 @@ type pendingApproval struct {
 	ExePath   string // realpath at approval time
 	ExeDev    uint64
 	ExeIno    uint64
+	ExeFile   *os.File // read-only fd pinned to ExeDev/ExeIno at approval (linux); nil once closed
 	CwdReal   string
+	CwdDev    uint64 // cwd directory identity pinned at approval (linux)
+	CwdIno    uint64
+	CwdPinned bool
 	Requester RequesterID
+}
+
+// closePins releases the pinned exe fd (idempotent). Every path that drops
+// or finishes a pending approval calls this, so pins never leak.
+func (p *pendingApproval) closePins() {
+	if p.ExeFile != nil {
+		p.ExeFile.Close()
+		p.ExeFile = nil
+	}
 }
 
 type Broker struct {
@@ -313,12 +326,24 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 	}
 
 	hash := req.Hash()
-	b.mu.Lock()
-	b.pending[hash] = &pendingApproval{
+	pend := &pendingApproval{
 		Hash: hash, Expiry: time.Now().Add(b.ttl),
 		ExePath: exeReal, ExeDev: dev, ExeIno: ino, CwdReal: cwdReal,
 		Requester: id,
 	}
+	// pin the approved identities for exec time: an open fd on the exe
+	// inode (exec runs /proc/self/fd/N, never the mutable path) and the
+	// cwd directory dev/ino (re-verified at exec). Fail closed if either
+	// target changed between stat and pin.
+	if code, detail := pinApproval(pend, exeReal, cwdReal, dev, ino); code != "" {
+		b.deny(req, id, code, detail, conn)
+		return false
+	}
+	b.mu.Lock()
+	if old, exists := b.pending[hash]; exists {
+		old.closePins() // re-approve replaces the pending: drop the old pin
+	}
+	b.pending[hash] = pend
 	b.mu.Unlock()
 	return true
 }
@@ -381,6 +406,7 @@ func (b *Broker) peekPending(hash string) (*pendingApproval, bool) {
 	p, has := b.pending[hash]
 	if has && time.Now().After(p.Expiry) {
 		delete(b.pending, hash)
+		p.closePins()
 		has = false
 	}
 	return p, has
@@ -393,6 +419,7 @@ func (b *Broker) takePending(hash string) (*pendingApproval, bool) {
 	p, has := b.pending[hash]
 	if has && time.Now().After(p.Expiry) {
 		delete(b.pending, hash)
+		p.closePins()
 		has = false
 	}
 	if has {
@@ -458,6 +485,7 @@ func (b *Broker) claimStage(req *proto.Request, id RequesterID, conn net.Conn) {
 		return
 	}
 	if p.ExePath != exeReal || p.ExeDev != dev || p.ExeIno != ino {
+		p.closePins() // pending consumed by takePending: drop the pin
 		b.deny(req, id, "executable_changed",
 			fmt.Sprintf("approved %s (dev=%d ino=%d), now %s (dev=%d ino=%d)", p.ExePath, p.ExeDev, p.ExeIno, exeReal, dev, ino), conn)
 		return
