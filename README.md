@@ -153,6 +153,7 @@ ci/run.sh tools && ci/run.sh local
 ## Документы
 
 - [CONTEXT.md](CONTEXT.md): глоссарий домена.
+- [ADR 0001](docs/adr/0001-oneshot-ssh-certificates.md): SSH-сертификаты с force-command, отклонён, причины внутри.
 - [ADR 0002](docs/adr/0002-standalone-tmb-broker.md): брокер как отдельный демон, sudo не затрагивается.
 - [ADR 0003](docs/adr/0003-sandbox-transport-tcp-mtls.md): песочница OpenShell, TCP endpoint с mTLS-идентичностью.
 - [VERDICT-OPENSHELL.md](VERDICT-OPENSHELL.md): вердикт OpenShell-майлстоуна, реестр O0–O9, отклонения от спеки, остаточные риски.
