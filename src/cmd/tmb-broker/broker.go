@@ -212,6 +212,10 @@ func (b *Broker) deny(req *proto.Request, id RequesterID, reason, detail string,
 	proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: reason, Detail: detail})
 }
 
+// denyDrainTimeout bounds how long a denied connection may take to deliver
+// its request frame before the denial is sent anyway.
+const denyDrainTimeout = 500 * time.Millisecond
+
 // denyRequesterNotAllowed rejects a connection whose identity failed the
 // allowlist check: requester_denied JSONL event, then the denied frame with
 // the identity's detail. Shared by the unix and TLS listeners (which is why
@@ -220,6 +224,12 @@ func (b *Broker) denyRequesterNotAllowed(conn net.Conn, id RequesterID) {
 	ev := id.LogFields()
 	ev["reason"] = "requester_not_allowed"
 	b.log.Event("requester_denied", ev)
+	// Consume (never parse) the request the client is sending: answering and
+	// closing first races its write, and a fast client then sees EPIPE or a
+	// reset instead of this denial. Bounded by MaxFrame and a short deadline.
+	_ = conn.SetReadDeadline(time.Now().Add(denyDrainTimeout))
+	_, _ = proto.ReadRawFrame(conn)
+	_ = conn.SetReadDeadline(time.Time{})
 	proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "requester_not_allowed",
 		Detail: id.NotAllowedDetail()})
 }
