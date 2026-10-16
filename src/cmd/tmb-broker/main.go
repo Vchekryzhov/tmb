@@ -15,6 +15,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "ca" {
+		os.Exit(runCA(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	}
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, stop))
