@@ -50,6 +50,9 @@
      "scenarios": ["N22"]},
     {"id": "SEC-20", "title": "claim files expire at TTL + 24h and are collected at start and hourly; unreadable files stay; replay inside the TTL is still denied after restart",
      "tests": ["tmb-poc/cmd/tmb-broker.TestClaimFilesCarryExpiresAt", "tmb-poc/cmd/tmb-broker.TestClaimGCRemovesOnlyExpired", "tmb-poc/cmd/tmb-broker.TestClaimGCKeepsLiveReplayProtection", "tmb-poc/cmd/tmb-broker.TestClaimGCLoopRepeats"],
-     "scenarios": ["N21", "N8"]}
+     "scenarios": ["N21", "N8"]},
+    {"id": "SEC-21", "title": "approval comes only from approver_uids over the host approver socket: requesters and TLS peers cannot list or decide; the first decision wins; a decision binds to the shown request hash",
+     "tests": ["tmb-poc/cmd/tmb-broker.TestQueueApprovalByApprover", "tmb-poc/cmd/tmb-broker.TestApproverMessagesRejected", "tmb-poc/cmd/tmb-broker.TestRequesterSocketRefusesApproverTypes", "tmb-poc/cmd/tmb.TestApproveYesNoAndAlreadyDecided"],
+     "scenarios": ["N13", "N14", "N16", "PAIR-APPROVE"]}
   ]
 }

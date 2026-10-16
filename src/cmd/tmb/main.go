@@ -56,6 +56,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		code, err = c.cmdExec(args[1:])
 	case "debug":
 		code, err = c.cmdDebug(args[1:])
+	case "approve": // approver role: decide queued requests
+		return cmdApprover(args[1:], c.stdin, c.stdout, c.stderr)
 	default:
 		c.usage()
 		return 2
@@ -92,15 +94,17 @@ func (c *cli) usage() {
 	fmt.Fprintf(c.stderr, `tmb (PROTOTYPE client)
 usage:
   tmb exec [--root] [--cwd DIR] [--env K=V]... -- /abs/executable [args...]   full flow
+  tmb approve [--list | --yes ID | --no ID] [--socket PATH]                   approver: decide queued requests
+                        (socket env TMB_APPROVE_SOCK, default %[2]s)
   tmb debug approve --json FILE|-                                            debug: approval phase only
   tmb debug claim --token TOKEN --json FILE|-                                debug: claim phase only
   tmb debug raw --json FILE|-                                                debug: raw request verbatim
-endpoint selection (all subcommands):
-  unix socket (default): --socket PATH (default %s, env TMB_SOCK)
+endpoint selection (exec and debug):
+  unix socket (default): --socket PATH (default %[1]s, env TMB_SOCK)
   TLS (mTLS endpoint):   --addr HOST:PORT (env TMB_ADDR) plus --ca/--cert/--key
                         (env TMB_CA/TMB_CERT/TMB_KEY); TMB_ADDR set without the
                         client cert material is a usage error (exit 2)
-`, defaultSocket)
+`, defaultSocket, defaultApproveSocket)
 }
 
 // --- shared plumbing ------------------------------------------------------

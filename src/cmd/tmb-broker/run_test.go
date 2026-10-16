@@ -22,11 +22,12 @@ func brokerFiles(t *testing.T, edit func(*Config)) (string, *Config) {
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	cfg := &Config{
-		SocketPath:      filepath.Join(dir, "run", "b.sock"),
-		StateDir:        filepath.Join(dir, "state"),
-		LogPath:         filepath.Join(dir, "log", "broker.log"),
-		PidFile:         filepath.Join(dir, "broker.pid"),
-		ApprovalDefault: ModeMockDeny,
+		SocketPath:         filepath.Join(dir, "run", "b.sock"),
+		StateDir:           filepath.Join(dir, "state"),
+		LogPath:            filepath.Join(dir, "log", "broker.log"),
+		PidFile:            filepath.Join(dir, "broker.pid"),
+		ApproverSocketPath: filepath.Join(dir, "run", "approve.sock"),
+		ApprovalDefault:    ModeMockDeny,
 	}
 	if edit != nil {
 		edit(cfg)
@@ -80,6 +81,7 @@ func TestBrokerRunSetupFailures(t *testing.T) {
 		{"tls without files", func(c *Config) { c.TLSAddr = "127.0.0.1:0" }, nil, 1, "requires tls_ca_file"},
 		{"tls bad files", nil, []string{"-tls-addr", "127.0.0.1:0", "-tls-ca", file, "-tls-cert", file, "-tls-key", file}, 1, "tls ca"},
 		{"pidfile", func(c *Config) { c.PidFile = filepath.Join(file, "pid") }, nil, 1, "tmb-broker: pidfile:"},
+		{"approver socket", func(c *Config) { c.ApproverSocketPath = filepath.Join(file, "approve.sock") }, nil, 1, "tmb-broker: approver socket:"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

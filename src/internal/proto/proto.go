@@ -23,7 +23,7 @@ const MaxFrame = 1 << 20
 // Request is the structured execution request sent by the client.
 // The broker NEVER executes anything except the fields of this object.
 type Request struct {
-	Type       string            `json:"type"` // "exec" | "approve" | "claim"
+	Type       string            `json:"type"` // requester: "exec" | "approve" | "claim"; approver: "list" | "decide"
 	Executable string            `json:"executable"`
 	Argv       []string          `json:"argv"`
 	Cwd        string            `json:"cwd"`
@@ -31,6 +31,27 @@ type Request struct {
 	Env        map[string]string `json:"env,omitempty"`
 	Nonce      string            `json:"nonce"`
 	ClaimToken string            `json:"claim_token,omitempty"`
+
+	// approver "decide": the queue item, the request hash the approver was
+	// shown, and the decision ("approve" or "deny")
+	ItemID   string `json:"item_id,omitempty"`
+	ItemHash string `json:"item_hash,omitempty"`
+	Decision string `json:"decision,omitempty"`
+}
+
+// QueueItem is one request waiting in the approval queue, as the approver
+// sees it: everything that will run, resolved by the broker.
+type QueueItem struct {
+	ID         string   `json:"id"`   // short id of the request hash (TokenID)
+	Hash       string   `json:"hash"` // full request hash; decide must echo it
+	Requester  string   `json:"requester"`
+	Executable string   `json:"executable"` // realpath
+	Argv       []string `json:"argv"`
+	Cwd        string   `json:"cwd"` // realpath
+	UID        int      `json:"uid"`
+	Env        []string `json:"env"` // final process environment
+	Nonce      string   `json:"nonce"`
+	QueuedAt   string   `json:"queued_at"`
 }
 
 // canonicalRequest is the exact tuple an approval binds to. Type and
@@ -99,12 +120,14 @@ func NewNonce() string {
 
 // Frame is a broker->client response frame.
 type Frame struct {
-	Type   string `json:"type"` // approved|denied|stdout|stderr|exit|error
+	Type   string `json:"type"` // approved|denied|stdout|stderr|exit|error; approver: queue|decided
 	Token  string `json:"token,omitempty"`
 	Reason string `json:"reason,omitempty"`
 	Detail string `json:"detail,omitempty"`
 	Data   string `json:"data,omitempty"` // base64 payload for stdout/stderr
 	Code   *int   `json:"code,omitempty"`
+
+	Items []QueueItem `json:"items,omitempty"` // queue: the waiting requests
 }
 
 // Stdout/Stderr build chunk frames.

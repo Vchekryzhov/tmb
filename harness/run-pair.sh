@@ -204,6 +204,8 @@ cat > "$TD/config-pair.json" <<EOF
   "log_path": "/var/log/tmb/broker.log",
   "pid_file": "/var/run/tmb-broker.pid",
   "allowed_requester_uids": [4242],
+  "approver_uids": [1500],
+  "approver_socket_path": "/run/tmb-approver/approve.sock",
   "allowed_requester_fps": ["$FP1", "$FP3"],
   "socket_gid": 4242,
   "allowed_cwd_roots": ["/tmp"],
@@ -635,6 +637,47 @@ stop_broker
 state_dump
 
 # -----------------------------------------------------------------------------
+log "SCENARIO PAIR-APPROVE: list/decide over the TLS listener -> unknown_request_type, queue untouched"
+# The approver protocol exists only on the host's approver socket. A sandbox
+# client with an allowlisted certificate tries it over TLS while a request
+# of its own waits in the queue.
+APPROVE_SOCK=/run/tmb-approver/approve.sock
+TLN=$(broker_log_count '"event":"tls_listen"'); TLN=${TLN:-0}
+start_broker queue 30
+wait_broker_log_count '"event":"tls_listen"' $((TLN+1))
+docker exec \
+  -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" -e TMB_CA=/certs/ca.crt \
+  -e TMB_CERT=/certs/client1.crt -e TMB_KEY=/certs/client1.key \
+  "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/pa.out" 2>"$TD/pa.err" &
+CLIPA=$!
+QUEUED=0
+for _ in $(seq 1 150); do
+  docker exec -u human -e TMB_APPROVE_SOCK="$APPROVE_SOCK" "$HOST" tmb approve --list >"$TD/pa-queue.out" 2>&1
+  grep -q '^=== ' "$TD/pa-queue.out" && { QUEUED=1; break; }
+  sleep 0.1
+done
+if [ "$QUEUED" = 1 ]; then ok "PAIR-APPROVE: TLS request waits in the queue"; else bad "PAIR-APPROVE: TLS request never queued"; fi
+PAID=$(sed -n 's/^=== \([0-9a-f]\{16\}\) ===$/\1/p' "$TD/pa-queue.out" | head -1)
+PAHASH=$(sed -n 's/^  hash      : //p' "$TD/pa-queue.out" | head -1)
+APPROVALS_BEFORE=$(broker_log_count '"event":"approval"')
+run_tls_client client1 sh -c "printf '%s' '{\"type\":\"list\"}' | tmb debug raw --json -"
+assert_rc      "PAIR-APPROVE: list over TLS -> exit 125" 125
+assert_err_has "PAIR-APPROVE: list deny reason unknown_request_type" "unknown_request_type"
+run_tls_client client1 sh -c "printf '%s' '{\"type\":\"decide\",\"item_id\":\"$PAID\",\"item_hash\":\"$PAHASH\",\"decision\":\"approve\"}' | tmb debug raw --json -"
+assert_rc      "PAIR-APPROVE: decide over TLS -> exit 125" 125
+assert_err_has "PAIR-APPROVE: decide deny reason unknown_request_type" "unknown_request_type"
+docker exec -u human -e TMB_APPROVE_SOCK="$APPROVE_SOCK" "$HOST" tmb approve --list >"$TD/pa-queue2.out" 2>&1
+if grep -q "^=== $PAID ===" "$TD/pa-queue2.out"; then ok "PAIR-APPROVE: the item is still waiting (queue unchanged)"; else bad "PAIR-APPROVE: the queue changed"; fi
+APPROVALS_AFTER=$(broker_log_count '"event":"approval"')
+if [ "$APPROVALS_BEFORE" = "$APPROVALS_AFTER" ]; then ok "PAIR-APPROVE: no approval event from the TLS attempts"; else bad "PAIR-APPROVE: approval events $APPROVALS_BEFORE -> $APPROVALS_AFTER"; fi
+docker exec -u human -e TMB_APPROVE_SOCK="$APPROVE_SOCK" "$HOST" tmb approve --no "$PAID" >/dev/null 2>&1
+wait $CLIPA; RUNC=$?
+OUT_FILE=$TD/pa.out; ERR_FILE=$TD/pa.err; show_io
+assert_rc "PAIR-APPROVE: the waiting request is denied by the host approver -> exit 125" 125
+stop_broker
+state_dump
+
+# -----------------------------------------------------------------------------
 log "STAGE 4: N-series regression (harness/run.sh must stay green, untouched)"
 echo "-- running: bash run.sh"
 if bash run.sh; then
@@ -646,10 +689,10 @@ N_SUMMARY=$(sed -n 's/^PASS: \([0-9]*\)  FAIL: \([0-9]*\)$/\1 \2/p' last-run.log
 echo "run.sh summary: PASS/FAIL = ${N_SUMMARY:-<not parsed>}"
 N_PASS=${N_SUMMARY%% *}
 N_FAIL=${N_SUMMARY##* }
-if [ "${N_PASS:-x}" = "119" ] && [ "${N_FAIL:-x}" = "0" ]; then
-  ok "REGRESSION: N-series 119/119 green (77 of the OpenShell milestone + N18 cwd roots + N19/N20 env policy + N22 held cwd fd + N21 claim GC)"
+if [ "${N_PASS:-x}" = "145" ] && [ "${N_FAIL:-x}" = "0" ]; then
+  ok "REGRESSION: N-series 145/145 green (77 of the OpenShell milestone + N13/N14/N16 approval queue + N18 cwd roots + N19/N20 env policy + N22 held cwd fd + N21 claim GC)"
 else
-  bad "REGRESSION: N-series PASS=${N_PASS:-?} FAIL=${N_FAIL:-?} (want 119/0)"
+  bad "REGRESSION: N-series PASS=${N_PASS:-?} FAIL=${N_FAIL:-?} (want 145/0)"
 fi
 
 # =============================================================================

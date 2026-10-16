@@ -392,6 +392,26 @@
     },
     {
       "scanner": "gosec",
+      "rule": "G301",
+      "location": "src/cmd/tmb-broker/queue.go",
+      "match": "os.MkdirAll(filepath.Dir(path), 0o755)",
+      "reason": "the approver socket must be reachable by the approver users; authorization is SO_PEERCRED against approver_uids, not file mode",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G302",
+      "location": "src/cmd/tmb-broker/queue.go",
+      "match": "os.Chmod(path, 0o666)",
+      "reason": "the approver socket must be reachable by the approver users; authorization is SO_PEERCRED against approver_uids, not file mode",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
       "rule": "G304",
       "location": "src/cmd/tmb-broker/pin_linux_test.go",
       "match": "os.ReadFile(bb)",

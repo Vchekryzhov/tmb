@@ -60,7 +60,7 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 		mode = *approval
 	}
 	switch mode {
-	case ModeManual, ModeMockApprove, ModeMockDeny, ModeMockTimeout:
+	case ModeQueue, ModeManual, ModeMockApprove, ModeMockDeny, ModeMockTimeout:
 	default:
 		return fail("unknown approval mode %q", mode)
 	}
@@ -165,6 +165,10 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 		log.Event("tls_listen", map[string]any{"addr": tlsAddr})
 		fmt.Fprintf(stdout, "tmb-broker: tls listening on %s (client certificates required, no plaintext)\n", tlsAddr)
 		go func() { served <- fmt.Errorf("tls serve: %w", b.ServeTLS(tls.NewListener(tlsLn, tlsCfg))) }()
+	}
+
+	if err := b.startApprover(cfg.ApproverSocketPath); err != nil {
+		return fail("approver socket: %v", err)
 	}
 
 	select {
