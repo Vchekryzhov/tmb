@@ -265,6 +265,8 @@ func TestDebugDispatchesProtocolSteps(t *testing.T) {
 		{[]string{"approve", "--json", missing}, "missing.json"},
 		{[]string{"claim", "--json", missing}, "--token is required"},
 		{[]string{"raw", "--json", missing}, "missing.json"},
+		{nil, "expected approve, claim or raw"},
+		{[]string{"exec"}, `unknown step "exec"`},
 	} {
 		err := cmdDebug(tc.args)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

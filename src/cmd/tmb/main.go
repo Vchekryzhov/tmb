@@ -349,8 +349,7 @@ func cmdExec(args []string) error {
 // harness only: approve (phase 1), claim (phase 2) and raw (verbatim JSON).
 func cmdDebug(args []string) error {
 	if len(args) == 0 {
-		usage()
-		os.Exit(2)
+		return errors.New("debug: expected approve, claim or raw")
 	}
 	switch args[0] {
 	case "approve": // phase 1 only (get a token, do not execute)
@@ -360,9 +359,7 @@ func cmdDebug(args []string) error {
 	case "raw": // send an arbitrary JSON request verbatim
 		return cmdRaw(args[1:])
 	}
-	usage()
-	os.Exit(2)
-	return nil
+	return fmt.Errorf("debug: unknown step %q, expected approve, claim or raw", args[0])
 }
 
 func cmdApprove(args []string) error {
