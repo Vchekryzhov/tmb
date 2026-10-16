@@ -45,5 +45,10 @@ done
 for d in "$ROOT"/ci/tools/*/; do
   grep -q "^go $want\$" "$d/go.mod" || { echo "ci/tools/$(basename "$d")/go.mod: go line differs from $want"; rc=1; }
 done
+if [ -x "${TMB_CI_BIN:-$ROOT/out/ci/bin}/tmbci" ]; then
+  "${TMB_CI_BIN:-$ROOT/out/ci/bin}/tmbci" badges -mode tools -check -dir "$ROOT/docs/badges" -go-version "$ROOT/.go-version" -tools-lock "$ROOT/ci/tools.lock" -tools-dir "$ROOT/ci/tools" || rc=1
+else
+  echo "tmbci not built: tool badges in docs/badges not checked"; rc=1
+fi
 [ $rc -eq 0 ] && echo "pins consistent"
 exit $rc

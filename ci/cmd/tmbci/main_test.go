@@ -135,3 +135,51 @@ func TestScanUnionOfReports(t *testing.T) {
 		t.Fatalf("finding in the first report: code %d status %s\n%s", code, r.Status, out)
 	}
 }
+
+func TestBadges(t *testing.T) {
+	dir := t.TempDir()
+	code, out, _ := tmbci(t, "", "badges", "-mode", "results", "-results", td("badges"), "-dir", dir)
+	if code != 0 {
+		t.Fatalf("results badges: code %d\n%s", code, out)
+	}
+	want := map[string]string{
+		"coverage":    `"message": "46.6%"`,
+		"image-vulns": `"message": "0 blocking, 70 informational"`,
+		"gosec":       `"message": "0 blocking, 34 excepted, 33 informational"`,
+		"govulncheck": `"message": "0 reachable"`,
+		"secrets":     `"message": "0 blocking"`,
+		"ci-results":  `"message": "8e3988abe1c2, run 38964567597"`,
+	}
+	for name, frag := range want {
+		data, err := os.ReadFile(filepath.Join(dir, name+".json"))
+		if err != nil || !strings.Contains(string(data), frag) || !strings.Contains(string(data), `"schemaVersion": 1`) {
+			t.Errorf("%s: want %s, got %v\n%s", name, frag, err, data)
+		}
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "coverage.json")); !strings.Contains(string(data), `"color": "orange"`) {
+		t.Errorf("46.6%% coverage must be orange:\n%s", data)
+	}
+
+	pins := td("badges/pins")
+	tools := t.TempDir()
+	code, out, _ = tmbci(t, "", "badges", "-mode", "tools", "-dir", tools, "-go-version", filepath.Join(pins, "go-version"), "-tools-lock", filepath.Join(pins, "tools.lock"), "-tools-dir", filepath.Join(pins, "tools"))
+	if code != 0 {
+		t.Fatalf("tool badges: code %d\n%s", code, out)
+	}
+	for name, msg := range map[string]string{"go": "1.27.2", "trivy": "0.75.0", "gitleaks": "8.30.1", "staticcheck": "v0.8.2", "gosec": "v2.29.0", "govulncheck": "v1.8.0", "actionlint": "v1.7.12"} {
+		data, err := os.ReadFile(filepath.Join(tools, "tool-"+name+".json"))
+		if err != nil || !strings.Contains(string(data), `"message": "`+msg+`"`) {
+			t.Errorf("%s: want %s, got %v\n%s", name, msg, err, data)
+		}
+	}
+	checkArgs := []string{"badges", "-mode", "tools", "-check", "-dir", tools, "-go-version", filepath.Join(pins, "go-version"), "-tools-lock", filepath.Join(pins, "tools.lock"), "-tools-dir", filepath.Join(pins, "tools")}
+	if code, out, _ = tmbci(t, "", checkArgs...); code != 0 {
+		t.Fatalf("fresh tool badges must pass -check: code %d\n%s", code, out)
+	}
+	if err := os.WriteFile(filepath.Join(tools, "tool-trivy.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, _ = tmbci(t, "", checkArgs...); code != 1 || !strings.Contains(out, "tool-trivy.json: differs") {
+		t.Fatalf("stale tool badge must fail -check: code %d\n%s", code, out)
+	}
+}

@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "label": "gosec",
+  "message": "0 blocking, 34 excepted, 33 informational",
+  "color": "brightgreen"
+}

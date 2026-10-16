@@ -2,6 +2,18 @@
 
 Неофициально: *trust me brother*.
 
+[![ci](https://github.com/Vchekryzhov/tmb/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Vchekryzhov/tmb/actions/workflows/ci.yml?query=branch%3Amain)
+[![nightly](https://github.com/Vchekryzhov/tmb/actions/workflows/ci.yml/badge.svg?branch=main&event=schedule)](https://github.com/Vchekryzhov/tmb/actions/workflows/ci.yml?query=branch%3Amain+event%3Aschedule)
+[![openshell-acceptance](https://github.com/Vchekryzhov/tmb/actions/workflows/openshell-acceptance.yml/badge.svg?branch=main)](https://github.com/Vchekryzhov/tmb/actions/workflows/openshell-acceptance.yml?query=branch%3Amain)
+[![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Fcoverage.json)](docs/ci.md#пороги)
+[![image-vulns](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Fimage-vulns.json)](docs/ci.md#пороги)
+[![gosec](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Fgosec.json)](docs/ci.md#пороги)
+[![govulncheck](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Fgovulncheck.json)](docs/ci.md#пороги)
+[![secrets](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Fsecrets.json)](docs/ci.md#пороги)
+[![ci-results](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Fci-results.json)](docs/ci.md#бейджи)
+[![stdlib-only](https://img.shields.io/badge/deps-stdlib--only-blue)](src/go.mod)
+[![tool-go](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-go.json)](.go-version)
+
 TMB посредничает между агентом в песочнице NVIDIA OpenShell и привилегированным выполнением команд на принимающем хосте.
 Агент просит, человек одобряет точный запрос, брокер запускает одобренную команду не более одного раза.
 Пароль sudo агенту не передаётся, а сам sudo, sudoers и PAM не меняются.
@@ -153,6 +165,7 @@ ci/run.sh tools && ci/run.sh local
 ## Документы
 
 - [CONTEXT.md](CONTEXT.md): глоссарий домена.
+- [ADR 0001](docs/adr/0001-oneshot-ssh-certificates.md): SSH-сертификаты с force-command, отклонён, причины внутри.
 - [ADR 0002](docs/adr/0002-standalone-tmb-broker.md): брокер как отдельный демон, sudo не затрагивается.
 - [ADR 0003](docs/adr/0003-sandbox-transport-tcp-mtls.md): песочница OpenShell, TCP endpoint с mTLS-идентичностью.
 - [VERDICT-OPENSHELL.md](VERDICT-OPENSHELL.md): вердикт OpenShell-майлстоуна, реестр O0–O9, отклонения от спеки, остаточные риски.

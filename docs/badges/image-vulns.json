@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "label": "image vulns",
+  "message": "0 blocking, 70 informational",
+  "color": "brightgreen"
+}

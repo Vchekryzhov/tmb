@@ -1,0 +1,14 @@
+{
+  "schema": "tmb-ci/result/v1",
+  "check": "coverage/compare",
+  "status": "PASS",
+  "sha": "8e3988abe1c2cc8dc77b1f6b03bd7cec9c117534",
+  "run_id": "38964567597",
+  "reason": "base a3baaf3749db 46.6% -\u003e head 46.6%",
+  "summary": [
+    "head total 46.6% (914 statements)",
+    "tmb-poc/cmd/tmb                           16.5% of 236",
+    "tmb-poc/cmd/tmb-broker                    56.2% of 635",
+    "tmb-poc/internal/proto                    69.8% of 43"
+  ]
+}

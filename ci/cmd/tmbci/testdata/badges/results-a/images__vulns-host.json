@@ -1,0 +1,38 @@
+{
+  "schema": "tmb-ci/result/v1",
+  "check": "images/vulns-host",
+  "status": "PASS",
+  "sha": "8e3988abe1c2cc8dc77b1f6b03bd7cec9c117534",
+  "run_id": "38964567597",
+  "reason": "0 blocking, 0 excepted, 25 informational",
+  "tools": {
+    "trivy": "0.75.0"
+  },
+  "summary": [
+    "info trivy CVE-2026-102473 dash [MEDIUM] dash 0.5.12-6ubuntu5 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-102474 dash [MEDIUM] dash 0.5.12-6ubuntu5 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-18374 libc-bin [MEDIUM] libc-bin 2.39-0ubuntu8.9 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-89092 libc-bin [MEDIUM] libc-bin 2.39-0ubuntu8.9 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-18374 libc6 [MEDIUM] libc6 2.39-0ubuntu8.9 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-89092 libc6 [MEDIUM] libc6 2.39-0ubuntu8.9 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-67693 libgnutls30t64 [MEDIUM] libgnutls30t64 3.8.3-1.1ubuntu3.6 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-88647 libgnutls30t64 [MEDIUM] libgnutls30t64 3.8.3-1.1ubuntu3.6 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-95184 libgnutls30t64 [MEDIUM] libgnutls30t64 3.8.3-1.1ubuntu3.6 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-95209 libgnutls30t64 [MEDIUM] libgnutls30t64 3.8.3-1.1ubuntu3.6 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-95210 libgnutls30t64 [MEDIUM] libgnutls30t64 3.8.3-1.1ubuntu3.6 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-103111 libpcre2-8-0 [MEDIUM] libpcre2-8-0 10.42-4ubuntu2.1 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-86145 libpcre2-8-0 [MEDIUM] libpcre2-8-0 10.42-4ubuntu2.1 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-89156 libpcre2-8-0 [MEDIUM] libpcre2-8-0 10.42-4ubuntu2.1 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-89157 libpcre2-8-0 [MEDIUM] libpcre2-8-0 10.42-4ubuntu2.1 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-89158 libpcre2-8-0 [MEDIUM] libpcre2-8-0 10.42-4ubuntu2.1 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-89160 libpcre2-8-0 [MEDIUM] libpcre2-8-0 10.42-4ubuntu2.1 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-89161 libpcre2-8-0 [MEDIUM] libpcre2-8-0 10.42-4ubuntu2.1 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-40228 libsystemd0 [LOW] libsystemd0 255.4-1ubuntu8.18 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-40228 libudev1 [LOW] libudev1 255.4-1ubuntu8.18 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2024-56433 login [LOW] login 1:4.13+dfsg1-4ubuntu3.2 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2024-56433 passwd [LOW] passwd 1:4.13+dfsg1-4ubuntu3.2 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-18477 tar [MEDIUM] tar 1.35+dfsg-3ubuntu0.4 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-18508 tar [MEDIUM] tar 1.35+dfsg-3ubuntu0.4 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)",
+    "info trivy CVE-2026-85091 zlib1g [MEDIUM] zlib1g 1:1.3.dfsg-3.1ubuntu2.2 in tmb-ci/host:38964567597-8e3988abe1c2 (ubuntu 24.04) (fixed: none)"
+  ]
+}
