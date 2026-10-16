@@ -78,6 +78,24 @@ Mac-брокер собирается только как часть тесто�
 
 Текущие GAP собраны в [#15](https://github.com/Vchekryzhov/tmb/issues/15). Mutation checks на момент внедрения находят выживших мутантов: проверку client cert, привязку токена к запросу и one-shot claim продуктовые тесты не ловят. Поэтому nightly красный, пока не появятся эти тесты.
 
+## Бейджи
+
+Бейджи в README и здесь это shields.io endpoint-файлы из [docs/badges](badges/): CI не имеет write-токенов и внешних сервисов, поэтому значения лежат в репозитории и обновляются коммитом.
+
+[![tool-go](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-go.json)](../.go-version)
+[![tool-staticcheck](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-staticcheck.json)](../ci/tools/staticcheck/go.mod)
+[![tool-gosec](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-gosec.json)](../ci/tools/gosec/go.mod)
+[![tool-govulncheck](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-govulncheck.json)](../ci/tools/govulncheck/go.mod)
+[![tool-trivy](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-trivy.json)](../ci/tools.lock)
+[![tool-gitleaks](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-gitleaks.json)](../ci/tools.lock)
+[![tool-zizmor](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-zizmor.json)](../ci/tools.lock)
+[![tool-actionlint](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-actionlint.json)](../ci/tools/actionlint/go.mod)
+[![tool-shellcheck](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-shellcheck.json)](../ci/tools.lock)
+[![tool-hadolint](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-hadolint.json)](../ci/tools.lock)
+
+- `tool-*.json` выводятся из пинов (`.go-version`, `ci/tools.lock`, `ci/tools/*/go.mod`) командой `ci/run.sh badges tools`. `lint/pins` падает, если файлы отстали от пинов: после обновления пина команду нужно повторить и закоммитить результат.
+- `coverage`, `image-vulns`, `gosec`, `govulncheck`, `secrets` и `ci-results` берутся из результатов одного прогона на main: `gh run download <run-id> -D out/ci/run && ci/run.sh badges results out/ci/run`. Бейдж `ci-results` показывает SHA и номер прогона, из которого взяты цифры, поэтому устаревание видно. Локальный `ci/run.sh local` не даёт результатов `images/*`, для них нужен прогон Actions.
+
 ## Исключения
 
 [ci/exceptions.json](../ci/exceptions.json): единственное место для принятых находок. В каждой записи:

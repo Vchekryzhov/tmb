@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"tmb-ci/internal/badges"
 	"tmb-ci/internal/coverage"
 	"tmb-ci/internal/fuzz"
 	"tmb-ci/internal/gate"
@@ -42,6 +43,7 @@ var commands = map[string]func(*env, []string) int{
 	"manifest":        cmdManifest,
 	"fuzz":            cmdFuzz,
 	"gate":            cmdGate,
+	"badges":          cmdBadges,
 }
 
 func run(args []string, w io.Writer) int {
@@ -680,6 +682,61 @@ func cmdGate(e *env, args []string) int {
 	}
 	if !v.Green {
 		return 1
+	}
+	return 0
+}
+
+// cmdBadges writes shields.io endpoint JSON under -dir: tool versions from
+// the pins (mode tools; -check only compares) or the badges of one run's
+// results (mode results). It is not a check and writes no result.
+func cmdBadges(e *env, args []string) int {
+	fs := e.flags("badges") // -out is accepted for uniformity and unused
+	mode := fs.String("mode", "", "tools or results")
+	dir := fs.String("dir", "docs/badges", "badge directory")
+	check := fs.Bool("check", false, "tools: compare with the files instead of writing")
+	results := fs.String("results", "out/ci/results", "results: directory of result JSON")
+	goVersion := fs.String("go-version", ".go-version", "tools: Go version file")
+	lock := fs.String("tools-lock", "ci/tools.lock", "tools: binary tool pins")
+	toolsDir := fs.String("tools-dir", "ci/tools", "tools: Go tool modules")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	var set map[string]badges.Badge
+	var err error
+	switch *mode {
+	case "tools":
+		set, err = badges.FromPins(*goVersion, *lock, *toolsDir)
+	case "results":
+		var rs map[string]result.Result
+		rs, err = badges.ReadResults(*results)
+		if err == nil {
+			set = badges.FromResults(rs)
+		}
+	default:
+		err = fmt.Errorf("-mode must be tools or results")
+	}
+	if err != nil {
+		fmt.Fprintf(e.w, "badges: ERROR %v\n", err)
+		return 2
+	}
+	if *check {
+		problems := badges.Check(*dir, set)
+		for _, p := range problems {
+			fmt.Fprintln(e.w, p)
+		}
+		if len(problems) > 0 {
+			return 1
+		}
+		fmt.Fprintf(e.w, "badges: %d tool badges match the pins\n", len(set))
+		return 0
+	}
+	paths, err := badges.Write(*dir, set)
+	if err != nil {
+		fmt.Fprintf(e.w, "badges: ERROR %v\n", err)
+		return 2
+	}
+	for _, p := range paths {
+		fmt.Fprintln(e.w, p)
 	}
 	return 0
 }

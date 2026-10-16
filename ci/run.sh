@@ -511,6 +511,16 @@ cmd_bench() {
   by_rc perf/bench $? "$Bn/bench.txt" "1"
 }
 
+cmd_badges() {
+  need_tmbci
+  local mode=${1:?tools|results}
+  case $mode in
+    tools) "$BIN/tmbci" badges -mode tools -dir "$ROOT/docs/badges" -go-version "$ROOT/.go-version" -tools-lock "$ROOT/ci/tools.lock" -tools-dir "$ROOT/ci/tools" ;;
+    results) "$BIN/tmbci" badges -mode results -dir "$ROOT/docs/badges" -results "${2:-$RESULTS}" ;;
+    *) echo "usage: ci/run.sh badges tools|results [results-dir]" >&2; return 2 ;;
+  esac
+}
+
 cmd_links_external() {
   need_tmbci
   "$ROOT/ci/check-links.sh" external >"$REPORTS/links-external.txt" 2>&1
@@ -590,9 +600,10 @@ case "$cmd" in
   mutation) cmd_mutation ;;
   bench) cmd_bench ;;
   links-external) cmd_links_external ;;
+  badges) rm -f "$MARK"; cmd_badges "$@"; exit $? ;;
   gate) rm -f "$MARK"; cmd_gate "$@"; exit $? ;;
   openshell) cmd_openshell ;;
   local) cmd_local ;;
-  *) rm -f "$MARK"; sed -n '2,25p' "$0"; exit 2 ;;
+  *) rm -f "$MARK"; sed -n '2,26p' "$0"; exit 2 ;;
 esac
 worst_of_run
