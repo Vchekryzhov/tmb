@@ -8,9 +8,9 @@
 
 TMB задуман как посредник привилегированного выполнения для AI-агента с человеческим одобрением. Пароль sudo агенту не передаётся. Человеческий sudo и действующая политика sudoers обязаны остаться нетронутыми.
 
-Точка встраивания проверялась двумя экспериментами и одним PoC, все факты ниже подтверждены прогонами.
+Точка встраивания проверялась двумя экспериментами и одним PoC; все факты ниже подтверждены прогонами.
 
-1. Эксперимент 1 (ветка `prototype/sudo-integration`): python approval-плагин sudo работает, sudoers остаётся политикой, 44+4 проверок PASS. Но плагин требует пересборки sudo из исходников с `--enable-python`, ни один проверенный дистрибутив не собирает python-плагин.
+1. Эксперимент 1 (ветка `prototype/sudo-integration`): python approval-плагин sudo работает, sudoers остаётся политикой, 44+4 проверок PASS. Но плагин требует пересборки sudo из исходников с `--enable-python`; ни один проверенный дистрибутив не собирает python-плагин.
 2. Эксперимент 2 (прерван, findings валидны): native C approval-плагин технически возможен, approval API входит в ядро sudo >= 1.9, плагин подключается внешней .so через `/etc/sudo.conf`. Но подтверждено экспериментально: любая строка `Plugin` в sudo.conf делает плагин зависимостью каждого вызова sudo. Битый или недоступный .so валит весь sudo на хосте, включая человеческий парольный путь, с exit 1. Для распространяемого продукта это недопустимый failure domain.
 3. PoC 3 (ветка `prototype/tmb-broker`): отдельный привилегированный tmb-broker на Unix socket, 56/56 проверок PASS, нулевая связанность с sudo.
 
@@ -51,9 +51,9 @@ TMB это отдельный привилегированный демон-бр
 ## Ссылки
 
 - [Итоги грила](../design/grill-results.md): исходные договорённости.
-- Ветка `prototype/sudo-integration`: эксперимент sudo-интеграции, [issue #1](https://github.com/Vchekryzhov/tmb/issues/1), закрывается.
+- Ветка `prototype/sudo-integration`: эксперимент sudo-интеграции, [issue #1](https://github.com/Vchekryzhov/tmb/issues/1), закрыт.
 - Ветка `prototype/tmb-broker`: [VERDICT-BROKER.md](https://github.com/Vchekryzhov/tmb/blob/prototype/tmb-broker/prototype/tmb-broker/VERDICT-BROKER.md), [RESEARCH-OPENSHELL.md](https://github.com/Vchekryzhov/tmb/blob/prototype/tmb-broker/prototype/tmb-broker/RESEARCH-OPENSHELL.md), last-run.log.
 - [Issue #2](https://github.com/Vchekryzhov/tmb/issues/2): подписант с Touch ID.
 - [Issue #3](https://github.com/Vchekryzhov/tmb/issues/3): удалённое одобрение.
-- Новый MVP-issue брокера: реализация принятой архитектуры.
+- [Issue #4](https://github.com/Vchekryzhov/tmb/issues/4): реализация принятой архитектуры, следующий этап брокера.
 - Словарь домена: [CONTEXT.md](../../CONTEXT.md).
