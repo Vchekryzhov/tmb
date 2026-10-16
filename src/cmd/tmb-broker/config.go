@@ -33,6 +33,9 @@ type Config struct {
 	// its own uid list, separate from the requester allowlist.
 	ApproverSocketPath string   `json:"approver_socket_path"`
 	ApproverUIDs       []uint32 `json:"approver_uids"`
+	// ApprovalWaitSeconds bounds how long a queued request waits for a
+	// decision (default 300); independent of token_ttl_seconds.
+	ApprovalWaitSeconds int `json:"approval_wait_seconds"`
 	// TLS listener (second listener, mTLS only). When tls_addr is set (config
 	// or -tls-addr flag), all three files must be set as well; empty
 	// tls_addr keeps the broker unix-socket-only.
@@ -59,6 +62,9 @@ func loadConfig(path string) (*Config, error) {
 	}
 	if c.PidFile == "" {
 		c.PidFile = "/var/run/tmb-broker.pid"
+	}
+	if c.ApprovalWaitSeconds <= 0 {
+		c.ApprovalWaitSeconds = 300
 	}
 	if c.ApprovalDefault == "" {
 		c.ApprovalDefault = ModeQueue

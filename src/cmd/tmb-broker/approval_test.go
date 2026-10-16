@@ -89,7 +89,7 @@ func TestManualConsoleShowsFinalEnv(t *testing.T) {
 	}
 	var granted bool
 	out := captureStdout(t, func() {
-		granted, _, _ = b.runApprovalInteraction(req, UIDRequester(4242, 1), exeReal, "/tmp", 0, 0)
+		granted, _, _ = b.runApprovalInteraction(req, UIDRequester(4242, 1), exeReal, "/tmp", 0, 0, nil)
 	})
 	if granted {
 		t.Fatalf("answer n must deny")
