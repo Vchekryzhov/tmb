@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // Config is broker-side configuration (loaded from JSON). The env allowlist,
@@ -23,8 +24,11 @@ type Config struct {
 	AllowedEnvKeys       []string          `json:"allowed_env_keys"`
 	FixedEnv             map[string]string `json:"fixed_env"`
 	ShellDenyList        []string          `json:"shell_deny_list"`
-	TokenTTLSeconds      int               `json:"token_ttl_seconds"`
-	ApprovalDefault      string            `json:"approval_default"`
+	// AllowedCwdRoots are the directories a request's cwd must lie in
+	// (realpath equal to a root or below it). Empty denies every cwd.
+	AllowedCwdRoots []string `json:"allowed_cwd_roots"`
+	TokenTTLSeconds int      `json:"token_ttl_seconds"`
+	ApprovalDefault string   `json:"approval_default"`
 	// TLS listener (second listener, mTLS only). When tls_addr is set (config
 	// or -tls-addr flag), all three files must be set as well; empty
 	// tls_addr keeps the broker unix-socket-only.
@@ -52,5 +56,31 @@ func loadConfig(path string) (*Config, error) {
 	if c.PidFile == "" {
 		c.PidFile = "/var/run/tmb-broker.pid"
 	}
+	roots, err := normalizeCwdRoots(c.AllowedCwdRoots)
+	if err != nil {
+		return nil, err
+	}
+	c.AllowedCwdRoots = roots
 	return &c, nil
+}
+
+// normalizeCwdRoots cleans every root and resolves it to its realpath, so the
+// check compares realpaths on both sides. A relative root is a config error.
+// A root that does not exist yet keeps its cleaned path: no existing cwd can
+// resolve below it until it is created.
+func normalizeCwdRoots(roots []string) ([]string, error) {
+	out := make([]string, 0, len(roots))
+	for _, r := range roots {
+		if !filepath.IsAbs(r) {
+			return nil, fmt.Errorf("config: allowed_cwd_roots entry %q is not an absolute path", r)
+		}
+		clean := filepath.Clean(r)
+		if real, err := filepath.EvalSymlinks(clean); err == nil {
+			clean = real
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("config: allowed_cwd_roots entry %q: %v", r, err)
+		}
+		out = append(out, clean)
+	}
+	return out, nil
 }
