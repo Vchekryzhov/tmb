@@ -222,12 +222,12 @@ EOF
 cat >"$TD/n1-b.json" <<'EOF'
 {"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-G"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n1-nonce-fixed-000001"}
 EOF
-run_client_json tmb approve "$TD/n1-a.json"
+run_client_json tmb debug approve "$TD/n1-a.json"
 assert_rc "N1: approve phase ok" 0
 T1=$(token_of)
 echo "-- token from approve: ${T1:-<none>}"
 if [ -n "$T1" ]; then ok "N1: got one-shot token $T1"; else bad "N1: no token parsed"; fi
-run_client_json tmb claim --token "$T1" "$TD/n1-b.json"
+run_client_json tmb debug claim --token "$T1" "$TD/n1-b.json"
 assert_rc      "N1: claim with same token but different argv -> exit 125" 125
 assert_err_has "N1: deny reason token_binding_mismatch" "token_binding_mismatch"
 state_dump
@@ -237,13 +237,13 @@ log "SCENARIO N2: token/nonce REPLAY (same token, same request, twice) -> deny 2
 cat >"$TD/n2.json" <<'EOF'
 {"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n2-nonce-fixed-000002"}
 EOF
-run_client_json tmb approve "$TD/n2.json"
+run_client_json tmb debug approve "$TD/n2.json"
 assert_rc "N2: approve phase ok" 0
 T2=$(token_of)
-run_client_json tmb claim --token "$T2" "$TD/n2.json"
+run_client_json tmb debug claim --token "$T2" "$TD/n2.json"
 assert_rc     "N2: first claim executes, exit 0" 0
 assert_out_eq "N2: first claim stdout '0'" "0"
-run_client_json tmb claim --token "$T2" "$TD/n2.json"
+run_client_json tmb debug claim --token "$T2" "$TD/n2.json"
 assert_rc      "N2: replay claim -> exit 125" 125
 assert_err_has "N2: deny reason token_consumed_replay" "token_consumed_replay"
 state_dump
@@ -254,12 +254,12 @@ docker exec "$HOST" rm -f /tmp/ttl-marker
 cat >"$TD/ttl.json" <<'EOF'
 {"type":"approve","executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/ttl-marker"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"ttl-nonce-fixed-0003"}
 EOF
-run_client_json tmb approve "$TD/ttl.json"
+run_client_json tmb debug approve "$TD/ttl.json"
 assert_rc "TTL: approve phase ok" 0
 TT=$(token_of)
 echo "-- sleeping $((TTL+2))s to let the token expire (ttl=$TTL s)"
 sleep $((TTL+2))
-run_client_json tmb claim --token "$TT" "$TD/ttl.json"
+run_client_json tmb debug claim --token "$TT" "$TD/ttl.json"
 assert_rc      "TTL: expired claim -> exit 125" 125
 assert_err_has "TTL: deny mentions no live approval" "no_pending_approval"
 host_absent "TTL: marker file never created" /tmp/ttl-marker
@@ -299,7 +299,7 @@ log "SCENARIO N6: non-absolute executable rejected (broker via raw, client-side)
 cat >"$TD/n6.json" <<'EOF'
 {"type":"exec","executable":"id","argv":["id","-u"],"cwd":"/tmp","uid":0,"nonce":"n6-nonce-fixed-000006"}
 EOF
-run_client_json tmb raw "$TD/n6.json"
+run_client_json tmb debug raw "$TD/n6.json"
 assert_rc      "N6: broker rejects non-absolute executable (raw 'id')" 125
 assert_err_has "N6: deny reason executable_not_absolute" "executable_not_absolute"
 run_client "$SBX" tmb exec --root -- ./id -u
@@ -325,15 +325,15 @@ start_broker mock-approve 10
 cat >"$TD/n10.json" <<'EOF'
 {"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n10-nonce-fixed-000010"}
 EOF
-run_client_json tmb approve "$TD/n10.json"
+run_client_json tmb debug approve "$TD/n10.json"
 assert_rc "N10: approve phase ok (requester uid 4242)" 0
 T10=$(token_of)
 echo "-- token from approve: ${T10:-<none>}"
 if [ -n "$T10" ]; then ok "N10: got one-shot token $T10"; else bad "N10: no token parsed"; fi
-docker exec -i -u 4343:4242 "$SBX" tmb claim --token "$T10" --json - <"$TD/n10.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+docker exec -i -u 4343:4242 "$SBX" tmb debug claim --token "$T10" --json - <"$TD/n10.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 assert_rc      "N10: claim under OTHER allowlisted uid 4343 -> exit 125" 125
 assert_err_has "N10: deny reason requester_mismatch" "requester_mismatch"
-docker exec -i "$SBX" tmb claim --token "$T10" --json - <"$TD/n10.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+docker exec -i "$SBX" tmb debug claim --token "$T10" --json - <"$TD/n10.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 assert_rc     "N10: token NOT consumed; claim under original uid 4242 -> exit 0" 0
 assert_out_eq "N10: stdout is exactly '0'" "0"
 state_dump
@@ -354,7 +354,7 @@ docker exec "$HOST" sh -c 'rm -rf /tmp/n11 && mkdir -p /tmp/n11 && cp /bin/echo 
 cat >"$TD/n11.json" <<'EOF'
 {"type":"approve","executable":"/tmp/n11/prog","argv":["/tmp/n11/prog","A"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n11-nonce-fixed-000011"}
 EOF
-run_client_json tmb approve "$TD/n11.json"
+run_client_json tmb debug approve "$TD/n11.json"
 assert_rc "N11: approve phase ok" 0
 T11=$(token_of)
 if [ -n "$T11" ]; then ok "N11: got one-shot token $T11"; else bad "N11: no token parsed"; fi
@@ -379,7 +379,7 @@ docker exec "$HOST" sh -c '
   exit 3
 ' &
 N11_WATCH=$!
-run_client_json tmb claim --token "$T11" "$TD/n11.json"
+run_client_json tmb debug claim --token "$T11" "$TD/n11.json"
 assert_rc "N11: claim exit 0 (a program ran)" 0
 wait "$N11_WATCH"; N11_WRC=$?
 if [ "$N11_WRC" = 0 ] && docker exec "$HOST" test -e /tmp/n11/swapped; then ok "N11: swap landed inside the claim window (broker frozen, exe path replaced)"; else bad "N11: swapper never fired (window not exercised)"; fi
@@ -404,13 +404,13 @@ docker exec "$HOST" sh -c 'rm -rf /tmp/n12-dir /tmp/n12-dir.old && mkdir /tmp/n1
 cat >"$TD/n12.json" <<'EOF'
 {"type":"approve","executable":"/bin/ls","argv":["/bin/ls"],"cwd":"/tmp/n12-dir","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n12-nonce-fixed-000012"}
 EOF
-run_client_json tmb approve "$TD/n12.json"
+run_client_json tmb debug approve "$TD/n12.json"
 assert_rc "N12: approve phase ok" 0
 T12=$(token_of)
 if [ -n "$T12" ]; then ok "N12: got one-shot token $T12"; else bad "N12: no token parsed"; fi
 docker exec "$HOST" sh -c 'mv /tmp/n12-dir /tmp/n12-dir.old && mkdir /tmp/n12-dir && touch /tmp/n12-dir/new-marker'
 if docker exec "$HOST" test -e /tmp/n12-dir.old/old-marker; then ok "N12: cwd really replaced (old dir moved aside, new inode at the same path)"; else bad "N12: cwd replacement did not happen"; fi
-run_client_json tmb claim --token "$T12" "$TD/n12.json"
+run_client_json tmb debug claim --token "$T12" "$TD/n12.json"
 assert_rc      "N12: claim after cwd swap -> exit 125" 125
 assert_err_has "N12: deny reason cwd_changed" "cwd_changed"
 assert_out_eq  "N12: no command output (nothing executed)" ""
@@ -450,7 +450,7 @@ start_broker mock-approve "$TTL"
 cat >"$TD/n8.json" <<'EOF'
 {"type":"exec","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"n8-replay-nonce-0008"}
 EOF
-run_client_json tmb raw "$TD/n8.json"
+run_client_json tmb debug raw "$TD/n8.json"
 assert_rc     "N8: first run of request (fixed nonce) -> exit 0" 0
 assert_out_eq "N8: first run stdout '0'" "0"
 
@@ -458,7 +458,7 @@ echo "-- docker restart $HOST (true container restart; claim store lives in name
 docker restart "$HOST" >/dev/null
 start_broker mock-approve "$TTL"
 
-run_client_json tmb raw "$TD/n8.json"
+run_client_json tmb debug raw "$TD/n8.json"
 assert_rc      "N8: byte-identical replay after restart -> exit 125" 125
 assert_err_has "N8: deny reason token_consumed_replay (persistent claim store)" "token_consumed_replay"
 state_dump

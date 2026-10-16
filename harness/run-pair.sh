@@ -642,7 +642,7 @@ echo "-- approve under fp1 (allowlisted)"
 docker exec -i \
   -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" -e TMB_CA=/certs/ca.crt \
   -e TMB_CERT=/certs/client1.crt -e TMB_KEY=/certs/client1.key \
-  "$SBX" tmb approve --json - <"$TD/o9.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+  "$SBX" tmb debug approve --json - <"$TD/o9.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 assert_rc "O9: approve under fp1 -> exit 0" 0
 T9=$(pair_token_of)
 echo "-- token from fp1 approve: ${T9:-<none>}"
@@ -652,7 +652,7 @@ echo "-- claim under fp3 (allowlisted, but NOT the approver)"
 docker exec -i \
   -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" -e TMB_CA=/certs/ca.crt \
   -e TMB_CERT=/certs/client3.crt -e TMB_KEY=/certs/client3.key \
-  "$SBX" tmb claim --token "$T9" --json - <"$TD/o9.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+  "$SBX" tmb debug claim --token "$T9" --json - <"$TD/o9.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 assert_rc      "O9: claim under fp3 -> exit 125" 125
 assert_err_has "O9: deny reason requester_mismatch" "requester_mismatch"
 assert_err_has "O9: token NOT consumed by the mismatch" "token not consumed"
@@ -667,7 +667,7 @@ echo "-- claim again under fp1 (the approver): token must still be alive"
 docker exec -i \
   -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" -e TMB_CA=/certs/ca.crt \
   -e TMB_CERT=/certs/client1.crt -e TMB_KEY=/certs/client1.key \
-  "$SBX" tmb claim --token "$T9" --json - <"$TD/o9.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+  "$SBX" tmb debug claim --token "$T9" --json - <"$TD/o9.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 assert_rc     "O9: token NOT consumed; claim under fp1 -> exit 0" 0
 assert_out_eq "O9: stdout is exactly '0'" "0"
 stop_broker
