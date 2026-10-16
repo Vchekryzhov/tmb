@@ -282,6 +282,136 @@
     },
     {
       "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/ca.go",
+      "match": "pemBytes, err = os.ReadFile(*in)",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/ca.go",
+      "match": "if err := os.MkdirAll(dir, 0o700); err != nil {",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/ca.go",
+      "match": "if _, err := os.Stat(keyPath); err == nil {",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/ca.go",
+      "match": "certPEM, err := os.ReadFile(filepath.Join(dir, \"ca.crt\"))",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/ca.go",
+      "match": "certPEM, err := os.ReadFile(filepath.Join(dir, \"ca.crt\"))",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/ca.go",
+      "match": "keyPEM, err := os.ReadFile(filepath.Join(dir, \"ca.key\"))",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/ca.go",
+      "match": "keyPEM, err := os.ReadFile(filepath.Join(dir, \"ca.key\"))",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/ca.go",
+      "match": "if err := os.MkdirAll(out, 0o700); err != nil {",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/ca.go",
+      "match": "f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/ca.go",
+      "match": "f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/ca_test.go",
+      "match": "b, err := os.ReadFile(path)",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/ca_test.go",
+      "match": "os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600)",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/ca_test.go",
+      "match": "crt, _ := os.ReadFile(filepath.Join(good, \"ca.crt\"))",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
       "rule": "G304",
       "location": "src/cmd/tmb-broker/pin_linux_test.go",
       "match": "os.ReadFile(bb)",
