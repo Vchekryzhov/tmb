@@ -148,6 +148,7 @@ ci/run.sh openshell
 
 - 2026-10-12: репозиторий был private, API rulesets отвечал 403 с требованием GitHub Pro.
 - 2026-10-16: репозиторий public, API rulesets отвечает (правил нет).
+- 2026-10-17: в настройках репозитория включены auto-merge и удаление ветки после слияния. Ruleset не включён: job `badges` пушит в `main` через `GITHUB_TOKEN`, а bypass для GitHub Actions в ruleset доступен только репозиториям организаций (API отвечает 422). Перед включением ruleset job `badges` нужно перевести на PAT владельца с bypass для роли admin или на PR. До тех пор зелёный `ci-gate` перед слиянием это правило в [AGENTS.md](../AGENTS.md), а не запрет GitHub.
 
 Включение правил остаётся отдельным решением владельца:
 
