@@ -16,7 +16,21 @@ import (
 // broker restarts: a token/nonce claimed before a restart can never be
 // redeemed again.
 type ClaimStore struct {
-	dir string
+	dir  string
+	open func(path string) (claimFile, error) // openClaimFile; replaced by fault-injection tests
+}
+
+// claimFile is the part of *os.File a claim needs.
+type claimFile interface {
+	Write(p []byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+// openClaimFile creates a claim file exclusively: O_EXCL is the one-shot
+// primitive, an existing file means the token or nonce was already used.
+func openClaimFile(path string) (claimFile, error) {
+	return os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 }
 
 func NewClaimStore(stateDir string) (*ClaimStore, error) {
@@ -24,7 +38,7 @@ func NewClaimStore(stateDir string) (*ClaimStore, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	return &ClaimStore{dir: dir}, nil
+	return &ClaimStore{dir: dir, open: openClaimFile}, nil
 }
 
 func (s *ClaimStore) tokenPath(fullHash string) string {
@@ -41,7 +55,7 @@ func (s *ClaimStore) noncePath(nonce string) string {
 // and an error on real I/O trouble. Both file and parent dir are fsynced
 // before returning success.
 func (s *ClaimStore) Claim(path string, meta map[string]string) (bool, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	f, err := s.open(path)
 	if err != nil {
 		if os.IsExist(err) {
 			return false, nil
@@ -49,7 +63,10 @@ func (s *ClaimStore) Claim(path string, meta map[string]string) (bool, error) {
 		return false, err
 	}
 	b, _ := json.MarshalIndent(meta, "", "  ")
-	f.Write(append(b, '\n'))
+	if _, err := f.Write(append(b, '\n')); err != nil {
+		f.Close()
+		return false, err
+	}
 	if err := f.Sync(); err != nil {
 		f.Close()
 		return false, err
