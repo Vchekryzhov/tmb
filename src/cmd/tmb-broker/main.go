@@ -140,10 +140,10 @@ func main() {
 		log.Event("tls_listen", map[string]any{"addr": tlsAddr})
 		fmt.Printf("tmb-broker: tls listening on %s (client certificates required, no plaintext)\n", tlsAddr)
 		go func() {
-			// ServeTLS only returns when the listener fails.
-			err := b.ServeTLS(tls.NewListener(tlsLn, tlsCfg))
-			fmt.Fprintf(os.Stderr, "tmb-broker: tls serve: %v\n", err)
-			os.Exit(1)
+			if err := b.ServeTLS(tls.NewListener(tlsLn, tlsCfg)); err != nil {
+				fmt.Fprintf(os.Stderr, "tmb-broker: tls serve: %v\n", err)
+				os.Exit(1)
+			}
 		}()
 	}
 
@@ -163,10 +163,10 @@ func main() {
 		os.Exit(0)
 	}()
 
-	// Serve only returns when the listener fails.
-	err = b.Serve(ln)
-	fmt.Fprintf(os.Stderr, "tmb-broker: serve: %v\n", err)
-	os.Exit(1)
+	if err := b.Serve(ln); err != nil {
+		fmt.Fprintf(os.Stderr, "tmb-broker: serve: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func lastSlash(p string) int {
