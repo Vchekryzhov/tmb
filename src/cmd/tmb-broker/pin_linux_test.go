@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -261,6 +262,43 @@ func TestExecChildFdHygieneViaPinnedExec(t *testing.T) {
 	// exe fd leaking past execve would appear here as an extra entry
 	if got := strings.Fields(stdout); len(got) != 4 || got[0] != "0" || got[1] != "1" || got[2] != "2" || got[3] != "3" {
 		t.Errorf("child fd list = %q, want exactly [0 1 2 3] (pin fd leaked into child?)", stdout)
+	}
+}
+
+// TestExecChildDoesNotInheritStrayFds: a descriptor the broker process
+// inherited from whatever started it (opened without O_CLOEXEC, as CI
+// runners and init scripts do) must not reach the privileged child.
+func TestExecChildDoesNotInheritStrayFds(t *testing.T) {
+	stray, err := syscall.Open("/dev/null", syscall.O_RDONLY, 0) // no O_CLOEXEC
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(stray)
+
+	dir := t.TempDir()
+	b, _ := newPinBroker(t, dir, 30*time.Second)
+	id := UIDRequester(4242, 11)
+	req := &proto.Request{
+		Executable: "/bin/ls",
+		Argv:       []string{"/bin/ls", "/proc/self/fd"},
+		Cwd:        "/tmp",
+		UID:        0,
+		Env:        map[string]string{"LANG": "C.UTF-8"},
+		Nonce:      "stray-fd-1",
+	}
+	f := approveDo(t, b, req, id)
+	if f.Type != "approved" || f.Token == "" {
+		t.Fatalf("approve: got frame %+v", f)
+	}
+	claim := *req
+	claim.Type = "claim"
+	claim.ClaimToken = f.Token
+	term, stdout := claimCollect(t, b, &claim, id)
+	if term.Type != "exit" || term.Code == nil || *term.Code != 0 {
+		t.Fatalf("fd listing exec: got frame %+v, want exit 0", term)
+	}
+	if got := strings.Fields(stdout); len(got) != 4 || got[0] != "0" || got[1] != "1" || got[2] != "2" || got[3] != "3" {
+		t.Errorf("child fd list = %q, want exactly [0 1 2 3] (inherited fd %d leaked into child)", stdout, stray)
 	}
 }
 
