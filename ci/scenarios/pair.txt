@@ -1,0 +1,14 @@
+# Sections of harness/run-pair.sh (its STAGE 4 re-runs run.sh, verified from last-run.log).
+STAGE 2
+STAGE 3
+PAIR-HAPPY
+PAIR-JSONL
+PAIR-NOKEY
+PAIR-PLAINTEXT
+PAIR-MANUAL
+O7-A
+O7-B
+O7-C
+O8
+O9
+STAGE 4

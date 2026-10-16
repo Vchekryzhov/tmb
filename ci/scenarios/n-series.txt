@@ -1,0 +1,20 @@
+# Sections of harness/run.sh that must run with only passing checks.
+STAGE 0
+HAPPY
+FD-NOLEAK
+MANUAL
+N1
+N2
+TTL
+N5a
+N5b
+N4
+N6
+N7
+N10
+N11
+N12
+N3a
+N3b
+N8
+N9

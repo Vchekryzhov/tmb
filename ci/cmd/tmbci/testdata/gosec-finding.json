@@ -1,0 +1,1 @@
+{"Golang errors":{},"Issues":[{"severity":"HIGH","confidence":"HIGH","rule_id":"G204","details":"Subprocess launched with variable","file":"/w/src/cmd/tmb/main.go","code":"5: exec.Command(x)\n","line":"5"}],"Stats":{}}

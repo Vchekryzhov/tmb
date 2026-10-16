@@ -1,0 +1,736 @@
+{
+  "pull_request": {
+    "checks": [
+      {
+        "check": "lint/gofmt"
+      },
+      {
+        "check": "lint/vet"
+      },
+      {
+        "check": "lint/staticcheck"
+      },
+      {
+        "check": "lint/module"
+      },
+      {
+        "check": "lint/pins"
+      },
+      {
+        "check": "lint/bash-syntax"
+      },
+      {
+        "check": "lint/shellcheck"
+      },
+      {
+        "check": "lint/actionlint"
+      },
+      {
+        "check": "lint/zizmor"
+      },
+      {
+        "check": "lint/hadolint"
+      },
+      {
+        "check": "lint/exceptions"
+      },
+      {
+        "check": "lint/doc-links"
+      },
+      {
+        "check": "test/linux-amd64-go1.27.2"
+      },
+      {
+        "check": "test/linux-amd64-go1.26.9"
+      },
+      {
+        "check": "test/linux-arm64-go1.27.2"
+      },
+      {
+        "check": "test/linux-arm64-go1.26.9"
+      },
+      {
+        "check": "test/darwin-arm64-go1.27.2"
+      },
+      {
+        "check": "test/darwin-arm64-go1.26.9"
+      },
+      {
+        "check": "ci/selftest"
+      },
+      {
+        "check": "coverage/compare"
+      },
+      {
+        "check": "coverage/diff",
+        "allow_not_applicable": true
+      },
+      {
+        "check": "coverage/targets"
+      },
+      {
+        "check": "security/gosec"
+      },
+      {
+        "check": "security/govulncheck-source"
+      },
+      {
+        "check": "build/binaries"
+      },
+      {
+        "check": "build/reproducible"
+      },
+      {
+        "check": "security/govulncheck-binaries"
+      },
+      {
+        "check": "fuzz/registry"
+      },
+      {
+        "check": "secrets/range"
+      },
+      {
+        "check": "secrets/tree"
+      },
+      {
+        "check": "harness/n-series"
+      },
+      {
+        "check": "harness/pair"
+      },
+      {
+        "check": "harness/cleanup"
+      },
+      {
+        "check": "harness/artifact-hygiene"
+      },
+      {
+        "check": "images/build"
+      },
+      {
+        "check": "images/trivy-db"
+      },
+      {
+        "check": "images/vulns"
+      },
+      {
+        "check": "images/config"
+      },
+      {
+        "check": "security/manifest"
+      },
+      {
+        "check": "fuzz/short",
+        "allow_not_applicable": true
+      }
+    ],
+    "jobs": [
+      "lint",
+      "test",
+      "ci-selftest",
+      "coverage",
+      "security",
+      "build",
+      "fuzz",
+      "secrets",
+      "harness",
+      "images",
+      "manifest"
+    ]
+  },
+  "merge_group": {
+    "checks": [
+      {
+        "check": "lint/gofmt"
+      },
+      {
+        "check": "lint/vet"
+      },
+      {
+        "check": "lint/staticcheck"
+      },
+      {
+        "check": "lint/module"
+      },
+      {
+        "check": "lint/pins"
+      },
+      {
+        "check": "lint/bash-syntax"
+      },
+      {
+        "check": "lint/shellcheck"
+      },
+      {
+        "check": "lint/actionlint"
+      },
+      {
+        "check": "lint/zizmor"
+      },
+      {
+        "check": "lint/hadolint"
+      },
+      {
+        "check": "lint/exceptions"
+      },
+      {
+        "check": "lint/doc-links"
+      },
+      {
+        "check": "test/linux-amd64-go1.27.2"
+      },
+      {
+        "check": "test/linux-amd64-go1.26.9"
+      },
+      {
+        "check": "test/linux-arm64-go1.27.2"
+      },
+      {
+        "check": "test/linux-arm64-go1.26.9"
+      },
+      {
+        "check": "test/darwin-arm64-go1.27.2"
+      },
+      {
+        "check": "test/darwin-arm64-go1.26.9"
+      },
+      {
+        "check": "ci/selftest"
+      },
+      {
+        "check": "coverage/compare"
+      },
+      {
+        "check": "coverage/diff",
+        "allow_not_applicable": true
+      },
+      {
+        "check": "coverage/targets"
+      },
+      {
+        "check": "security/gosec"
+      },
+      {
+        "check": "security/govulncheck-source"
+      },
+      {
+        "check": "build/binaries"
+      },
+      {
+        "check": "build/reproducible"
+      },
+      {
+        "check": "security/govulncheck-binaries"
+      },
+      {
+        "check": "fuzz/registry"
+      },
+      {
+        "check": "secrets/range"
+      },
+      {
+        "check": "secrets/tree"
+      },
+      {
+        "check": "harness/n-series"
+      },
+      {
+        "check": "harness/pair"
+      },
+      {
+        "check": "harness/cleanup"
+      },
+      {
+        "check": "harness/artifact-hygiene"
+      },
+      {
+        "check": "images/build"
+      },
+      {
+        "check": "images/trivy-db"
+      },
+      {
+        "check": "images/vulns"
+      },
+      {
+        "check": "images/config"
+      },
+      {
+        "check": "security/manifest"
+      },
+      {
+        "check": "fuzz/short",
+        "allow_not_applicable": true
+      }
+    ],
+    "jobs": [
+      "lint",
+      "test",
+      "ci-selftest",
+      "coverage",
+      "security",
+      "build",
+      "fuzz",
+      "secrets",
+      "harness",
+      "images",
+      "manifest"
+    ]
+  },
+  "push": {
+    "checks": [
+      {
+        "check": "lint/gofmt"
+      },
+      {
+        "check": "lint/vet"
+      },
+      {
+        "check": "lint/staticcheck"
+      },
+      {
+        "check": "lint/module"
+      },
+      {
+        "check": "lint/pins"
+      },
+      {
+        "check": "lint/bash-syntax"
+      },
+      {
+        "check": "lint/shellcheck"
+      },
+      {
+        "check": "lint/actionlint"
+      },
+      {
+        "check": "lint/zizmor"
+      },
+      {
+        "check": "lint/hadolint"
+      },
+      {
+        "check": "lint/exceptions"
+      },
+      {
+        "check": "lint/doc-links"
+      },
+      {
+        "check": "test/linux-amd64-go1.27.2"
+      },
+      {
+        "check": "test/linux-amd64-go1.26.9"
+      },
+      {
+        "check": "test/linux-arm64-go1.27.2"
+      },
+      {
+        "check": "test/linux-arm64-go1.26.9"
+      },
+      {
+        "check": "test/darwin-arm64-go1.27.2"
+      },
+      {
+        "check": "test/darwin-arm64-go1.26.9"
+      },
+      {
+        "check": "ci/selftest"
+      },
+      {
+        "check": "coverage/compare"
+      },
+      {
+        "check": "coverage/diff",
+        "allow_not_applicable": true
+      },
+      {
+        "check": "coverage/targets"
+      },
+      {
+        "check": "security/gosec"
+      },
+      {
+        "check": "security/govulncheck-source"
+      },
+      {
+        "check": "build/binaries"
+      },
+      {
+        "check": "build/reproducible"
+      },
+      {
+        "check": "security/govulncheck-binaries"
+      },
+      {
+        "check": "fuzz/registry"
+      },
+      {
+        "check": "secrets/range"
+      },
+      {
+        "check": "secrets/tree"
+      },
+      {
+        "check": "harness/n-series"
+      },
+      {
+        "check": "harness/pair"
+      },
+      {
+        "check": "harness/cleanup"
+      },
+      {
+        "check": "harness/artifact-hygiene"
+      },
+      {
+        "check": "images/build"
+      },
+      {
+        "check": "images/trivy-db"
+      },
+      {
+        "check": "images/vulns"
+      },
+      {
+        "check": "images/config"
+      },
+      {
+        "check": "security/manifest"
+      },
+      {
+        "check": "fuzz/short",
+        "allow_not_applicable": true
+      }
+    ],
+    "jobs": [
+      "lint",
+      "test",
+      "ci-selftest",
+      "coverage",
+      "security",
+      "build",
+      "fuzz",
+      "secrets",
+      "harness",
+      "images",
+      "manifest"
+    ]
+  },
+  "workflow_dispatch": {
+    "checks": [
+      {
+        "check": "lint/gofmt"
+      },
+      {
+        "check": "lint/vet"
+      },
+      {
+        "check": "lint/staticcheck"
+      },
+      {
+        "check": "lint/module"
+      },
+      {
+        "check": "lint/pins"
+      },
+      {
+        "check": "lint/bash-syntax"
+      },
+      {
+        "check": "lint/shellcheck"
+      },
+      {
+        "check": "lint/actionlint"
+      },
+      {
+        "check": "lint/zizmor"
+      },
+      {
+        "check": "lint/hadolint"
+      },
+      {
+        "check": "lint/exceptions"
+      },
+      {
+        "check": "lint/doc-links"
+      },
+      {
+        "check": "test/linux-amd64-go1.27.2"
+      },
+      {
+        "check": "test/linux-amd64-go1.26.9"
+      },
+      {
+        "check": "test/linux-arm64-go1.27.2"
+      },
+      {
+        "check": "test/linux-arm64-go1.26.9"
+      },
+      {
+        "check": "test/darwin-arm64-go1.27.2"
+      },
+      {
+        "check": "test/darwin-arm64-go1.26.9"
+      },
+      {
+        "check": "ci/selftest"
+      },
+      {
+        "check": "coverage/compare"
+      },
+      {
+        "check": "coverage/diff",
+        "allow_not_applicable": true
+      },
+      {
+        "check": "coverage/targets"
+      },
+      {
+        "check": "security/gosec"
+      },
+      {
+        "check": "security/govulncheck-source"
+      },
+      {
+        "check": "build/binaries"
+      },
+      {
+        "check": "build/reproducible"
+      },
+      {
+        "check": "security/govulncheck-binaries"
+      },
+      {
+        "check": "fuzz/registry"
+      },
+      {
+        "check": "secrets/range"
+      },
+      {
+        "check": "secrets/tree"
+      },
+      {
+        "check": "harness/n-series"
+      },
+      {
+        "check": "harness/pair"
+      },
+      {
+        "check": "harness/cleanup"
+      },
+      {
+        "check": "harness/artifact-hygiene"
+      },
+      {
+        "check": "images/build"
+      },
+      {
+        "check": "images/trivy-db"
+      },
+      {
+        "check": "images/vulns"
+      },
+      {
+        "check": "images/config"
+      },
+      {
+        "check": "security/manifest"
+      },
+      {
+        "check": "fuzz/long",
+        "allow_not_applicable": true
+      },
+      {
+        "check": "secrets/history"
+      },
+      {
+        "check": "stress/race-shuffle"
+      },
+      {
+        "check": "security/mutation"
+      }
+    ],
+    "jobs": [
+      "lint",
+      "test",
+      "ci-selftest",
+      "coverage",
+      "security",
+      "build",
+      "fuzz",
+      "secrets",
+      "harness",
+      "images",
+      "manifest",
+      "nightly"
+    ]
+  },
+  "schedule": {
+    "checks": [
+      {
+        "check": "lint/gofmt"
+      },
+      {
+        "check": "lint/vet"
+      },
+      {
+        "check": "lint/staticcheck"
+      },
+      {
+        "check": "lint/module"
+      },
+      {
+        "check": "lint/pins"
+      },
+      {
+        "check": "lint/bash-syntax"
+      },
+      {
+        "check": "lint/shellcheck"
+      },
+      {
+        "check": "lint/actionlint"
+      },
+      {
+        "check": "lint/zizmor"
+      },
+      {
+        "check": "lint/hadolint"
+      },
+      {
+        "check": "lint/exceptions"
+      },
+      {
+        "check": "lint/doc-links"
+      },
+      {
+        "check": "test/linux-amd64-go1.27.2"
+      },
+      {
+        "check": "test/linux-amd64-go1.26.9"
+      },
+      {
+        "check": "test/linux-arm64-go1.27.2"
+      },
+      {
+        "check": "test/linux-arm64-go1.26.9"
+      },
+      {
+        "check": "test/darwin-arm64-go1.27.2"
+      },
+      {
+        "check": "test/darwin-arm64-go1.26.9"
+      },
+      {
+        "check": "ci/selftest"
+      },
+      {
+        "check": "coverage/compare"
+      },
+      {
+        "check": "coverage/diff",
+        "allow_not_applicable": true
+      },
+      {
+        "check": "coverage/targets"
+      },
+      {
+        "check": "security/gosec"
+      },
+      {
+        "check": "security/govulncheck-source"
+      },
+      {
+        "check": "build/binaries"
+      },
+      {
+        "check": "build/reproducible"
+      },
+      {
+        "check": "security/govulncheck-binaries"
+      },
+      {
+        "check": "fuzz/registry"
+      },
+      {
+        "check": "secrets/range"
+      },
+      {
+        "check": "secrets/tree"
+      },
+      {
+        "check": "harness/n-series"
+      },
+      {
+        "check": "harness/pair"
+      },
+      {
+        "check": "harness/cleanup"
+      },
+      {
+        "check": "harness/artifact-hygiene"
+      },
+      {
+        "check": "images/build"
+      },
+      {
+        "check": "images/trivy-db"
+      },
+      {
+        "check": "images/vulns"
+      },
+      {
+        "check": "images/config"
+      },
+      {
+        "check": "security/manifest"
+      },
+      {
+        "check": "fuzz/long",
+        "allow_not_applicable": true
+      },
+      {
+        "check": "secrets/history"
+      },
+      {
+        "check": "stress/race-shuffle"
+      },
+      {
+        "check": "security/mutation"
+      }
+    ],
+    "jobs": [
+      "lint",
+      "test",
+      "ci-selftest",
+      "coverage",
+      "security",
+      "build",
+      "fuzz",
+      "secrets",
+      "harness",
+      "images",
+      "manifest",
+      "nightly"
+    ]
+  },
+  "openshell": {
+    "checks": [
+      {
+        "check": "openshell/n-series"
+      },
+      {
+        "check": "openshell/pair"
+      },
+      {
+        "check": "openshell/rig"
+      },
+      {
+        "check": "openshell/artifact-hygiene"
+      }
+    ],
+    "jobs": [
+      "acceptance"
+    ]
+  }
+}

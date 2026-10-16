@@ -1,0 +1,41 @@
+name: TMB CI setup
+description: Pinned Go toolchain (no cache) and the pinned CI tools built or verified by ci/install-tools.sh.
+inputs:
+  go-version:
+    description: Exact Go version; defaults to .go-version
+    required: false
+    default: ""
+  tools:
+    description: Install CI tools (false installs only tmbci)
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Go (exact version from input)
+      if: inputs.go-version != ''
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: ${{ inputs.go-version }}
+        check-latest: false
+        cache: false
+    - name: Go (.go-version)
+      if: inputs.go-version == ''
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: .go-version
+        check-latest: false
+        cache: false
+    - name: Pinned tools
+      shell: bash
+      env:
+        WITH_TOOLS: ${{ inputs.tools }}
+      run: |
+        set -euo pipefail
+        go version
+        if [ "$WITH_TOOLS" = "true" ]; then
+          ci/install-tools.sh out/ci/bin
+        else
+          mkdir -p out/ci/bin
+          (cd ci && GOFLAGS=-mod=readonly CGO_ENABLED=0 go build -trimpath -o ../out/ci/bin/tmbci ./cmd/tmbci)
+        fi

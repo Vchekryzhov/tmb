@@ -1,0 +1,21 @@
+# Reviewable update PRs for pinned dependencies. No auto-merge: every PR is
+# reviewed and must pass ci-gate. Updates wait 14 days after release.
+# Pins Dependabot cannot see (.go-version, ci/tools.lock, golang/ubuntu
+# digests in sync with .go-version) follow docs/ci.md "Updating pins".
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/setup"]
+    schedule: {interval: weekly}
+    cooldown: {default-days: 14}
+    open-pull-requests-limit: 5
+  - package-ecosystem: gomod
+    directories: ["/ci/tools/staticcheck", "/ci/tools/gosec", "/ci/tools/govulncheck", "/ci/tools/actionlint"]
+    schedule: {interval: weekly}
+    cooldown: {default-days: 14}
+    open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directories: ["/harness/images"]
+    schedule: {interval: weekly}
+    cooldown: {default-days: 14}
+    open-pull-requests-limit: 5

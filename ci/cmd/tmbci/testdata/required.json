@@ -1,0 +1,1 @@
+{"pull_request": {"checks": [{"check": "lint/gofmt"}, {"check": "coverage/diff", "allow_not_applicable": true}], "jobs": ["lint", "coverage"]}}

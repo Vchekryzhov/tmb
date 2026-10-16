@@ -1,0 +1,3 @@
+self-hosted-runner:
+  # dedicated phase B Mac (docs/ci.md "Phase B")
+  labels: [tmb-openshell]
