@@ -14,7 +14,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/tmb ./cmd/tmb
 # The digest below is the linux/arm64 manifest of ghcr.io/anomalyco/opencode:latest,
 # resolved 2026-10-09 (docker manifest inspect). run-openshell.sh refuses to
 # run unless the local image matches OPENCODE_IMAGE_REF.
-FROM ghcr.io/anomalyco/opencode@sha256:6911572e4a9b3ead5e4086b40e2c98bd82075dae617aff679767f358cf8f374e
+FROM ghcr.io/anomalyco/opencode@sha256:6ebc13097f2381301220abe9d1b2a54f50cd1603a910dc1c66e93d8f2c4e8ebb
 # base is Alpine; openssl is present for the O-series probes (s_client etc.)
 # hadolint ignore=DL3018 # base is digest-pinned; apk repository versions roll, the O-series needs only openssl
 RUN apk add --no-cache openssl
