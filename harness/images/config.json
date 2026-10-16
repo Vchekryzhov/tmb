@@ -1,0 +1,22 @@
+{
+  "_comment": "PROTOTYPE config - throwaway PoC. NOTE: token_ttl_seconds is deliberately short (2-3s) so tests never sleep a real 60s; production default would be 60.",
+  "socket_path": "/run/tmb/tmb.sock",
+  "state_dir": "/var/lib/tmb-proto",
+  "log_path": "/var/log/tmb/broker.log",
+  "pid_file": "/var/run/tmb-broker.pid",
+  "allowed_requester_uids": [4242, 4343],
+  "socket_gid": 4242,
+  "allowed_env_keys": ["LANG"],
+  "fixed_env": {
+    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "LANG": "C.UTF-8"
+  },
+  "shell_deny_list": [
+    "/bin/sh", "/bin/bash", "/bin/dash", "/bin/zsh", "/bin/ksh",
+    "/usr/bin/sh", "/usr/bin/bash", "/usr/bin/dash", "/usr/bin/zsh",
+    "/usr/bin/ksh", "/usr/bin/env", "/usr/bin/fish", "/bin/tcsh",
+    "/usr/bin/tcsh", "/bin/csh", "/usr/bin/csh", "/usr/bin/busybox"
+  ],
+  "token_ttl_seconds": 3,
+  "approval_default": "mock-approve"
+}

@@ -1,0 +1,18 @@
+// PROTOTYPE CODE - throwaway PoC, not production.
+//
+//go:build !linux
+
+package main
+
+// The broker is a Linux PoC (unix socket listener, /proc/self/fd exec); it
+// is never run elsewhere. These stubs keep the package buildable/testable
+// on dev machines: approvals are not fd-pinned and exec uses the resolved
+// path, so the pinning guarantees DO NOT hold off-Linux.
+
+func pinApproval(p *pendingApproval, exeReal, cwdReal string, dev, ino uint64) (string, string) {
+	return "", ""
+}
+
+func cwdStillPinned(cwdReal string, dev, ino uint64) bool { return true }
+
+func (p *pendingApproval) execTarget() (string, bool) { return p.ExePath, false }

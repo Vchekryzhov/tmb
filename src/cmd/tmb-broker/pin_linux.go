@@ -1,0 +1,126 @@
+// PROTOTYPE CODE - throwaway PoC, not production.
+//
+//go:build linux
+
+package main
+
+// Exec-time identity pinning (security contract):
+//
+// The exe the human approved is pinned by an open read-only fd at approval
+// time; at exec the broker execve()s /proc/self/fd/<N> so the kernel runs
+// EXACTLY the approved inode even if the path is replaced in the window
+// between claim validation and execve (the stat->execve TOCTOU). The fd is
+// opened O_CLOEXEC (os.Open): fork inherits it regardless, execve resolves
+// the /proc/self/fd symlink before CLOEXEC closes the fd on success, so the
+// child still ends with only fds 0,1,2. Verified empirically by
+// TestExecChildFdHygieneViaPinnedExec and harness scenario N11.
+//
+// The cwd is pinned by directory identity (dev/ino via O_DIRECTORY fd at
+// approval); at exec the path is reopened and re-fstat'ed, and a mismatch
+// (same path, new inode) denies with cwd_changed instead of silently
+// running the command in a directory the human did not approve.
+
+import (
+	"fmt"
+	"os"
+	"syscall"
+)
+
+// pinApproval pins exec-time identities onto p: the exe inode via an open
+// read-only fd, the cwd directory identity via dev/ino. Returns a
+// (denyCode, denyDetail) pair when pinning proves the exe or cwd changed
+// mid-validation and the approval must fail closed; ("", "") on success.
+func pinApproval(p *pendingApproval, exeReal, cwdReal string, dev, ino uint64) (string, string) {
+	f, pdev, pino, deny := pinExe(exeReal, dev, ino)
+	if deny != "" {
+		return deny, exeReal
+	}
+	p.ExeFile = f
+	p.ExeDev, p.ExeIno = pdev, pino
+	cdev, cino, ok := cwdIdentity(cwdReal)
+	if !ok {
+		p.closePins()
+		return "cwd_invalid", cwdReal
+	}
+	p.CwdDev, p.CwdIno, p.CwdPinned = cdev, cino, true
+	return "", ""
+}
+
+// pinExe opens exeReal read-only and fstats the fd to verify it is the file
+// that was just stat'd as (dev, ino). On a stat/open race it re-resolves
+// the path once; if the on-disk truth still is not the fd's file, the
+// request is denied exe_changed, fail-closed.
+func pinExe(exeReal string, dev, ino uint64) (f *os.File, pdev, pino uint64, deny string) {
+	f, err := os.Open(exeReal) // O_RDONLY | O_CLOEXEC
+	if err != nil {
+		return nil, 0, 0, "exe_changed"
+	}
+	pdev, pino, ok := fdIdentity(f)
+	if !ok {
+		f.Close()
+		return nil, 0, 0, "exe_changed"
+	}
+	if pdev == dev && pino == ino {
+		return f, pdev, pino, ""
+	}
+	// swapped between stat and open: accept only if the path has settled
+	// on exactly the fd's file
+	if st, err := os.Stat(exeReal); err == nil {
+		if sti, ok := st.Sys().(*syscall.Stat_t); ok &&
+			uint64(sti.Dev) == pdev && uint64(sti.Ino) == pino {
+			return f, pdev, pino, ""
+		}
+	}
+	f.Close()
+	return nil, 0, 0, "exe_changed"
+}
+
+func fdIdentity(f *os.File) (uint64, uint64, bool) {
+	var st syscall.Stat_t
+	if err := syscall.Fstat(int(f.Fd()), &st); err != nil {
+		return 0, 0, false
+	}
+	return uint64(st.Dev), uint64(st.Ino), true
+}
+
+// cwdIdentity records the directory identity of the approved cwd via an
+// O_DIRECTORY fd; the fd itself is closed immediately - only the identity
+// is kept for re-verification at exec time.
+func cwdIdentity(cwdReal string) (uint64, uint64, bool) {
+	fd, err := syscall.Open(cwdReal, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return 0, 0, false
+	}
+	defer syscall.Close(fd)
+	var st syscall.Stat_t
+	if err := syscall.Fstat(fd, &st); err != nil {
+		return 0, 0, false
+	}
+	return uint64(st.Dev), uint64(st.Ino), true
+}
+
+// cwdStillPinned reopens the cwd path and checks it is still the exact
+// approved directory (dev, ino).
+func cwdStillPinned(cwdReal string, dev, ino uint64) bool {
+	fd, err := syscall.Open(cwdReal, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return false
+	}
+	defer syscall.Close(fd)
+	var st syscall.Stat_t
+	if err := syscall.Fstat(fd, &st); err != nil {
+		return false
+	}
+	return uint64(st.Dev) == dev && uint64(st.Ino) == ino
+}
+
+// execTarget returns the path to execve: the approved inode via
+// /proc/self/fd/N (the fd survives fork; execve resolves the symlink in
+// the child before CLOEXEC closes it), or the plain resolved path when no
+// fd is pinned.
+func (p *pendingApproval) execTarget() (string, bool) {
+	if p.ExeFile == nil {
+		return p.ExePath, false
+	}
+	return fmt.Sprintf("/proc/self/fd/%d", p.ExeFile.Fd()), true
+}

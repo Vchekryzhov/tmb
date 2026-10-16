@@ -1,0 +1,22 @@
+# PROTOTYPE - throwaway PoC. sandbox-sim container: unprivileged stand-in
+# for the future OpenShell sandbox (OpenShell wiring is a later follow-up).
+# NO sudo installed, NO docker.sock, --network none at runtime for the
+# N-series (unix path); the mTLS pair harness (run-pair.sh) additionally
+# puts this image on a dedicated network. openssl is present for the O-series
+# scenarios (openssl s_client probes).
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY src/ .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/tmb ./cmd/tmb
+
+FROM ubuntu:24.04
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl openssl \
+ && rm -rf /var/lib/apt/lists/*
+RUN groupadd -g 4242 tmb \
+ && useradd -u 4242 -g tmb -m -s /bin/bash tmb \
+ && mkdir -p /run/tmb
+COPY --from=build /out/tmb /usr/local/bin/tmb
+USER tmb
+WORKDIR /home/tmb
+CMD ["sleep", "infinity"]

@@ -1,0 +1,29 @@
+# PROTOTYPE - throwaway PoC (ticket #8). OpenShell sandbox image: pinned
+# opencode base image (digest pinned + verified by run-openshell.sh as
+# OPENCODE_IMAGE_REF) + openssl (required by the O-series) + the static tmb
+# client binary (same recipe as Dockerfile.sandbox).
+#
+# Per-run client certificates are NOT baked here: run-openshell.sh layers
+# them on top with a second build whose context is the per-run cert temp
+# dir (see README-PROTOTYPE.md "Доставка сертификатов в песочницу").
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY src/ .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/tmb ./cmd/tmb
+
+# The digest below is the linux/arm64 manifest of ghcr.io/anomalyco/opencode:latest,
+# resolved 2026-10-09 (docker manifest inspect). run-openshell.sh refuses to
+# run unless the local image matches OPENCODE_IMAGE_REF.
+FROM ghcr.io/anomalyco/opencode@sha256:6911572e4a9b3ead5e4086b40e2c98bd82075dae617aff679767f358cf8f374e
+# base is Alpine; openssl is present for the O-series probes (s_client etc.)
+RUN apk add --no-cache openssl
+# Workload identity must exist in the image: the gateway resolves the
+# workload uid/gid from /etc/passwd, and OpenShell rejects root workloads.
+# An image without USER would run as 1000:1000 anyway (default policy), but
+# an explicit named user keeps identity resolution deterministic.
+RUN adduser -D -u 1000 sandbox
+COPY --from=build /out/tmb /usr/local/bin/tmb
+USER sandbox
+WORKDIR /home/sandbox
+# canonical process for the harness; run-openshell.sh passes -- sleep infinity
+CMD ["sleep", "infinity"]

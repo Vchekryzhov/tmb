@@ -1,0 +1,27 @@
+# PROTOTYPE - throwaway PoC. host-sim container: runs tmb-broker as root.
+# Has normal human password sudo (the thing TMB must NEVER touch or break).
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY src/ .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/tmb-broker ./cmd/tmb-broker
+
+FROM ubuntu:24.04
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends sudo procps netcat-openbsd \
+ && rm -rf /var/lib/apt/lists/*
+# netcat-openbsd: O1 control listener (`nc -l -p 19999`) raised by
+# run-openshell.sh inside host-sim (ticket #9); harmless for run-pair.sh.
+# dedicated group matching the sandbox user gid (socket group perms)
+RUN groupadd -g 4242 tmb
+# human user with normal password sudo - used to prove sudo stays untouched
+RUN useradd -m -s /bin/bash human \
+ && echo 'human:human' | chpasswd \
+ && usermod -aG sudo human
+COPY --from=build /out/tmb-broker /usr/local/bin/tmb-broker
+COPY harness/images/config.json /etc/tmb/config.json
+RUN mkdir -p /run/tmb /var/lib/tmb-proto /var/log/tmb \
+ && chown root:4242 /run/tmb && chmod 0755 /run/tmb
+VOLUME /run/tmb
+# NOTE: no sudoers/sudo.conf/PAM modifications anywhere in this image -
+# stock ubuntu sudo, untouched.
+CMD ["sleep", "infinity"]
