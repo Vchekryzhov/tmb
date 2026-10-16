@@ -686,10 +686,10 @@ N_SUMMARY=$(sed -n 's/^PASS: \([0-9]*\)  FAIL: \([0-9]*\)$/\1 \2/p' last-run.log
 echo "run.sh summary: PASS/FAIL = ${N_SUMMARY:-<not parsed>}"
 N_PASS=${N_SUMMARY%% *}
 N_FAIL=${N_SUMMARY##* }
-if [ "${N_PASS:-x}" = "112" ] && [ "${N_FAIL:-x}" = "0" ]; then
-  ok "REGRESSION: N-series 112/112 green (77 of the OpenShell milestone + N18 cwd roots + N19/N20 env policy + N22 held cwd fd)"
+if [ "${N_PASS:-x}" = "119" ] && [ "${N_FAIL:-x}" = "0" ]; then
+  ok "REGRESSION: N-series 119/119 green (77 of the OpenShell milestone + N18 cwd roots + N19/N20 env policy + N22 held cwd fd + N21 claim GC)"
 else
-  bad "REGRESSION: N-series PASS=${N_PASS:-?} FAIL=${N_FAIL:-?} (want 112/0)"
+  bad "REGRESSION: N-series PASS=${N_PASS:-?} FAIL=${N_FAIL:-?} (want 119/0)"
 fi
 
 # =============================================================================

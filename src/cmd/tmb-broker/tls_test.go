@@ -132,7 +132,7 @@ func TestTLSListenerCertIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("logger: %v", err)
 	}
-	claims, err := NewClaimStore(dir)
+	claims, err := NewClaimStore(dir, time.Minute)
 	if err != nil {
 		t.Fatalf("claim store: %v", err)
 	}
