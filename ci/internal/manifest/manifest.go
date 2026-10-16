@@ -19,7 +19,7 @@ const SchemaV1 = "tmb-ci/security-manifest/v1"
 var RequiredIDs = []string{
 	"SEC-01", "SEC-02", "SEC-03", "SEC-04", "SEC-05", "SEC-06", "SEC-07", "SEC-08",
 	"SEC-09", "SEC-10", "SEC-11", "SEC-12", "SEC-13", "SEC-14", "SEC-15", "SEC-16",
-	"SEC-17", // spec #27: cwd roots
+	"SEC-17", "SEC-18", // spec #27: cwd roots, env policy
 }
 
 // Level says where a case's evidence can be produced.

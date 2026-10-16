@@ -28,7 +28,7 @@ func newTestBroker(t *testing.T) *Broker {
 		AllowedRequesterUIDs: []uint32{4242, 4343},
 		AllowedRequesterFPs:  []string{strings.Repeat("aa", 32), strings.Repeat("bb", 32)},
 		AllowedEnvKeys:       []string{"LANG"},
-		FixedEnv:             map[string]string{"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+		FixedEnv:             map[string]string{"PATH": "/usr/bin:/bin"},
 		AllowedCwdRoots:      []string{"/"},
 	}
 	return NewBroker(cfg, log, claims, ModeMockApprove, 30*time.Second)

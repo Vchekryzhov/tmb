@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -107,6 +108,45 @@ func (b *Broker) envKeyAllowed(k string) bool {
 		}
 	}
 	return false
+}
+
+// maxEnvValue bounds one requested env value, so the approval display and
+// the audit log never carry an oversized value.
+const maxEnvValue = 4096
+
+// checkEnv applies the env policy to the requested keys in sorted order (a
+// stable verdict for a multi-key request). Per key: syntax, PATH, then
+// fixed_env (a fixed key is never editable, even if it is also
+// allowlisted), then the allowlist; then the value: single line, no NUL, at most maxEnvValue bytes.
+func (b *Broker) checkEnv(env map[string]string) (deny, detail string) {
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := env[k]
+		switch {
+		case k == "" || strings.ContainsAny(k, "=\x00"):
+			return "env_key_invalid", fmt.Sprintf("%q", k)
+		case k == "PATH": // never requestable, whatever fixed_env says
+			return "env_key_not_allowed", k
+		case b.envKeyFixed(k):
+			return "env_fixed_key", k
+		case !b.envKeyAllowed(k):
+			return "env_key_not_allowed", k
+		case strings.ContainsAny(v, "\x00\n"):
+			return "env_value_invalid", k + ": value contains NUL or a newline"
+		case len(v) > maxEnvValue:
+			return "env_value_too_long", fmt.Sprintf("%s: %d bytes, limit %d", k, len(v), maxEnvValue)
+		}
+	}
+	return "", ""
+}
+
+func (b *Broker) envKeyFixed(k string) bool {
+	_, fixed := b.cfg.FixedEnv[k]
+	return fixed
 }
 
 // cwdAllowed reports whether a realpath'd cwd equals one of the configured
@@ -268,10 +308,8 @@ func (b *Broker) validateRequest(req *proto.Request) (exeReal, cwdReal string, d
 	if req.UID != 0 {
 		return "", "", 0, 0, "uid_not_supported", fmt.Sprintf("uid %d requested; PoC supports only uid 0", req.UID)
 	}
-	for k := range req.Env {
-		if !b.envKeyAllowed(k) {
-			return "", "", 0, 0, "env_key_not_allowed", k
-		}
+	if deny, detail := b.checkEnv(req.Env); deny != "" {
+		return "", "", 0, 0, deny, detail
 	}
 	if len(req.Env) > 32 {
 		return "", "", 0, 0, "env_too_many", ""

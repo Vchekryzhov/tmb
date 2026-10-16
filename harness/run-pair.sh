@@ -636,7 +636,7 @@ TLN=$(broker_log_count '"event":"tls_listen"'); TLN=${TLN:-0}
 start_broker mock-approve 30
 wait_broker_log_count '"event":"tls_listen"' $((TLN+1))
 cat >"$TD/o9.json" <<'EOF'
-{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"o9-nonce-fixed-000007"}
+{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"o9-nonce-fixed-000007"}
 EOF
 
 echo "-- approve under fp1 (allowlisted)"
@@ -686,10 +686,10 @@ N_SUMMARY=$(sed -n 's/^PASS: \([0-9]*\)  FAIL: \([0-9]*\)$/\1 \2/p' last-run.log
 echo "run.sh summary: PASS/FAIL = ${N_SUMMARY:-<not parsed>}"
 N_PASS=${N_SUMMARY%% *}
 N_FAIL=${N_SUMMARY##* }
-if [ "${N_PASS:-x}" = "89" ] && [ "${N_FAIL:-x}" = "0" ]; then
-  ok "REGRESSION: N-series 89/89 green (77 of the OpenShell milestone + N18 cwd roots)"
+if [ "${N_PASS:-x}" = "104" ] && [ "${N_FAIL:-x}" = "0" ]; then
+  ok "REGRESSION: N-series 104/104 green (77 of the OpenShell milestone + N18 cwd roots + N19/N20 env policy)"
 else
-  bad "REGRESSION: N-series PASS=${N_PASS:-?} FAIL=${N_FAIL:-?} (want 89/0)"
+  bad "REGRESSION: N-series PASS=${N_PASS:-?} FAIL=${N_FAIL:-?} (want 104/0)"
 fi
 
 # =============================================================================
