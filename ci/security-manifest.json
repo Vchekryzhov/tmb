@@ -47,6 +47,9 @@
      "scenarios": ["N18"]},
     {"id": "SEC-18", "title": "env policy: fixed_env keys not overridable, PATH never requestable or allowlisted, values single-line and at most 4096 bytes, denied before approval",
      "tests": ["tmb-poc/cmd/tmb-broker.TestCheckEnvPolicy", "tmb-poc/cmd/tmb-broker.TestCheckEnvPathNotRequestable", "tmb-poc/cmd/tmb-broker.TestBuildEnvFixedKeyWins", "tmb-poc/cmd/tmb-broker.TestLoadConfigRejectsPathInAllowedEnvKeys"],
-     "scenarios": ["N19", "N20"]}
+     "scenarios": ["N19", "N20"]},
+    {"id": "SEC-19", "title": "the approved cwd directory is held by fd until exec and the child chdirs through it; a swap after the last check does not move the command; the fd closes on every outcome",
+     "tests": ["tmb-poc/cmd/tmb-broker.TestExecChdirsThroughHeldCwdDespiteSwapAfterCheck", "tmb-poc/cmd/tmb-broker.TestCwdPinClosedOnEveryOutcome"],
+     "scenarios": ["N22"]}
   ]
 }
