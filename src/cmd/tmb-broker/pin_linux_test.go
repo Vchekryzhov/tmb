@@ -84,6 +84,7 @@ func newPinBroker(t *testing.T, dir string, ttl time.Duration) (*Broker, string)
 		AllowedRequesterUIDs: []uint32{4242},
 		AllowedEnvKeys:       []string{"LANG"},
 		FixedEnv:             map[string]string{"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+		AllowedCwdRoots:      []string{"/"},
 	}
 	return NewBroker(cfg, log, claims, ModeMockApprove, ttl), filepath.Join(dir, "broker.log")
 }

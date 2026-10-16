@@ -422,6 +422,45 @@ fi
 state_dump
 
 # -----------------------------------------------------------------------------
+log "SCENARIO N18: cwd outside allowed_cwd_roots -> deny cwd_not_allowed before approval"
+# The bench config allows only /tmp. The check runs on the realpath, so a
+# symlink inside /tmp that points at /etc is denied too, and the denial comes
+# from validation: no approval event is logged for it.
+docker exec "$HOST" sh -c 'rm -rf /tmp/n18-dir /tmp/n18-link && mkdir /tmp/n18-dir && ln -s /etc /tmp/n18-link'
+approvals() { docker exec "$HOST" grep -c '"event":"approval"' /var/log/tmb/broker.log 2>/dev/null; }
+A0=$(approvals)
+run_client "$SBX" tmb exec --root --cwd /etc -- /usr/bin/id -u
+assert_rc      "N18: --cwd /etc -> exit 125" 125
+assert_err_has "N18: deny reason cwd_not_allowed" "cwd_not_allowed"
+run_client "$SBX" tmb exec --root --cwd /tmp/n18-link -- /usr/bin/id -u
+assert_rc      "N18: --cwd /tmp/n18-link (symlink to /etc) -> exit 125" 125
+assert_err_has "N18: symlink denied with realpath /etc in detail" "cwd_not_allowed (/etc)"
+if [ "$(approvals)" = "$A0" ]; then ok "N18: no approval event for cwd outside the roots"; else bad "N18: approval event logged for a denied cwd"; fi
+run_client "$SBX" tmb exec --root --cwd /tmp/n18-dir -- /bin/pwd
+assert_rc     "N18: --cwd /tmp/n18-dir inside the root -> approved, exit 0" 0
+assert_out_eq "N18: command ran in /tmp/n18-dir" "/tmp/n18-dir"
+
+echo "-- round 2: broker with an empty allowed_cwd_roots denies every cwd"
+stop_broker
+docker exec "$HOST" sh -c 'sed "s#\"allowed_cwd_roots\": \[\"/tmp\"\]#\"allowed_cwd_roots\": []#" /etc/tmb/config.json >/tmp/n18-empty.json'
+docker exec -d "$HOST" tmb-broker -config /tmp/n18-empty.json -approval mock-approve -ttl "$TTL"
+wait_socket
+run_client "$SBX" tmb exec --root --cwd /tmp -- /usr/bin/id -u
+assert_rc      "N18: empty allowed_cwd_roots, --cwd /tmp -> exit 125" 125
+assert_err_has "N18: empty roots deny reason cwd_not_allowed" "cwd_not_allowed"
+stop_broker
+
+echo "-- round 3: a relative root is a config error, the broker does not start"
+docker exec "$HOST" sh -c 'sed "s#\"allowed_cwd_roots\": \[\"/tmp\"\]#\"allowed_cwd_roots\": [\"work/dir\"]#" /etc/tmb/config.json >/tmp/n18-relative.json'
+OUT_FILE=$TD/n18r.out; ERR_FILE=$TD/n18r.err
+docker exec "$HOST" timeout 10 tmb-broker -config /tmp/n18-relative.json -approval mock-approve >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc      "N18: relative root -> broker exits 1" 1
+assert_err_has "N18: stderr names the relative root" '"work/dir"'
+if docker exec "$HOST" test -S /run/tmb/tmb.sock; then bad "N18: socket exists after a failed start"; else ok "N18: no socket after a failed start"; fi
+start_broker mock-approve 10
+state_dump
+
+# -----------------------------------------------------------------------------
 log "SCENARIO N3a: mock-deny -> deny, nothing runs"
 stop_broker
 start_broker mock-deny "$TTL"

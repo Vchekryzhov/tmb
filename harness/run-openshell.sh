@@ -338,6 +338,7 @@ cat > "$TD/config-osh.json" <<EOF
   "allowed_requester_uids": [4242],
   "allowed_requester_fps": ["$FP1"],
   "socket_gid": 4242,
+  "allowed_cwd_roots": ["/tmp"],
   "allowed_env_keys": ["LANG"],
   "fixed_env": {
     "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",

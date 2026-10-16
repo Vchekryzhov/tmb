@@ -109,6 +109,18 @@ func (b *Broker) envKeyAllowed(k string) bool {
 	return false
 }
 
+// cwdAllowed reports whether a realpath'd cwd equals one of the configured
+// roots or lies below one. Roots are realpaths already (normalizeCwdRoots);
+// an empty list allows nothing.
+func (b *Broker) cwdAllowed(cwdReal string) bool {
+	for _, root := range b.cfg.AllowedCwdRoots {
+		if cwdReal == root || strings.HasPrefix(cwdReal, strings.TrimSuffix(root, "/")+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // shellDenied checks both the raw path and the realpath against the deny
 // list (entries themselves resolved, so /bin/sh -> /usr/bin/dash matches).
 func (b *Broker) shellDenied(rawPath, realPath string) bool {
@@ -296,6 +308,9 @@ func (b *Broker) validateRequest(req *proto.Request) (exeReal, cwdReal string, d
 	}
 	if st2, err := os.Stat(cwdReal); err != nil || !st2.IsDir() {
 		return "", "", 0, 0, "cwd_invalid", cwdReal
+	}
+	if !b.cwdAllowed(cwdReal) {
+		return "", "", 0, 0, "cwd_not_allowed", cwdReal
 	}
 	return exeReal, cwdReal, dev, ino, "", ""
 }

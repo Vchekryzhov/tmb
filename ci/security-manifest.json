@@ -41,6 +41,9 @@
     {"id": "SEC-15", "title": "SIGKILL of the broker closes the agent path; human password sudo keeps working",
      "scenarios": ["N9"]},
     {"id": "SEC-16", "title": "client disconnects and concurrent connections do not bypass one-shot or identity checks",
-     "gap": {"what": "client-disconnect and concurrent-connection tests", "owner": "Vchekryzhov", "issue": "https://github.com/Vchekryzhov/tmb/issues/15", "due": "2026-11-16"}}
+     "gap": {"what": "client-disconnect and concurrent-connection tests", "owner": "Vchekryzhov", "issue": "https://github.com/Vchekryzhov/tmb/issues/15", "due": "2026-11-16"}},
+    {"id": "SEC-17", "title": "cwd outside allowed_cwd_roots (realpath, symlinks resolved) is denied before approval; empty roots deny all; relative root is a config error",
+     "tests": ["tmb-poc/cmd/tmb-broker.TestValidateRequestDeniesCwdOutsideRoots", "tmb-poc/cmd/tmb-broker.TestLoadConfigRejectsRelativeCwdRoot", "tmb-poc/cmd/tmb-broker.TestLoadConfigWithoutCwdRootsAllowsNothing"],
+     "scenarios": ["N18"]}
   ]
 }
