@@ -71,6 +71,8 @@ type Broker struct {
 	pending map[string]*pendingApproval
 
 	stdin *bufio.Reader // broker console stdin (manual approval)
+
+	queue *approvalQueue // queue mode: requests waiting for an approver
 }
 
 func NewBroker(cfg *Config, log *Logger, claims *ClaimStore, mode string, ttl time.Duration) *Broker {
@@ -82,6 +84,7 @@ func NewBroker(cfg *Config, log *Logger, claims *ClaimStore, mode string, ttl ti
 		claims:  claims,
 		pending: map[string]*pendingApproval{},
 		stdin:   bufio.NewReader(os.Stdin),
+		queue:   newApprovalQueue(),
 	}
 }
 
@@ -379,12 +382,11 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 		return false
 	}
 
-	granted, reason := b.runApprovalInteraction(req, id, exeReal, dev, ino)
+	granted, reason, approver := b.runApprovalInteraction(req, id, exeReal, cwdReal, dev, ino)
 	aev := id.LogFields()
 	aev["mode"] = b.mode
-	// every bench mode decides on its own; the queue (ADR 0004) puts the
-	// approver's identity here instead
-	aev["approver"] = "mode:" + b.mode
+	// the approver's identity in queue mode, mode:<mode> for bench modes
+	aev["approver"] = approver
 	aev["decision"] = decision(granted)
 	aev["result"] = boolRes(granted)
 	aev["reason"] = reason
@@ -423,7 +425,17 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 // runApprovalInteraction performs the mode-specific approval. manual prints
 // the exact request to the broker console and reads y/n from stdin; mock
 // modes are deterministic stand-ins for tests.
-func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeReal string, dev, ino uint64) (bool, string) {
+func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64) (bool, string, string) {
+	if b.mode == ModeQueue {
+		return b.queueApproval(req, id, exeReal, cwdReal)
+	}
+	granted, reason := b.benchApproval(req, id, exeReal, dev, ino)
+	return granted, reason, "mode:" + b.mode
+}
+
+// benchApproval is the approval of the bench modes: the broker decides on
+// its own (mock-*) or asks its console (manual).
+func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal string, dev, ino uint64) (bool, string) {
 	switch b.mode {
 	case ModeMockApprove:
 		return true, ""

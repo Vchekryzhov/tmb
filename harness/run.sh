@@ -422,6 +422,104 @@ fi
 state_dump
 
 # -----------------------------------------------------------------------------
+# Approval queue helpers: the approver is the host user `human` (uid 1500,
+# the only approver_uids entry) running `tmb approve` on the approver socket,
+# which lives outside the volume shared with the sandbox.
+APPROVE_SOCK=/run/tmb-approver/approve.sock
+approve_as() { # approve_as USER ARGS... -> tmb approve in host-sim as USER
+  local u=$1; shift
+  docker exec -u "$u" -e TMB_APPROVE_SOCK="$APPROVE_SOCK" "$HOST" tmb approve "$@"
+}
+wait_queue() { # wait_queue N -> the queue lists at least N items ($TD/queue.out)
+  local _
+  for _ in $(seq 1 150); do
+    approve_as human --list >"$TD/queue.out" 2>&1
+    [ "$(grep -c '^=== ' "$TD/queue.out")" -ge "$1" ] && return 0
+    sleep 0.1
+  done
+  return 1
+}
+queue_id() { sed -n 's/^=== \([0-9a-f]\{16\}\) ===$/\1/p' "$TD/queue.out" | head -1; }
+queue_has() { if grep -qF -- "$2" "$TD/queue.out"; then ok "$1"; else bad "$1 (queue listing lacks '$2')"; fi; }
+
+log "SCENARIO N13: approval queue: the request waits, the approver decides with tmb approve"
+stop_broker
+start_broker queue 10
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/n13a.out" 2>"$TD/n13a.err" &
+CLI13=$!
+if wait_queue 1; then ok "N13: request waits in the approval queue"; else bad "N13: request never reached the queue"; fi
+sed 's/^/  | /' "$TD/queue.out"
+queue_has "N13: listing shows the requester uid" "requester : uid=4242 "
+queue_has "N13: listing shows the realpath of the executable" "executable: /usr/bin/id"
+queue_has "N13: listing shows argv" 'argv      : ["/usr/bin/id","-u"]'
+queue_has "N13: listing shows the cwd realpath" "cwd       : /tmp"
+queue_has "N13: listing shows the final env with PATH from fixed_env" '"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"'
+ID13=$(queue_id)
+OUT_FILE=$TD/n13y.out; ERR_FILE=$TD/n13y.err
+approve_as human --yes "$ID13" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc "N13: tmb approve --yes <id> -> exit 0" 0
+wait $CLI13; RUNC=$?
+OUT_FILE=$TD/n13a.out; ERR_FILE=$TD/n13a.err; show_io
+assert_rc     "N13: approved client -> exit 0" 0
+assert_out_eq "N13: approved client stdout '0'" "0"
+LOG13=$(docker exec "$HOST" cat /var/log/tmb/broker.log)
+if grep '"event":"queued"' <<<"$LOG13" | grep -q "\"item\":\"$ID13\""; then ok "N13: JSONL queued for the item"; else bad "N13: JSONL queued missing"; fi
+if grep '"event":"approval"' <<<"$LOG13" | grep '"approver":"uid:1500"' | grep -q '"decision":"approve"'; then ok "N13: JSONL approval with approver=uid:1500, decision approve"; else bad "N13: JSONL approval lacks approver uid:1500 / decision"; fi
+if grep '"event":"exec_exit"' <<<"$LOG13" | grep -q "\"token\":\"$ID13\""; then ok "N13: JSONL claim/exec_start/exec_exit follow for the token"; else bad "N13: JSONL exec_exit for the token missing"; fi
+
+echo "-- round 2: the approver says no"
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -G >"$TD/n13b.out" 2>"$TD/n13b.err" &
+CLI13B=$!
+wait_queue 1 || bad "N13: second request never reached the queue"
+approve_as human --no "$(queue_id)" >/dev/null 2>&1
+wait $CLI13B; RUNC=$?
+OUT_FILE=$TD/n13b.out; ERR_FILE=$TD/n13b.err; show_io
+assert_rc      "N13: denied client -> exit 125" 125
+assert_err_has "N13: deny reason approval_denied_by_human" "approval_denied_by_human"
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N14: the approver is not a requester; no approval path from the sandbox"
+OUT_FILE=$TD/n14a.out; ERR_FILE=$TD/n14a.err
+approve_as 4242 --list >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc      "N14: requester uid 4242 on the approver socket -> exit 125" 125
+assert_err_has "N14: deny reason approver_not_allowed" "approver_not_allowed"
+if docker exec "$HOST" grep '"event":"approver_denied"' /var/log/tmb/broker.log | grep -q '"requester_uid":4242'; then ok "N14: JSONL approver_denied with uid 4242"; else bad "N14: JSONL approver_denied for uid 4242 missing"; fi
+if docker exec "$SBX" test -e "$APPROVE_SOCK"; then bad "N14: approver socket visible in the sandbox"; else ok "N14: approver socket not visible in the sandbox"; fi
+cat >"$TD/n14.json" <<'EOF'
+{"type":"list"}
+EOF
+run_client_json tmb debug raw "$TD/n14.json"
+assert_rc      "N14: list on the requester socket -> exit 125" 125
+assert_err_has "N14: deny reason unknown_request_type" "unknown_request_type"
+OUT_FILE=$TD/n14q.out; ERR_FILE=$TD/n14q.err
+approve_as human --list >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?
+assert_out_eq "N14: queue unchanged (empty)" "queue is empty"
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N16: two approvers: the first decision wins, the second sees already decided"
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/n16.out" 2>"$TD/n16.err" &
+CLI16=$!
+wait_queue 1 || bad "N16: request never reached the queue"
+ID16=$(queue_id)
+OUT_FILE=$TD/n16y.out; ERR_FILE=$TD/n16y.err
+approve_as human --yes "$ID16" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc "N16: first approver --yes -> exit 0" 0
+OUT_FILE=$TD/n16n.out; ERR_FILE=$TD/n16n.err
+approve_as human --no "$ID16" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc      "N16: second approver --no on the same id -> exit 1" 1
+assert_err_has "N16: stderr says already decided" "already decided"
+wait $CLI16; RUNC=$?
+OUT_FILE=$TD/n16.out; ERR_FILE=$TD/n16.err; show_io
+assert_rc "N16: client of the approved request -> exit 0" 0
+N16_STARTS=$(docker exec "$HOST" grep '"event":"exec_start"' /var/log/tmb/broker.log | grep -c "\"token\":\"$ID16\"")
+if [ "$N16_STARTS" = 1 ]; then ok "N16: command ran exactly once (one exec_start)"; else bad "N16: exec_start count $N16_STARTS, want 1"; fi
+stop_broker
+start_broker mock-approve 10
+state_dump
+
+# -----------------------------------------------------------------------------
 log "SCENARIO N18: cwd outside allowed_cwd_roots -> deny cwd_not_allowed before approval"
 # The bench config allows only /tmp. The check runs on the realpath, so a
 # symlink inside /tmp that points at /etc is denied too, and the denial comes

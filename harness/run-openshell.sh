@@ -311,6 +311,8 @@ cat > "$TD/config-osh.json" <<EOF
   "log_path": "/var/log/tmb/broker.log",
   "pid_file": "/var/run/tmb-broker.pid",
   "allowed_requester_uids": [4242],
+  "approver_uids": [1500],
+  "approver_socket_path": "/run/tmb-approver/approve.sock",
   "allowed_requester_fps": ["$FP1"],
   "socket_gid": 4242,
   "allowed_cwd_roots": ["/tmp"],

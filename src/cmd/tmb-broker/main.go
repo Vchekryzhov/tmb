@@ -35,7 +35,7 @@ func main() {
 		mode = *approval
 	}
 	switch mode {
-	case ModeManual, ModeMockApprove, ModeMockDeny, ModeMockTimeout:
+	case ModeQueue, ModeManual, ModeMockApprove, ModeMockDeny, ModeMockTimeout:
 	default:
 		fmt.Fprintf(os.Stderr, "tmb-broker: unknown approval mode %q\n", mode)
 		os.Exit(1)
@@ -149,6 +149,11 @@ func main() {
 				os.Exit(1)
 			}
 		}()
+	}
+
+	if err := b.startApprover(cfg.ApproverSocketPath); err != nil {
+		fmt.Fprintf(os.Stderr, "tmb-broker: approver socket: %v\n", err)
+		os.Exit(1)
 	}
 
 	// SIGTERM/SIGINT: remove socket + pidfile, then exit. A stale socket is

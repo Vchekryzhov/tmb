@@ -41,6 +41,8 @@ func main() {
 		err = cmdExec(os.Args[2:])
 	case "debug":
 		err = cmdDebug(os.Args[2:])
+	case "approve":
+		os.Exit(cmdApprover(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	default:
 		usage()
 		os.Exit(2)
@@ -55,15 +57,17 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `tmb (PROTOTYPE client)
 usage:
   tmb exec [--root] [--cwd DIR] [--env K=V]... -- /abs/executable [args...]   full flow
+  tmb approve [--list | --yes ID | --no ID] [--socket PATH]                   approver: decide queued requests
+                        (socket env TMB_APPROVE_SOCK, default %[2]s)
   tmb debug approve --json FILE|-                                            debug: approval phase only
   tmb debug claim --token TOKEN --json FILE|-                                debug: claim phase only
   tmb debug raw --json FILE|-                                                debug: raw request verbatim
-endpoint selection (all subcommands):
-  unix socket (default): --socket PATH (default %s, env TMB_SOCK)
+endpoint selection (exec and debug):
+  unix socket (default): --socket PATH (default %[1]s, env TMB_SOCK)
   TLS (mTLS endpoint):   --addr HOST:PORT (env TMB_ADDR) plus --ca/--cert/--key
                         (env TMB_CA/TMB_CERT/TMB_KEY); TMB_ADDR set without the
                         client cert material is a usage error (exit 2)
-`, defaultSocket)
+`, defaultSocket, defaultApproveSocket)
 }
 
 // --- shared plumbing ------------------------------------------------------
