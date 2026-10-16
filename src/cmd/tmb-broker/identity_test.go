@@ -297,3 +297,19 @@ func TestClaimRequesterMismatchCert(t *testing.T) {
 		t.Fatalf("claim under cert A after mismatch: got frame %+v, want exit 0", f)
 	}
 }
+
+// An identity of unknown kind never matches and renders as unknown.
+func TestUnknownRequesterKind(t *testing.T) {
+	var zero RequesterID
+	if zero.Equal(zero) {
+		t.Error("an identity of unknown kind must not equal anything")
+	}
+	if zero.Key() != "unknown:" || zero.ConsoleLine() != "unknown" || len(zero.LogFields()) != 0 ||
+		zero.NotAllowedDetail() != "requester not in the broker allowlist" {
+		t.Errorf("unknown kind renders as key %q, console %q, fields %v, detail %q",
+			zero.Key(), zero.ConsoleLine(), zero.LogFields(), zero.NotAllowedDetail())
+	}
+	if newTestBroker(t).allowedRequester(zero) {
+		t.Error("an identity of unknown kind passed the allowlist")
+	}
+}

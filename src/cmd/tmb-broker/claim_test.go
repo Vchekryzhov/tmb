@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -209,4 +210,50 @@ func codeOf(f *proto.Frame) any {
 		return f.Reason
 	}
 	return *f.Code
+}
+
+// SEC-05: a nonce is spent once even under a different, separately
+// approved request.
+func TestNonceReuseAcrossRequestsIsDenied(t *testing.T) {
+	b := newTestBroker(t)
+	id := UIDRequester(4242, 1)
+	first := approved(t, b, testReq(t, "shared-nonce"), id)
+	if f := claimDo(t, b, first, id); f.Type != "exit" {
+		t.Fatalf("first claim = %+v", f)
+	}
+	second := testReq(t, "shared-nonce")
+	second.Argv = append(second.Argv, "again")
+	second = approved(t, b, second, id)
+	if f := claimDo(t, b, second, id); f.Type != "denied" || f.Reason != "nonce_consumed_replay" {
+		t.Fatalf("second claim = %+v, want denied nonce_consumed_replay", f)
+	}
+}
+
+// SEC-10: an executable replaced at its path between approval and claim
+// is denied.
+func TestClaimDeniedWhenExecutableReplaced(t *testing.T) {
+	dir := t.TempDir()
+	src, err := os.ReadFile(trueExe(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(dir, "tool")
+	if err := os.WriteFile(exe, src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	b := newTestBroker(t)
+	id := UIDRequester(4242, 1)
+	req := testReq(t, "exe-replaced")
+	req.Executable, req.Argv = exe, []string{exe}
+	req = approved(t, b, req, id)
+
+	if err := os.Remove(exe); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(exe, src, 0o755); err != nil { // same bytes, new inode
+		t.Fatal(err)
+	}
+	if f := claimDo(t, b, req, id); f.Type != "denied" || f.Reason != "executable_changed" {
+		t.Fatalf("claim = %+v, want denied executable_changed", f)
+	}
 }

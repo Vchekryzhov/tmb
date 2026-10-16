@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -64,7 +65,8 @@ type Broker struct {
 	mu      sync.Mutex // guards pending + manual prompt serialization
 	pending map[string]*pendingApproval
 
-	stdin *bufio.Reader // broker console stdin (manual approval)
+	stdin   *bufio.Reader // broker console stdin (manual approval)
+	console io.Writer     // broker console output (manual approval)
 }
 
 func NewBroker(cfg *Config, log *Logger, claims *ClaimStore, mode string, ttl time.Duration) *Broker {
@@ -76,6 +78,7 @@ func NewBroker(cfg *Config, log *Logger, claims *ClaimStore, mode string, ttl ti
 		claims:  claims,
 		pending: map[string]*pendingApproval{},
 		stdin:   bufio.NewReader(os.Stdin),
+		console: os.Stdout,
 	}
 }
 
@@ -375,24 +378,24 @@ func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeR
 	case ModeManual:
 		b.mu.Lock() // serialize prompts so they never interleave
 		defer b.mu.Unlock()
-		fmt.Printf("=== TMB APPROVAL REQUIRED ===\n")
-		fmt.Printf("  requester : %s\n", id.ConsoleLine())
-		fmt.Printf("  executable: %s (realpath %s, dev=%d ino=%d)\n", req.Executable, exeReal, dev, ino)
+		fmt.Fprintf(b.console, "=== TMB APPROVAL REQUIRED ===\n")
+		fmt.Fprintf(b.console, "  requester : %s\n", id.ConsoleLine())
+		fmt.Fprintf(b.console, "  executable: %s (realpath %s, dev=%d ino=%d)\n", req.Executable, exeReal, dev, ino)
 		argvJ, _ := json.Marshal(req.Argv)
-		fmt.Printf("  argv      : %s\n", argvJ)
-		fmt.Printf("  cwd       : %s\n", req.Cwd)
-		fmt.Printf("  run as uid: %d\n", req.UID)
-		fmt.Printf("  env       : %s\n", envJ)
-		fmt.Printf("  nonce     : %s\n", req.Nonce)
-		fmt.Printf("Approve exactly this command? [y/N]: ")
+		fmt.Fprintf(b.console, "  argv      : %s\n", argvJ)
+		fmt.Fprintf(b.console, "  cwd       : %s\n", req.Cwd)
+		fmt.Fprintf(b.console, "  run as uid: %d\n", req.UID)
+		fmt.Fprintf(b.console, "  env       : %s\n", envJ)
+		fmt.Fprintf(b.console, "  nonce     : %s\n", req.Nonce)
+		fmt.Fprintf(b.console, "Approve exactly this command? [y/N]: ")
 		line, err := b.stdin.ReadString('\n')
 		if err != nil && line == "" {
 			// stdin closed (detached broker) -> fail closed
-			fmt.Printf("CLOSED (no human input) -> DENIED\n")
+			fmt.Fprintf(b.console, "CLOSED (no human input) -> DENIED\n")
 			return false, "approval_input_closed"
 		}
 		ans := strings.ToLower(strings.TrimSpace(line))
-		fmt.Printf("HUMAN ANSWER: %q -> %s\n", ans, map[bool]string{true: "APPROVED", false: "DENIED"}[ans == "y" || ans == "yes"])
+		fmt.Fprintf(b.console, "HUMAN ANSWER: %q -> %s\n", ans, map[bool]string{true: "APPROVED", false: "DENIED"}[ans == "y" || ans == "yes"])
 		if ans == "y" || ans == "yes" {
 			return true, ""
 		}

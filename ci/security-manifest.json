@@ -38,6 +38,6 @@
     {"id": "SEC-15", "title": "SIGKILL of the broker closes the agent path; human password sudo keeps working",
      "scenarios": ["N9"]},
     {"id": "SEC-16", "title": "client disconnects and concurrent connections do not bypass one-shot or identity checks",
-     "gap": {"what": "client-disconnect and concurrent-connection tests", "owner": "Vchekryzhov", "issue": "https://github.com/Vchekryzhov/tmb/issues/15", "due": "2026-11-16"}}
+     "tests": ["tmb-poc/cmd/tmb-broker.TestServeUnixConcurrentConnectionsRunAtMostOnce", "tmb-poc/cmd/tmb-broker.TestServeUnixClientDisconnect"]}
   ]
 }
