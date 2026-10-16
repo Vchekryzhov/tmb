@@ -146,17 +146,18 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 }
 
 // buildEnv constructs the child environment: fixed env from broker config
-// plus request values for allowlisted keys only. PATH is always the fixed
-// safe value and is never requestable.
+// plus request values for allowlisted keys that are not fixed. A fixed key
+// always keeps its configured value; PATH can only be fixed (loadConfig
+// rejects it in allowed_env_keys).
 func (b *Broker) buildEnv(req *proto.Request) []string {
 	vals := map[string]string{}
-	for k, v := range b.cfg.FixedEnv {
-		vals[k] = v
-	}
 	for k, v := range req.Env {
-		if b.envKeyAllowed(k) {
+		if b.envKeyAllowed(k) && !b.envKeyFixed(k) {
 			vals[k] = v
 		}
+	}
+	for k, v := range b.cfg.FixedEnv {
+		vals[k] = v
 	}
 	keys := make([]string, 0, len(vals))
 	for k := range vals {

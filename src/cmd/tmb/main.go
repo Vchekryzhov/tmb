@@ -307,7 +307,7 @@ func cmdExec(args []string) error {
 	}
 	argv := append([]string{exe}, argvRest[1:]...) // argv[0] = resolved absolute path
 
-	env := map[string]string{"LANG": "C.UTF-8"}
+	env := map[string]string{}
 	for _, kv := range envFlags {
 		parts := strings.SplitN(kv, "=", 2)
 		if len(parts) != 2 {

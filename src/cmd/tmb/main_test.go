@@ -274,3 +274,12 @@ func TestDebugDispatchesProtocolSteps(t *testing.T) {
 		}
 	}
 }
+
+// The client sends only the env the caller asked for and rejects a
+// malformed --env before connecting.
+func TestExecRejectsMalformedEnvFlag(t *testing.T) {
+	err := cmdExec([]string{"--root", "--env", "NOEQUALS", "--", "/usr/bin/true"})
+	if err == nil || !strings.Contains(err.Error(), `--env expects K=V, got "NOEQUALS"`) {
+		t.Fatalf("cmdExec = %v, want the --env K=V error", err)
+	}
+}

@@ -56,6 +56,11 @@ func loadConfig(path string) (*Config, error) {
 	if c.PidFile == "" {
 		c.PidFile = "/var/run/tmb-broker.pid"
 	}
+	for _, k := range c.AllowedEnvKeys {
+		if k == "PATH" {
+			return nil, fmt.Errorf("config: allowed_env_keys must not contain PATH: the search path comes only from fixed_env")
+		}
+	}
 	roots, err := normalizeCwdRoots(c.AllowedCwdRoots)
 	if err != nil {
 		return nil, err
