@@ -2,6 +2,10 @@
 
 Неофициально: *trust me brother*.
 
+[![ci](https://github.com/Vchekryzhov/tmb/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Vchekryzhov/tmb/actions/workflows/ci.yml?query=branch%3Amain)
+[![nightly](https://github.com/Vchekryzhov/tmb/actions/workflows/ci.yml/badge.svg?branch=main&event=schedule)](https://github.com/Vchekryzhov/tmb/actions/workflows/ci.yml?query=branch%3Amain+event%3Aschedule)
+[![openshell-acceptance](https://github.com/Vchekryzhov/tmb/actions/workflows/openshell-acceptance.yml/badge.svg?branch=main)](https://github.com/Vchekryzhov/tmb/actions/workflows/openshell-acceptance.yml?query=branch%3Amain)
+
 TMB посредничает между агентом в песочнице NVIDIA OpenShell и привилегированным выполнением команд на принимающем хосте.
 Агент просит, человек одобряет точный запрос, брокер запускает одобренную команду не более одного раза.
 Пароль sudo агенту не передаётся, а сам sudo, sudoers и PAM не меняются.
