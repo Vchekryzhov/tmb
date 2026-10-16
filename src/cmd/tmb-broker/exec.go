@@ -29,7 +29,9 @@ import (
 //     socket cannot leak into the child; the pinned exe fd is O_CLOEXEC
 //     too and execve resolves it before the close)
 //   - cwd is the realpath'd request cwd, re-verified by directory identity
-//     (dev/ino) at exec time: a replaced cwd denies with cwd_changed
+//     (dev/ino) at exec time: a replaced cwd denies with cwd_changed; on
+//     linux the child then chdirs through the held fd (/proc/self/fd/N),
+//     so a swap after that check cannot move it to another directory
 func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string, id RequesterID, conn net.Conn, cwdReal string) {
 	// the pending was consumed by the claim: whatever happens below, its
 	// pin goes away with this execution attempt
@@ -40,7 +42,9 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 			fmt.Sprintf("approved cwd %s (dev=%d ino=%d) was replaced before exec", cwdReal, p.CwdDev, p.CwdIno), conn)
 		return
 	}
+	afterCwdCheck()
 	exeTarget, viaFd := p.execTarget()
+	cwdTarget, cwdViaFd := p.cwdTarget(cwdReal)
 
 	env := b.buildEnv(req)
 
@@ -55,7 +59,7 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 	cmd := &exec.Cmd{
 		Path:   exeTarget, // linux: /proc/self/fd/N = the approved inode; else the absolute realpath
 		Args:   req.Argv,  // EXACT argv, verbatim from the approved request
-		Dir:    cwdReal,
+		Dir:    cwdTarget, // linux: /proc/self/fd/N = the approved directory; else the realpath
 		Env:    env,
 		Stdin:  devNull,
 		Stdout: nil, // pipes below
@@ -90,6 +94,7 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 	evStart["exe_dev"] = p.ExeDev
 	evStart["exe_ino"] = p.ExeIno
 	evStart["cwd_verified"] = p.CwdPinned
+	evStart["cwd_via_fd"] = cwdViaFd
 	b.log.Event("exec_start", evStart)
 
 	if err := cmd.Start(); err != nil {
@@ -146,18 +151,23 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 	writeFrame(&proto.Frame{Type: "exit", Code: &code})
 }
 
+// afterCwdCheck is a test seam: it runs between the last cwd identity check
+// and the fork, the window the held cwd fd closes.
+var afterCwdCheck = func() {}
+
 // buildEnv constructs the child environment: fixed env from broker config
-// plus request values for allowlisted keys only. PATH is always the fixed
-// safe value and is never requestable.
+// plus request values for allowlisted keys that are not fixed. A fixed key
+// always keeps its configured value; PATH can only be fixed (loadConfig
+// rejects it in allowed_env_keys).
 func (b *Broker) buildEnv(req *proto.Request) []string {
 	vals := map[string]string{}
-	for k, v := range b.cfg.FixedEnv {
-		vals[k] = v
-	}
 	for k, v := range req.Env {
-		if b.envKeyAllowed(k) {
+		if b.envKeyAllowed(k) && !b.envKeyFixed(k) {
 			vals[k] = v
 		}
+	}
+	for k, v := range b.cfg.FixedEnv {
+		vals[k] = v
 	}
 	keys := make([]string, 0, len(vals))
 	for k := range vals {

@@ -5,13 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // M6 / SEC-05: a claim file is created exclusively, so a token or nonce is
 // redeemed once, including by a broker restarted over the same state dir.
 func TestClaimStoreIsOneShotAcrossRestart(t *testing.T) {
 	state := t.TempDir()
-	s, err := NewClaimStore(state)
+	s, err := NewClaimStore(state, time.Minute)
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -25,7 +26,7 @@ func TestClaimStoreIsOneShotAcrossRestart(t *testing.T) {
 		t.Fatalf("first nonce claim = %v, %v; want true", ok, err)
 	}
 
-	restarted, err := NewClaimStore(state)
+	restarted, err := NewClaimStore(state, time.Minute)
 	if err != nil {
 		t.Fatalf("store after restart: %v", err)
 	}
@@ -45,7 +46,7 @@ func TestNewClaimStoreFailsOnUnusableStateDir(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewClaimStore(file); err == nil {
+	if _, err := NewClaimStore(file, time.Minute); err == nil {
 		t.Fatal("NewClaimStore accepted a regular file as the state dir")
 	}
 }

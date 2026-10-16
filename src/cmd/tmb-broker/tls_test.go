@@ -134,14 +134,14 @@ func TestTLSListenerCertIdentity(t *testing.T) {
 	cfg := &Config{
 		AllowedRequesterFPs: []string{fp1},
 		AllowedEnvKeys:      []string{"LANG"},
-		FixedEnv:            map[string]string{"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+		FixedEnv:            map[string]string{"PATH": "/usr/bin:/bin"},
 		AllowedCwdRoots:     []string{"/"},
 	}
 	log, err := NewLogger(filepath.Join(dir, "broker.log"))
 	if err != nil {
 		t.Fatalf("logger: %v", err)
 	}
-	claims, err := NewClaimStore(dir)
+	claims, err := NewClaimStore(dir, time.Minute)
 	if err != nil {
 		t.Fatalf("claim store: %v", err)
 	}

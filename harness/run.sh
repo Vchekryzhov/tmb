@@ -217,10 +217,10 @@ state_dump
 log "SCENARIO N1: spent token presented with DIFFERENT argv -> deny"
 start_broker mock-approve "$TTL"
 cat >"$TD/n1-a.json" <<'EOF'
-{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n1-nonce-fixed-000001"}
+{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"n1-nonce-fixed-000001"}
 EOF
 cat >"$TD/n1-b.json" <<'EOF'
-{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-G"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n1-nonce-fixed-000001"}
+{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-G"],"cwd":"/tmp","uid":0,"nonce":"n1-nonce-fixed-000001"}
 EOF
 run_client_json tmb debug approve "$TD/n1-a.json"
 assert_rc "N1: approve phase ok" 0
@@ -235,7 +235,7 @@ state_dump
 # -----------------------------------------------------------------------------
 log "SCENARIO N2: token/nonce REPLAY (same token, same request, twice) -> deny 2nd"
 cat >"$TD/n2.json" <<'EOF'
-{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n2-nonce-fixed-000002"}
+{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"n2-nonce-fixed-000002"}
 EOF
 run_client_json tmb debug approve "$TD/n2.json"
 assert_rc "N2: approve phase ok" 0
@@ -252,7 +252,7 @@ state_dump
 log "SCENARIO TTL: token claimed AFTER expiry -> deny, nothing runs (ttl=${TTL}s, no 60s sleeps)"
 docker exec "$HOST" rm -f /tmp/ttl-marker
 cat >"$TD/ttl.json" <<'EOF'
-{"type":"approve","executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/ttl-marker"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"ttl-nonce-fixed-0003"}
+{"type":"approve","executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/ttl-marker"],"cwd":"/tmp","uid":0,"nonce":"ttl-nonce-fixed-0003"}
 EOF
 run_client_json tmb debug approve "$TD/ttl.json"
 assert_rc "TTL: approve phase ok" 0
@@ -274,7 +274,7 @@ if grep -qF -- "/tmp/evil.so" "$TD/lp.out"; then ok "N5a: client-side env really
 run_client -e LD_PRELOAD=/tmp/evil.so "$SBX" tmb exec --root -- /usr/bin/printenv
 assert_rc       "N5a: printenv child ran" 0
 assert_out_has  "N5a: child env has fixed broker PATH" "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-assert_out_has  "N5a: child env has allowlisted LANG" "LANG=C.UTF-8"
+assert_out_has  "N5a: child env has fixed LANG" "LANG=C.UTF-8"
 assert_out_lacks "N5a: child env lacks smuggled LD_PRELOAD" "LD_PRELOAD"
 state_dump
 
@@ -323,7 +323,7 @@ log "SCENARIO N10: approval bound to requester identity (two allowlisted uids)"
 stop_broker
 start_broker mock-approve 10
 cat >"$TD/n10.json" <<'EOF'
-{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n10-nonce-fixed-000010"}
+{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"n10-nonce-fixed-000010"}
 EOF
 run_client_json tmb debug approve "$TD/n10.json"
 assert_rc "N10: approve phase ok (requester uid 4242)" 0
@@ -352,7 +352,7 @@ stop_broker
 start_broker mock-approve 10
 docker exec "$HOST" sh -c 'rm -rf /tmp/n11 && mkdir -p /tmp/n11 && cp /bin/echo /tmp/n11/prog && chmod 0755 /tmp/n11/prog && printf "#!/bin/sh\necho B\n" > /tmp/n11/prog.b && chmod 0755 /tmp/n11/prog.b && rm -f /tmp/n11/swapped'
 cat >"$TD/n11.json" <<'EOF'
-{"type":"approve","executable":"/tmp/n11/prog","argv":["/tmp/n11/prog","A"],"cwd":"/tmp","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n11-nonce-fixed-000011"}
+{"type":"approve","executable":"/tmp/n11/prog","argv":["/tmp/n11/prog","A"],"cwd":"/tmp","uid":0,"nonce":"n11-nonce-fixed-000011"}
 EOF
 run_client_json tmb debug approve "$TD/n11.json"
 assert_rc "N11: approve phase ok" 0
@@ -402,7 +402,7 @@ log "SCENARIO N12: cwd directory replaced between approve and claim -> deny cwd_
 # instead of silently running the command in the replacement directory.
 docker exec "$HOST" sh -c 'rm -rf /tmp/n12-dir /tmp/n12-dir.old && mkdir /tmp/n12-dir && touch /tmp/n12-dir/old-marker'
 cat >"$TD/n12.json" <<'EOF'
-{"type":"approve","executable":"/bin/ls","argv":["/bin/ls"],"cwd":"/tmp/n12-dir","uid":0,"env":{"LANG":"C.UTF-8"},"nonce":"n12-nonce-fixed-000012"}
+{"type":"approve","executable":"/bin/ls","argv":["/bin/ls"],"cwd":"/tmp/n12-dir","uid":0,"nonce":"n12-nonce-fixed-000012"}
 EOF
 run_client_json tmb debug approve "$TD/n12.json"
 assert_rc "N12: approve phase ok" 0
@@ -458,6 +458,119 @@ assert_rc      "N18: relative root -> broker exits 1" 1
 assert_err_has "N18: stderr names the relative root" '"work/dir"'
 if docker exec "$HOST" test -S /run/tmb/tmb.sock; then bad "N18: socket exists after a failed start"; else ok "N18: no socket after a failed start"; fi
 start_broker mock-approve 10
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N19: fixed env keys cannot be requested; PATH only from fixed_env"
+# The bench config keeps LANG in both fixed_env and allowed_env_keys: the
+# fixed value wins, so the key is not editable.
+run_client "$SBX" tmb exec --root --env LANG=ru_RU -- /usr/bin/id -u
+assert_rc      "N19: --env LANG=ru_RU (fixed and allowlisted) -> exit 125" 125
+assert_err_has "N19: deny reason env_fixed_key" "env_fixed_key"
+run_client "$SBX" tmb exec --root --env PATH=/evil -- /usr/bin/id -u
+assert_rc      "N19: --env PATH=/evil -> exit 125" 125
+assert_err_has "N19: deny reason env_key_not_allowed" "env_key_not_allowed (PATH)"
+run_client "$SBX" tmb exec --root -- /usr/bin/printenv LANG
+assert_out_eq  "N19: child LANG is the fixed value" "C.UTF-8"
+
+echo "-- a config with PATH in allowed_env_keys does not start"
+stop_broker
+docker exec "$HOST" sh -c 'sed "s#\"allowed_env_keys\": \[\"LANG\", \"TZ\"\]#\"allowed_env_keys\": [\"LANG\", \"PATH\"]#" /etc/tmb/config.json >/tmp/n19-path.json'
+OUT_FILE=$TD/n19p.out; ERR_FILE=$TD/n19p.err
+docker exec "$HOST" timeout 10 tmb-broker -config /tmp/n19-path.json -approval mock-approve >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc      "N19: PATH in allowed_env_keys -> broker exits 1" 1
+assert_err_has "N19: stderr names the key" "allowed_env_keys must not contain PATH"
+if docker exec "$HOST" test -S /run/tmb/tmb.sock; then bad "N19: socket exists after a failed start"; else ok "N19: no socket after a failed start"; fi
+start_broker mock-approve 10
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N20: env values are single-line and at most 4096 bytes"
+V4096=$(printf 'a%.0s' $(seq 1 4096))
+run_client "$SBX" tmb exec --root --env "TZ=$(printf 'UTC\nX=1')" -- /usr/bin/id -u
+assert_rc      "N20: value with a newline -> exit 125" 125
+assert_err_has "N20: deny reason env_value_invalid" "env_value_invalid"
+run_client "$SBX" tmb exec --root --env "TZ=${V4096}a" -- /usr/bin/id -u
+assert_rc      "N20: 4097-byte value -> exit 125" 125
+assert_err_has "N20: deny reason env_value_too_long" "env_value_too_long"
+
+echo "-- 4096 bytes pass; the manual console shows the value on the env line"
+stop_broker
+FIFO20=$TD/n20-console.in
+LOG20=$TD/n20-console.log
+mkfifo "$FIFO20"
+docker exec -i "$HOST" tmb-broker -approval manual -ttl "$TTL" <"$FIFO20" >"$LOG20" 2>&1 &
+N20_PID=$!
+exec 8>"$FIFO20"
+wait_socket
+docker exec "$SBX" tmb exec --root --env "TZ=$V4096" -- /usr/bin/printenv TZ >"$TD/n20.out" 2>"$TD/n20.err" &
+CLI20=$!
+for _ in $(seq 1 150); do grep -q 'Approve exactly this command' "$LOG20" 2>/dev/null && break; sleep 0.1; done
+printf 'y\n' >&8
+wait $CLI20; RUNC=$?
+OUT_FILE=$TD/n20.out; ERR_FILE=$TD/n20.err; show_io
+assert_rc     "N20: 4096-byte value -> approved, exit 0" 0
+if [ "$(cat "$OUT_FILE")" = "$V4096" ]; then ok "N20: child got the 4096-byte value"; else bad "N20: child TZ differs from the 4096-byte value"; fi
+if grep -q "^  env       : .*\"TZ=${V4096}\"" "$LOG20"; then ok "N20: console env line carries the whole value"; else bad "N20: console env line lacks the 4096-byte value"; fi
+stop_broker
+wait $N20_PID 2>/dev/null
+exec 8>&-
+start_broker mock-approve 10
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N22: held cwd fd from approval to exec; rename before claim -> cwd_changed"
+# The approval holds an O_DIRECTORY fd on the cwd and the child chdirs
+# through /proc/self/fd/N. A rename between approve and claim is still
+# caught by the identity check (as N12); the window after that check is
+# covered by TestExecChdirsThroughHeldCwdDespiteSwapAfterCheck.
+docker exec "$HOST" sh -c 'rm -rf /tmp/n22 /tmp/n22-old && mkdir /tmp/n22'
+cat >"$TD/n22.json" <<'EOF'
+{"type":"approve","executable":"/usr/bin/touch","argv":["/usr/bin/touch","marker"],"cwd":"/tmp/n22","uid":0,"nonce":"n22-nonce-fixed-000022"}
+EOF
+run_client_json tmb debug approve "$TD/n22.json"
+assert_rc "N22: approve phase ok" 0
+T22=$(token_of)
+docker exec "$HOST" sh -c 'mv /tmp/n22 /tmp/n22-old && mkdir /tmp/n22'
+run_client_json tmb debug claim --token "$T22" "$TD/n22.json"
+assert_rc      "N22: claim after cwd rename -> exit 125" 125
+assert_err_has "N22: deny reason cwd_changed" "cwd_changed"
+host_absent    "N22: no marker in the renamed directory" /tmp/n22-old/marker
+host_absent    "N22: no marker in the new directory" /tmp/n22/marker
+
+echo "-- positive control: same request, cwd untouched"
+cat >"$TD/n22b.json" <<'EOF'
+{"type":"approve","executable":"/usr/bin/touch","argv":["/usr/bin/touch","marker"],"cwd":"/tmp/n22","uid":0,"nonce":"n22-nonce-fixed-000023"}
+EOF
+run_client_json tmb debug approve "$TD/n22b.json"
+T22B=$(token_of)
+run_client_json tmb debug claim --token "$T22B" "$TD/n22b.json"
+assert_rc "N22: claim with intact cwd -> exit 0" 0
+if docker exec "$HOST" test -e /tmp/n22/marker; then ok "N22: marker created in /tmp/n22"; else bad "N22: marker missing in /tmp/n22"; fi
+if docker exec "$HOST" grep '"event":"exec_start"' /var/log/tmb/broker.log | grep -q '"cwd_via_fd":true'; then ok "N22: exec_start records cwd_via_fd=true"; else bad "N22: exec_start lacks cwd_via_fd=true"; fi
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N21: claim-file GC at start removes expired files, keeps replay protection"
+# Every claim file carries expires_at = creation + TTL + 24h. The harness
+# plants one file already expired and one far in the future, restarts the
+# broker, and checks the start-up pass removed exactly the expired one while
+# a token redeemed just before the restart is still refused.
+cat >"$TD/n21.json" <<'EOF'
+{"type":"exec","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"n21-replay-nonce-0021"}
+EOF
+run_client_json tmb debug raw "$TD/n21.json"
+assert_rc "N21: fresh request runs, exit 0" 0
+if docker exec "$HOST" sh -c 'grep -l "\"expires_at\"" /var/lib/tmb-proto/claims/*.claim | head -1 | grep -q .'; then ok "N21: claim files carry expires_at"; else bad "N21: claim files lack expires_at"; fi
+docker exec "$HOST" sh -c 'echo "{\"kind\":\"token\",\"expires_at\":1}" >/var/lib/tmb-proto/claims/n21-expired.claim && echo "{\"kind\":\"token\",\"expires_at\":4102444800}" >/var/lib/tmb-proto/claims/n21-future.claim'
+stop_broker
+start_broker mock-approve 10
+host_absent "N21: expired claim file removed at start" /var/lib/tmb-proto/claims/n21-expired.claim
+if docker exec "$HOST" test -e /var/lib/tmb-proto/claims/n21-future.claim; then ok "N21: unexpired claim file kept"; else bad "N21: unexpired claim file removed"; fi
+if docker exec "$HOST" sh -c 'grep "\"event\":\"claim_gc\"" /var/log/tmb/broker.log | tail -1 | grep -q "\"removed\":1"'; then ok "N21: JSONL claim_gc removed=1"; else bad "N21: JSONL claim_gc removed=1 missing"; fi
+run_client_json tmb debug raw "$TD/n21.json"
+assert_rc      "N21: replay of the redeemed token after restart -> exit 125" 125
+assert_err_has "N21: deny reason token_consumed_replay" "token_consumed_replay"
 state_dump
 
 # -----------------------------------------------------------------------------

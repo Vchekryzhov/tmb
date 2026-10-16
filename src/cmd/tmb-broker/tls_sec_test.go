@@ -23,7 +23,7 @@ func tlsBroker(t *testing.T, ca *testCA, dir string, fps ...string) (addr string
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims, err := NewClaimStore(dir)
+	claims, err := NewClaimStore(dir, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}

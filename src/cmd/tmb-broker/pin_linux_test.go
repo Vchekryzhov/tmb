@@ -76,14 +76,14 @@ func newPinBroker(t *testing.T, dir string, ttl time.Duration) (*Broker, string)
 	if err != nil {
 		t.Fatalf("logger: %v", err)
 	}
-	claims, err := NewClaimStore(dir)
+	claims, err := NewClaimStore(dir, time.Minute)
 	if err != nil {
 		t.Fatalf("claim store: %v", err)
 	}
 	cfg := &Config{
 		AllowedRequesterUIDs: []uint32{4242},
 		AllowedEnvKeys:       []string{"LANG"},
-		FixedEnv:             map[string]string{"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+		FixedEnv:             map[string]string{"PATH": "/usr/bin:/bin"},
 		AllowedCwdRoots:      []string{"/"},
 	}
 	return NewBroker(cfg, log, claims, ModeMockApprove, ttl), filepath.Join(dir, "broker.log")

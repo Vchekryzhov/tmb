@@ -29,7 +29,7 @@
      "tests": ["tmb-poc/cmd/tmb-broker.TestExecChildFdHygieneViaPinnedExec", "tmb-poc/cmd/tmb-broker.TestExecReturnsOutputAndExitStatus"],
      "scenarios": ["FD-NOLEAK", "HAPPY"]},
     {"id": "SEC-12", "title": "env allowlist and fixed PATH; no implicit shell or PATH lookup",
-     "scenarios": ["N4", "N5a", "N5b", "N6"]},
+     "scenarios": ["N4", "N5a", "N5b", "N6", "N19"]},
     {"id": "SEC-13", "title": "N/pair: real Linux SO_PEERCRED; sandbox without root/sudo, docker.sock or host access",
      "scenarios": ["N7", "STAGE 0"]},
     {"id": "SEC-14", "title": "OpenShell O1/O2 port control and rule removal/restore; O4 restart without recreate",
@@ -41,6 +41,15 @@
      "tests": ["tmb-poc/cmd/tmb-broker.TestServeUnixConcurrentConnectionsRunAtMostOnce", "tmb-poc/cmd/tmb-broker.TestServeUnixClientDisconnect", "tmb-poc/cmd/tmb-broker.TestServeUnixConcurrentForeignClaimsKeepIdentityBinding", "tmb-poc/cmd/tmb-broker.TestServeUnixDeniesNonAllowlistedUID"]},
     {"id": "SEC-17", "title": "cwd outside allowed_cwd_roots (realpath, symlinks resolved) is denied before approval; empty roots deny all; relative root is a config error",
      "tests": ["tmb-poc/cmd/tmb-broker.TestValidateRequestDeniesCwdOutsideRoots", "tmb-poc/cmd/tmb-broker.TestLoadConfigRejectsRelativeCwdRoot", "tmb-poc/cmd/tmb-broker.TestLoadConfigWithoutCwdRootsAllowsNothing"],
-     "scenarios": ["N18"]}
+     "scenarios": ["N18"]},
+    {"id": "SEC-18", "title": "env policy: fixed_env keys not overridable, PATH never requestable or allowlisted, values single-line and at most 4096 bytes, denied before approval",
+     "tests": ["tmb-poc/cmd/tmb-broker.TestCheckEnvPolicy", "tmb-poc/cmd/tmb-broker.TestCheckEnvPathNotRequestable", "tmb-poc/cmd/tmb-broker.TestBuildEnvFixedKeyWins", "tmb-poc/cmd/tmb-broker.TestLoadConfigRejectsPathInAllowedEnvKeys"],
+     "scenarios": ["N19", "N20"]},
+    {"id": "SEC-19", "title": "the approved cwd directory is held by fd until exec and the child chdirs through it; a swap after the last check does not move the command; the fd closes on every outcome",
+     "tests": ["tmb-poc/cmd/tmb-broker.TestExecChdirsThroughHeldCwdDespiteSwapAfterCheck", "tmb-poc/cmd/tmb-broker.TestCwdPinClosedOnEveryOutcome"],
+     "scenarios": ["N22"]},
+    {"id": "SEC-20", "title": "claim files expire at TTL + 24h and are collected at start and hourly; unreadable files stay; replay inside the TTL is still denied after restart",
+     "tests": ["tmb-poc/cmd/tmb-broker.TestClaimFilesCarryExpiresAt", "tmb-poc/cmd/tmb-broker.TestClaimGCRemovesOnlyExpired", "tmb-poc/cmd/tmb-broker.TestClaimGCKeepsLiveReplayProtection", "tmb-poc/cmd/tmb-broker.TestClaimGCLoopRepeats"],
+     "scenarios": ["N21", "N8"]}
   ]
 }

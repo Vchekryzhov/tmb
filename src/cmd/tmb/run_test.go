@@ -120,7 +120,7 @@ func TestRunExecStreamsAndReturnsRemoteExitCode(t *testing.T) {
 	}
 	req := <-fb.got
 	if req.Type != "exec" || req.Executable != tool || strings.Join(req.Argv, " ") != tool+" -x" ||
-		req.Cwd != "/var" || req.UID != 0 || req.Env["TZ"] != "UTC" || req.Env["LANG"] != "C.UTF-8" || len(req.Nonce) != 32 {
+		req.Cwd != "/var" || req.UID != 0 || len(req.Env) != 1 || req.Env["TZ"] != "UTC" || len(req.Nonce) != 32 {
 		t.Errorf("request sent = %+v", req)
 	}
 }

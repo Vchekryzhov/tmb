@@ -72,10 +72,13 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 	}
 	defer log.Close()
 
-	claims, err := NewClaimStore(cfg.StateDir)
+	claims, err := NewClaimStore(cfg.StateDir, ttl)
 	if err != nil {
 		return fail("claim store: %v", err)
 	}
+	gcStop := make(chan struct{})
+	defer close(gcStop)                                // runs before log.Close: the loop never logs into a closed file
+	startClaimGC(claims, log, claimGCInterval, gcStop) // before any socket opens
 
 	// socket dir: root:tmb-gid 0755 so unprivileged clients can traverse
 	if err := os.MkdirAll(cfg.SocketPath[:lastSlash(cfg.SocketPath)], 0o755); err != nil {
