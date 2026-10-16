@@ -8,8 +8,8 @@
       "match": "return os.ReadFile(path)",
       "reason": "--json file chosen by the client's own user; the client runs unprivileged in the sandbox",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -18,8 +18,8 @@
       "match": "os.ReadFile(caPath)",
       "reason": "CA path from --ca/TMB_CA set by the sandbox operator, read by the unprivileged client",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -28,8 +28,8 @@
       "match": "os.ReadFile(caFile)",
       "reason": "CA path comes from the root-owned broker config, not from a request",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -38,28 +38,18 @@
       "match": "os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600",
       "reason": "claim file name is derived by the broker from the token, under its own state directory; O_EXCL is the one-shot primitive",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
       "rule": "G304",
       "location": "src/cmd/tmb-broker/log.go",
-      "match": "os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o640",
+      "match": "os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600",
       "reason": "log path comes from the root-owned broker config",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
-    },
-    {
-      "scanner": "gosec",
-      "rule": "G302",
-      "location": "src/cmd/tmb-broker/log.go",
-      "match": "os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o640",
-      "reason": "audit log group-readable by design (operator group); review in #15",
-      "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -68,8 +58,8 @@
       "match": "b, err := os.ReadFile(path)",
       "reason": "config path is the -config flag of the root-started broker",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -78,38 +68,28 @@
       "match": "os.Chmod(cfg.SocketPath, 0o660)",
       "reason": "unix socket must be connectable by the allowlisted group (SO_PEERCRED decides access)",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
       "rule": "G301",
       "location": "src/cmd/tmb-broker/main.go",
       "match": "os.MkdirAll(cfg.SocketPath[:lastSlash(cfg.SocketPath)], 0o755)",
-      "reason": "socket directory must be traversable by unprivileged clients",
+      "reason": "socket directory must be traversable by unprivileged clients; narrowing to 0o750 (dir is root:socket gid) waits for a testable main()",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
-    },
-    {
-      "scanner": "gosec",
-      "rule": "G301",
-      "location": "src/cmd/tmb-broker/log.go",
-      "match": "os.MkdirAll(filepath.Dir(path), 0o755)",
-      "reason": "log directory permissions; review together with the log mode in #15",
-      "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
       "rule": "G306",
       "location": "src/cmd/tmb-broker/main.go",
       "match": "os.WriteFile(cfg.PidFile",
-      "reason": "pid file is conventionally world-readable",
+      "reason": "pid file is conventionally world-readable and holds no secret",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -118,8 +98,8 @@
       "match": "uint32(len(b))",
       "reason": "len(b) is checked against MaxFrame just above, far below 2^32",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -128,8 +108,8 @@
       "match": "uint64(sti.Dev)",
       "reason": "device number is only compared for identity of the pinned executable; darwin's int32 Dev sign-extends consistently",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -138,8 +118,8 @@
       "match": "cand := filepath.Join(dir, arg0)",
       "reason": "client-side PATH resolution inside the unprivileged sandbox; the broker requires an absolute path and re-validates it",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -148,8 +128,8 @@
       "match": "os.ReadFile(filepath.Join(dir, \"broker.log\"))",
       "reason": "test fixture under t.TempDir(): path built by the test itself",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -158,8 +138,8 @@
       "match": "os.ReadFile(filepath.Join(dir, \"broker.log\"))",
       "reason": "test fixture under t.TempDir(): path built by the test itself",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -168,8 +148,8 @@
       "match": "f, err := os.Create(path)",
       "reason": "test fixture under t.TempDir(): path built by the test itself",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -178,28 +158,8 @@
       "match": "f, err := os.Create(p)",
       "reason": "test fixture under t.TempDir(): path built by the test itself",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
-    },
-    {
-      "scanner": "gosec",
-      "rule": "G306",
-      "location": "src/cmd/tmb-broker/config_test.go",
-      "match": "os.WriteFile(path, []byte(body), 0o644)",
-      "reason": "test fixture under t.TempDir(): path built by the test itself",
-      "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
-    },
-    {
-      "scanner": "gosec",
-      "rule": "G306",
-      "location": "src/cmd/tmb/main_test.go",
-      "match": "os.WriteFile(garbage, []byte(\"not a pem\"), 0o644)",
-      "reason": "test fixture under t.TempDir(): path built by the test itself",
-      "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gitleaks",
@@ -208,7 +168,7 @@
       "match": "token\":\"REDACTED\"",
       "reason": "history of prototype branches: spent one-shot TMB token IDs (16 hex of the request hash) from disposable harness runs, not credentials; history is immutable, re-review on expiry",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
       "expires": "2027-04-14"
     },
     {
@@ -218,7 +178,7 @@
       "match": "token\":\"REDACTED\"",
       "reason": "history of prototype branches: spent one-shot TMB token IDs (16 hex of the request hash) from disposable harness runs, not credentials; history is immutable, re-review on expiry",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
       "expires": "2027-04-14"
     },
     {
@@ -227,8 +187,8 @@
       "location": "Dockerfile.host",
       "reason": "host-sim stands in for the privileged host: tmb-broker must run as root there; the sandbox images run unprivileged",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "staticcheck",
@@ -257,8 +217,8 @@
       "match": "uint32(cred.Pid)",
       "reason": "kernel pids are bounded by pid_max (at most 2^22), far below 2^32",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -267,8 +227,8 @@
       "match": "os.Open(exeReal)",
       "reason": "exeReal is the validated realpath of the approved request; opening it read-only is the pinning primitive",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -277,8 +237,8 @@
       "match": "os.ReadFile(bb)",
       "reason": "test fixture under t.TempDir(): path built by the test itself",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -287,8 +247,8 @@
       "match": "os.ReadFile(goBin)",
       "reason": "test copies the Go toolchain binary it runs under into t.TempDir()",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -297,8 +257,8 @@
       "match": "os.ReadFile(logPath)",
       "reason": "test fixture under t.TempDir(): path built by the test itself",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -307,8 +267,8 @@
       "match": "os.WriteFile(path, data, 0o755)",
       "reason": "test executables must be executable",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -317,8 +277,8 @@
       "match": "os.WriteFile(path, data, 0o755)",
       "reason": "test fixture under t.TempDir(): path built by the test itself",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     },
     {
       "scanner": "gosec",
@@ -327,8 +287,8 @@
       "match": "os.Mkdir(cwd, 0o755)",
       "reason": "test fixture under t.TempDir(): path built by the test itself",
       "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-      "expires": "2026-11-16"
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     }
   ]
 }

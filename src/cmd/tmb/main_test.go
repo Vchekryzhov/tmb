@@ -128,7 +128,7 @@ func TestTLSClientConfigValidation(t *testing.T) {
 		t.Error("missing CA file must fail")
 	}
 	garbage := filepath.Join(dir, "garbage.crt")
-	os.WriteFile(garbage, []byte("not a pem"), 0o644)
+	os.WriteFile(garbage, []byte("not a pem"), 0o600)
 	if _, err := tlsClientConfig("h:1", garbage, certFile, keyFile); err == nil || !strings.Contains(err.Error(), "no certificates parsed") {
 		t.Errorf("garbage CA: err = %v, want 'no certificates parsed'", err)
 	}

@@ -20,7 +20,7 @@ func TestLoadConfigTLSFields(t *testing.T) {
   "tls_cert_file": "/etc/tmb/certs/server.crt",
   "tls_key_file": "/etc/tmb/certs/server.key"
 }`
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	c, err := loadConfig(path)
@@ -48,7 +48,7 @@ func TestLoadConfigTLSFields(t *testing.T) {
 func TestLoadConfigTLSAbsentKeepsBrokerUnixOnly(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	body := `{"socket_path":"/run/tmb/tmb.sock","state_dir":"/s","log_path":"/l"}`
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	c, err := loadConfig(path)
