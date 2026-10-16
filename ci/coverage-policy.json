@@ -1,0 +1,43 @@
+{
+  "schema": "tmb-ci/coverage-policy/v1",
+  "diff_min": 90,
+  "targets": [
+    {
+      "name": "overall",
+      "min": 80,
+      "gap": {
+        "owner": "Vchekryzhov",
+        "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+        "due": "2026-11-16"
+      }
+    },
+    {
+      "name": "proto",
+      "min": 90,
+      "files": [
+        "tmb-poc/internal/proto/"
+      ],
+      "gap": {
+        "owner": "Vchekryzhov",
+        "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+        "due": "2026-11-16"
+      }
+    },
+    {
+      "name": "security",
+      "min": 90,
+      "files": [
+        "tmb-poc/cmd/tmb-broker/identity.go",
+        "tmb-poc/cmd/tmb-broker/store.go",
+        "tmb-poc/cmd/tmb-broker/tls.go",
+        "tmb-poc/cmd/tmb-broker/broker.go",
+        "tmb-poc/cmd/tmb-broker/pin_linux.go"
+      ],
+      "gap": {
+        "owner": "Vchekryzhov",
+        "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+        "due": "2026-11-16"
+      }
+    }
+  ]
+}

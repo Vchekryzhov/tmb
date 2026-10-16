@@ -1,0 +1,15 @@
+# Sections of harness/run-openshell.sh (full OpenShell acceptance, phase B).
+STAGE 1
+STAGE 2
+STAGE 4
+STAGE 5
+O2a
+O3
+O1a
+O1b
+O1c
+O2b
+O2c
+O4
+O5
+O6

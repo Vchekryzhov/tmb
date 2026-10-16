@@ -1,0 +1,1 @@
+{"schema": "tmb-ci/coverage-policy/v1", "diff_min": 90, "targets": [{"name": "overall", "min": 80, "gap": {"owner": "Vchekryzhov", "issue": "https://github.com/Vchekryzhov/tmb/issues/15", "due": "2026-11-15"}}]}

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Pin consistency: one Go patch version for CI, harness build images and the
+# local entrypoint; every action pinned by full commit SHA; every Docker base
+# image pinned by digest. Exit 1 on any mismatch.
+set -uo pipefail
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+rc=0
+want=$(tr -d '[:space:]' <"$ROOT/.go-version")
+want=${want#go}
+echo ".go-version: $want"
+for f in "$ROOT"/harness/images/Dockerfile.*; do
+  while read -r img; do
+    case "$img" in
+      golang:*) v=${img#golang:}; v=${v%%-*}
+        [ "$v" = "$want" ] || { echo "$(basename "$f"): $img does not match .go-version $want"; rc=1; } ;;
+    esac
+    case "$img" in
+      *@sha256:*) ;;
+      *) echo "$(basename "$f"): base image $img is not pinned by digest"; rc=1 ;;
+    esac
+  done < <(sed -n 's/^FROM[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$f")
+done
+for s in "$ROOT"/harness/*.sh; do
+  while read -r img; do
+    v=${img#golang:}; v=${v%%-*}
+    [ "$v" = "$want" ] || { echo "$(basename "$s"): $img does not match .go-version $want"; rc=1; }
+    case "$img" in *@sha256:*) ;; *) echo "$(basename "$s"): $img is not pinned by digest"; rc=1 ;; esac
+  done < <(grep -oE 'golang:[^[:space:]"]+' "$s" || true)
+done
+for wf in "$ROOT"/.github/workflows/*.yml "$ROOT"/.github/actions/*/action.yml; do
+  while IFS=: read -r ln _ v; do
+    v=$(echo "$v" | tr -d " \"'")
+    [ "$v" = "$want" ] || { echo "$(basename "$wf"):$ln GO_PRIMARY $v != $want"; rc=1; }
+  done < <(grep -n 'GO_PRIMARY:' "$wf" || true)
+  while IFS=: read -r ln line; do
+    first=$(echo "$line" | sed -n 's/.*go: \["\([0-9.]*\)".*/\1/p')
+    [ -z "$first" ] || [ "$first" = "$want" ] || { echo "$(basename "$wf"):$ln matrix starts with Go $first, want $want"; rc=1; }
+  done < <(grep -n 'go: \["' "$wf" || true)
+  while IFS=: read -r ln line; do
+    ref=$(echo "$line" | sed -n 's/.*uses:[[:space:]]*\([^[:space:]#]*\).*/\1/p')
+    case "$ref" in ./*|'$/'*|'') continue ;; esac   # in-repo actions run at the tested commit
+    echo "$ref" | grep -qE '@[0-9a-f]{40}$' || { echo "$(basename "$wf"):$ln action $ref is not pinned by full commit SHA"; rc=1; }
+  done < <(grep -n 'uses:' "$wf")
+done
+for d in "$ROOT"/ci/tools/*/; do
+  grep -q "^go $want\$" "$d/go.mod" || { echo "ci/tools/$(basename "$d")/go.mod: go line differs from $want"; rc=1; }
+done
+[ $rc -eq 0 ] && echo "pins consistent"
+exit $rc

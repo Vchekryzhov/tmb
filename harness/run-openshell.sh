@@ -47,7 +47,7 @@
 # the JSONL requester_fp binding are asserted from the capture.
 
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # ---------------------------------------------------------------- pins ----
 OPENSHELL_VERSION=0.1.3
@@ -86,6 +86,7 @@ SBX_CREATED=""
 
 exec > >(tee "$LOG") 2>&1
 
+# shellcheck disable=SC2329 # invoked by the EXIT trap
 cleanup() {
   echo "=== cleanup ==="
   if [ -n "$SBX_CREATED" ]; then
@@ -206,6 +207,7 @@ if docker image inspect "$OPENCODE_IMAGE_REF" >/dev/null 2>&1; then
   ok "O0: local image matches $OPENCODE_IMAGE_REF"
 else
   echo "-- pulling pinned base image (was not cached)..."
+  # shellcheck disable=SC2015 # ok/bad always return 0, so C runs only when A fails
   retry docker pull -q "$OPENCODE_IMAGE_REF" \
     && ok "O0: pulled $OPENCODE_IMAGE_REF" \
     || { bad "O0: cannot obtain $OPENCODE_IMAGE_REF"; fatal "base image pin failed"; }
@@ -214,7 +216,8 @@ docker image inspect "$OPENCODE_IMAGE_REF" --format 'base: {{.Os}}/{{.Architectu
 
 echo "-- O0: stdlib-only dependency surface (go list -m all in src/)"
 GOLIST=$(retry docker run --rm -e GOCACHE=/tmp/gocache \
-  -v "$(cd .. && pwd)/src":/src:ro -w /src golang:1.23-alpine go list -m all 2>/dev/null)
+  -v "$(cd .. && pwd)/src":/src:ro -w /src golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d go list -m all 2>/dev/null)
+# shellcheck disable=SC2001 # prefixes every line of a multi-line value
 echo "$GOLIST" | sed 's/^/  | /'
 if [ "$(echo "$GOLIST" | tr -d '[:space:]')" = "tmb-poc" ]; then
   ok "O0: go list -m all -> only tmb-poc (stdlib only)"
@@ -259,8 +262,8 @@ PYEOF
     brew services restart openshell >/dev/null 2>&1 || return 1
   fi
   # wait for Connected
-  local i
-  for i in $(seq 1 12); do
+  local _
+  for _ in $(seq 1 12); do
     timeout 30 openshell status 2>/dev/null | grep -q "Status: Connected" && return 0
     sleep 5
   done
@@ -415,8 +418,8 @@ docker exec -d "$HOST" tmb-broker -approval mock-approve -ttl "$TTL" -config /et
 
 broker_log_count() { docker exec "$HOST" sh -c "grep -c '$1' /var/log/tmb/broker.log" 2>/dev/null | tr -d '[:space:]'; }
 wait_broker_log_count() {
-  local i pat=$1 want=$2
-  for i in $(seq 1 150); do
+  local _ pat=$1 want=$2
+  for _ in $(seq 1 150); do
     [ "$(broker_log_count "$pat")" -ge "$want" ] 2>/dev/null && return 0
     sleep 0.1
   done
@@ -441,7 +444,7 @@ sandbox_create() { # $1 = name ; rc 0 on Ready
     --env "TMB_CERT=/usr/share/tmb/certs/client1.crt" \
     --env "TMB_KEY=/usr/share/tmb/certs/client1.key" \
     --detach -- sleep infinity >"$TD/create.out" 2>&1 || { sed 's/^/  | /' "$TD/create.out"; return 1; }
-  for i in $(seq 1 40); do
+  for _ in $(seq 1 40); do
     timeout 30 openshell sandbox get "$name" -o json 2>/dev/null \
       | python3 -c 'import json,sys
 try:
@@ -495,6 +498,7 @@ timeout 90 openshell policy set "$SBX" --policy "$TD/policy-tmb.json" --wait >/d
 
 echo "-- verify effective policy: exactly one rule, tcp + tls skip, binary tmb"
 timeout 30 openshell policy get "$SBX" --full -o json > "$TD/policy-eff.json" 2>/dev/null
+# shellcheck disable=SC2015 # ok/bad always return 0, so C runs only when A fails
 python3 - "$TD/policy-eff.json" "$TLS_PORT" <<'PYEOF' && ok "TOP: effective policy = single rule tcp+tls:skip -> $SERVER_NAME:$TLS_PORT (binary /usr/local/bin/tmb)" || bad "TOP: effective policy shape unexpected (see above)"
 import json, sys
 doc = json.load(open(sys.argv[1]))["policy"]
@@ -587,7 +591,7 @@ start_nc() {
   sleep 0.3
   docker exec -d "$HOST" sh -c "nc -l -p $NC_PORT > /tmp/$name.bin" || return 1
   hex=$(printf '%04X' "$NC_PORT")
-  for i in $(seq 1 50); do
+  for _ in $(seq 1 50); do
     docker exec "$HOST" grep -Eq ":$hex 00000000:0000 0A " /proc/net/tcp /proc/net/tcp6 2>/dev/null && return 0
     sleep 0.1
   done
@@ -601,8 +605,8 @@ nc_bytes() { docker exec "$HOST" sh -c "wc -c < /tmp/$1.bin 2>/dev/null || echo 
 # nc_wait_bytes NAME : wait until the capture file settles non-empty (the
 # one-shot nc flushes as the peer streams, then exits on close)
 nc_wait_bytes() {
-  local i
-  for i in $(seq 1 50); do
+  local _
+  for _ in $(seq 1 50); do
     [ "$(nc_bytes "$1")" -gt 0 ] 2>/dev/null && return 0
     sleep 0.1
   done
@@ -687,7 +691,7 @@ log "SCENARIO O4: gateway restart - policy and deny-by-default survive"
 echo "-- restarting the gateway the clean way (brew service, no kill -9)"
 brew services restart openshell >/dev/null 2>&1 || fatal "O4: brew services restart failed"
 GW_OK=0
-for i in $(seq 1 12); do
+for _ in $(seq 1 12); do
   timeout 30 openshell status 2>/dev/null | grep -q "Status: Connected" && { GW_OK=1; break; }
   sleep 5
 done
@@ -935,6 +939,7 @@ except subprocess.TimeoutExpired:
         pass
 print('-- O6 driver: done (console captured, manual broker stopped)')
 PYEOF
+# shellcheck disable=SC2181 # the command is a long heredoc driver above
 if [ $? -eq 0 ]; then
   ok "O6: pty driver completed unattended (broker manual, y then n fed through the pty)"
 else

@@ -1,0 +1,1 @@
+{"schema": "tmb-ci/exceptions/v1", "exceptions": [{"scanner": "gosec", "rule": "G204", "location": "src/cmd/tmb/main.go", "match": "exec.Command(x)", "reason": "fixture", "owner": "Vchekryzhov", "issue": "https://github.com/Vchekryzhov/tmb/issues/15", "expires": "2026-10-01"}]}

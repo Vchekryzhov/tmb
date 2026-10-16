@@ -1,0 +1,6 @@
+# Changes to CI behaviour, thresholds, exceptions and pins need the owner.
+# Enforced only once phase C (ci/main-protection) is active.
+/.github/                   @Vchekryzhov
+/ci/                        @Vchekryzhov
+/.go-version                @Vchekryzhov
+/harness/images/            @Vchekryzhov

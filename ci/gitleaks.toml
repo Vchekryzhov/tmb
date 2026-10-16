@@ -1,0 +1,4 @@
+# Gitleaks configuration: the upstream default rules, nothing disabled.
+# Accepted findings live in ci/exceptions.json (owner, issue, expiry), not here.
+[extend]
+useDefault = true

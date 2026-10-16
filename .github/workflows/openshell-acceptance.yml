@@ -1,0 +1,127 @@
+# Phase B (spec #13 section F): full OpenShell acceptance on a DEDICATED,
+# isolated Mac arm64 with Docker Desktop and a pinned OpenShell gateway.
+# A GitHub-hosted Mac VM cannot run Docker Desktop (no nested virtualization
+# on arm64 hosted runners) and a personal Mac is never used.
+#
+# Until the owner registers that runner and sets the repository variable
+# TMB_OPENSHELL_RUNNER=ready, this workflow reports UNAVAILABLE and stays red:
+# preparing this YAML is not a PASS of phase B.
+name: openshell-acceptance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 4 * * 1"
+
+permissions: {}
+
+concurrency:
+  group: openshell-acceptance
+  cancel-in-progress: false
+
+jobs:
+  availability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          RUNNER_STATE: ${{ vars.TMB_OPENSHELL_RUNNER }}
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != refs/heads/main ]; then
+            echo "ready=false" >>"$GITHUB_OUTPUT"
+            echo "::error::phase B runs only on trusted main (got $REF)"
+          elif [ "$RUNNER_STATE" = ready ]; then
+            echo "ready=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >>"$GITHUB_OUTPUT"
+            {
+              echo "## Phase B: UNAVAILABLE"
+              echo
+              echo "No dedicated Mac arm64 runner (labels: self-hosted, macOS, ARM64, tmb-openshell) is declared:"
+              echo "repository variable TMB_OPENSHELL_RUNNER is '${RUNNER_STATE:-unset}', not 'ready'."
+              echo
+              echo "Manual reproduction on an isolated Mac with Docker Desktop and OpenShell: docs/ci.md, section 'Phase B'."
+              echo "The last recorded full run (2026-10-10) is in VERDICT-OPENSHELL.md; it is not evidence for this SHA."
+            } >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+  acceptance:
+    needs: availability
+    if: needs.availability.outputs.ready == 'true' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macOS, ARM64, tmb-openshell]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      TMB_CI_SHA: ${{ github.sha }}
+      TMB_CI_RUN_ID: ${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+        with:
+          tools: "false"
+      - run: ci/run.sh openshell
+      - if: always()
+        name: cleanup leftovers of this run only
+        run: |
+          docker ps -aq --filter name='^tmb-' | xargs -r docker rm -f
+          rm -f harness/last-*run.log
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-openshell
+          path: out/ci/results
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-openshell
+          path: out/ci/reports/openshell
+          retention-days: 30
+          overwrite: true
+
+  acceptance-gate:
+    needs: [availability, acceptance]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      TMB_CI_SHA: ${{ github.sha }}
+      TMB_CI_RUN_ID: ${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+        with:
+          tools: "false"
+      - if: needs.availability.outputs.ready == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: results-openshell
+          path: out/ci/results
+      - name: phase B verdict
+        env:
+          READY: ${{ needs.availability.outputs.ready }}
+          TMB_CI_NEEDS: ${{ toJSON(needs) }}
+        run: |
+          if [ "$READY" != true ]; then
+            echo "phase B: UNAVAILABLE (no dedicated OpenShell runner); not a PASS"
+            exit 1
+          fi
+          rc=0
+          ci/run.sh gate openshell || rc=$?
+          cat out/ci/gate-summary.md >>"$GITHUB_STEP_SUMMARY"
+          exit "$rc"

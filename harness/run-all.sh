@@ -16,7 +16,7 @@
 # its EXIT trap; this wrapper holds no state of its own.
 
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 LOG=last-full-run.log
 

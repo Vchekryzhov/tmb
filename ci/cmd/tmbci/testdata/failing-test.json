@@ -1,0 +1,4 @@
+{"Action":"run","Package":"tmb-poc/cmd/tmb","Test":"TestDial"}
+{"Action":"output","Package":"tmb-poc/cmd/tmb","Test":"TestDial","Output":"    main_test.go:9: boom\n"}
+{"Action":"fail","Package":"tmb-poc/cmd/tmb","Test":"TestDial","Elapsed":0}
+{"Action":"fail","Package":"tmb-poc/cmd/tmb","Elapsed":0}

@@ -1,0 +1,432 @@
+# TMB portable CI (spec #13, phase A). Every job runs a ci/run.sh entrypoint
+# that also works locally; the single required check is `ci-gate`.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions: {}
+
+concurrency:
+  # A new commit cancels the stale PR run; trusted events never cancel each other.
+  # (a pending trusted run would otherwise be replaced by the next one in its group)
+  group: ci-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GO_PRIMARY: "1.27.2"
+  TMB_CI_SHA: ${{ github.sha }}
+  TMB_CI_RUN_ID: ${{ github.run_id }}
+  # base for coverage and secrets: the target branch for PRs, the previous main otherwise
+  TMB_CI_BASE: ${{ github.event_name == 'pull_request' && 'origin/main' || github.event_name == 'merge_group' && github.event.merge_group.base_sha || 'HEAD^' }}
+  NIGHTLY: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+  # diagnostic artifacts 14 days; reports of scheduled security audits 30 days
+  RETENTION: 14
+  AUDIT_RETENTION: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 30 || 14 }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+      - run: ci/run.sh lint
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-lint
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-lint
+          path: out/ci/reports
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+
+  test:
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+        go: ["1.27.2", "1.26.9"]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+        with:
+          go-version: ${{ matrix.go }}
+          tools: "false"
+      - name: go test (race detector on Linux)
+        env:
+          GO_CELL: ${{ matrix.go }}
+        run: |
+          label="$(go env GOOS)-$(go env GOARCH)-go${GO_CELL}"
+          if [ "$(go env GOOS)" = linux ]; then ci/run.sh test "$label" race; else ci/run.sh test "$label"; fi
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-test-${{ matrix.runner }}-${{ matrix.go }}
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-test-${{ matrix.runner }}-${{ matrix.go }}
+          path: out/ci/reports
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+
+  ci-selftest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+        with:
+          tools: "false"
+      - run: ci/run.sh ci-selftest
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-ci-selftest
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+
+  coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+        with:
+          tools: "false"
+      - run: ci/run.sh coverage "$TMB_CI_BASE"
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-coverage
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-coverage
+          path: out/ci/reports
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+
+  security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+      - run: ci/run.sh security
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-security
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-security
+          path: out/ci/reports
+          retention-days: ${{ env.AUDIT_RETENTION }}
+          overwrite: true
+
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+      - run: ci/run.sh build
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-build
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-artifacts
+          path: |
+            out/ci/reports/build/a
+            out/ci/reports/build/SHA256SUMS
+            out/ci/reports/build/build-manifest.txt
+            out/ci/reports/build/*.json
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+        with:
+          tools: "false"
+      - run: if [ "$NIGHTLY" = true ]; then ci/run.sh fuzz long; else ci/run.sh fuzz short; fi
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-fuzz
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-corpus
+          path: out/ci/reports/fuzz
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+
+  secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+      - run: if [ "$NIGHTLY" = true ]; then ci/run.sh secrets full; else ci/run.sh secrets range "$TMB_CI_BASE"; fi
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-secrets
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-secrets
+          path: out/ci/reports
+          retention-days: ${{ env.AUDIT_RETENTION }}
+          overwrite: true
+
+  harness:
+    # disposable GitHub-hosted VM: real Linux SO_PEERCRED, Docker, nothing persists
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+        with:
+          tools: "false"
+      - run: ci/run.sh harness
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-harness
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-harness
+          path: out/ci/reports/harness
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+      - run: ci/run.sh images
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-images
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-images
+          path: out/ci/reports/images
+          retention-days: ${{ env.AUDIT_RETENTION }}
+          overwrite: true
+
+  manifest:
+    needs: [test, harness]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+        with:
+          tools: "false"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: reports-test-ubuntu-24.04-*
+          path: out/ci/reports
+          merge-multiple: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: reports-harness
+          path: out/ci/reports/harness
+      - run: ci/run.sh manifest
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-manifest
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+
+  nightly:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+        with:
+          tools: "false"
+      - run: ci/run.sh stress
+      - if: always()
+        run: ci/run.sh mutation
+      - if: always()
+        run: ci/run.sh bench
+      - if: always()
+        run: ci/run.sh links-external
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-nightly
+          path: out/ci/results
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-nightly
+          path: out/ci/reports
+          retention-days: 30
+          overwrite: true
+
+  ci-gate:
+    # The one stable required check. It runs for every event, including
+    # docs-only PRs (no path filters anywhere), and is red unless every
+    # required job and check for this event passed on this SHA and run.
+    needs: [lint, test, ci-selftest, coverage, security, build, fuzz, secrets, harness, images, manifest, nightly]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+        with:
+          tools: "false"
+      # one directory per artifact: a duplicated check id stays visible to the gate
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: results-*
+          path: out/ci/results
+      - name: ci-gate
+        env:
+          TMB_CI_NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -o pipefail
+          rc=0
+          ci/run.sh gate "$EVENT" || rc=$?
+          {
+            if [ -n "$PR_HEAD" ]; then printf 'PR head %s; tested SHA is the merge commit %s.\n\n' "$PR_HEAD" "$TMB_CI_SHA"; fi
+            cat out/ci/gate-summary.md
+            printf '\nPhase B (full OpenShell acceptance) and phase C (main enforcement) are separate; see docs/ci.md.\n'
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$rc"
