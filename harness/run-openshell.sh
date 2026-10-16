@@ -149,6 +149,7 @@ sbx_exec() {
 log "TMB OPENSHELL RUNNER: tickets #8 + #9 + #10 ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
 docker version --format 'docker {{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})' || fatal "docker not reachable"
 command -v openssl >/dev/null || fatal "openssl is required on the harness host"
+command -v go >/dev/null || fatal "go is required on the harness host (it builds tmb-broker for the CA)"
 command -v python3 >/dev/null || fatal "python3 is required (Docker Desktop settings + policy merge)"
 echo "workdir: $(pwd), cert dir: $TD (temp, never committed), run id: $RUNID"
 
@@ -280,45 +281,19 @@ fi
 # -----------------------------------------------------------------------------
 log "STAGE 3: harness CA + server + client certs into $TD (run-pair recipe)"
 
-cat > "$TD/openssl.cnf" <<'EOF'
-[req]
-distinguished_name = dn
-[dn]
-[v3_ca]
-basicConstraints = critical, CA:TRUE
-keyUsage = critical, keyCertSign, cRLSign
-[ext_server]
-basicConstraints = critical, CA:FALSE
-keyUsage = critical, digitalSignature, keyEncipherment
-extendedKeyUsage = serverAuth
-subjectAltName = DNS:host.openshell.internal
-[ext_client]
-basicConstraints = critical, CA:FALSE
-keyUsage = critical, digitalSignature
-extendedKeyUsage = clientAuth
-EOF
-
-openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 2 \
-  -keyout "$TD/ca.key" -out "$TD/ca.crt" \
-  -subj "/CN=TMB OpenShell Harness CA" \
-  -config "$TD/openssl.cnf" -extensions v3_ca >/dev/null 2>&1 \
-  || fatal "CA generation failed"
-
-openssl req -new -newkey rsa:2048 -nodes -sha256 \
-  -keyout "$TD/server.key" -out "$TD/server.csr" \
-  -subj "/CN=$SERVER_NAME" -config "$TD/openssl.cnf" >/dev/null 2>&1
-openssl x509 -req -sha256 -days 2 -in "$TD/server.csr" \
-  -CA "$TD/ca.crt" -CAkey "$TD/ca.key" -CAcreateserial \
-  -out "$TD/server.crt" -extfile "$TD/openssl.cnf" -extensions ext_server >/dev/null 2>&1 \
-  || fatal "server certificate failed"
-
-openssl req -new -newkey rsa:2048 -nodes -sha256 \
-  -keyout "$TD/client1.key" -out "$TD/client1.csr" \
-  -subj "/CN=tmb-osh-client1" -config "$TD/openssl.cnf" >/dev/null 2>&1
-openssl x509 -req -sha256 -days 2 -in "$TD/client1.csr" \
-  -CA "$TD/ca.crt" -CAkey "$TD/ca.key" -CAcreateserial \
-  -out "$TD/client1.crt" -extfile "$TD/openssl.cnf" -extensions ext_client >/dev/null 2>&1 \
-  || fatal "client1 certificate failed"
+# run-pair recipe: tmb-broker ca built for the harness host; ca.key stays
+# here, the client key is generated and only its public key is signed.
+(cd ../src && CGO_ENABLED=0 go build -trimpath -o "$TD/tmb-broker-ca" ./cmd/tmb-broker) \
+  || fatal "building tmb-broker for the CA failed"
+CA_BIN=$TD/tmb-broker-ca
+"$CA_BIN" ca init --dir "$TD" >/dev/null || fatal "CA generation failed"
+"$CA_BIN" ca issue-server --dir "$TD" --dns "$SERVER_NAME" >/dev/null || fatal "server certificate failed"
+if ! { openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$TD/client1.key" 2>/dev/null \
+    && openssl pkey -in "$TD/client1.key" -pubout -out "$TD/client1.pub" 2>/dev/null \
+    && "$CA_BIN" ca issue-sandbox --dir "$TD" --in "$TD/client1.pub" --name tmb-osh-client1 \
+      --out "$TD/client1.crt" >/dev/null; }; then
+  fatal "client1 certificate failed"
+fi
 
 fp_of() {
   openssl x509 -in "$1" -noout -fingerprint -sha256 \

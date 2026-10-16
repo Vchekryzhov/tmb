@@ -11,9 +11,9 @@
 # O7c (TMB_ADDR without cert env), O8 (foreign-CA broker endpoint) and O9
 # (approval bound to the certificate identity).
 #
-# Certificates: harness CA + server cert (SAN host.openshell.internal) +
-# client certs for fp1/fp2/fp3 are generated into a TEMP dir per run and
-# never committed. The CA KEY never enters any container: only the crt/key
+# Certificates: CA + server cert (SAN host.openshell.internal) + client
+# certs for fp1/fp2/fp3 are issued by `tmb-broker ca` into a TEMP dir per run
+# and never committed. The CA KEY never enters any container: only the crt/key
 # files each side needs are mounted (O0-pair checks this).
 #
 # harness/run.sh (N-series, unix path) stays untouched: this script runs it
@@ -153,51 +153,30 @@ state_dump() {
 log "TMB PAIR RUNNER: mTLS transport proof ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
 docker version --format 'docker {{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})'
 command -v openssl >/dev/null || { echo "FATAL: openssl is required on the harness host"; exit 1; }
+command -v go >/dev/null || { echo "FATAL: go is required on the harness host (it builds tmb-broker for the CA)"; exit 1; }
 echo "workdir: $(pwd), cert dir: $TD (temp, never committed)"
 
 # -----------------------------------------------------------------------------
 log "STAGE 1: generate harness CA + server + client certs into $TD"
 
-cat > "$TD/openssl.cnf" <<'EOF'
-[req]
-distinguished_name = dn
-[dn]
-[v3_ca]
-basicConstraints = critical, CA:TRUE
-keyUsage = critical, keyCertSign, cRLSign
-[ext_server]
-basicConstraints = critical, CA:FALSE
-keyUsage = critical, digitalSignature, keyEncipherment
-extendedKeyUsage = serverAuth
-subjectAltName = DNS:host.openshell.internal
-[ext_client]
-basicConstraints = critical, CA:FALSE
-keyUsage = critical, digitalSignature
-extendedKeyUsage = clientAuth
-EOF
-
-openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 2 \
-  -keyout "$TD/ca.key" -out "$TD/ca.crt" \
-  -subj "/CN=TMB Pair Harness CA" \
-  -config "$TD/openssl.cnf" -extensions v3_ca >/dev/null 2>&1 \
-  || { echo "FATAL: CA generation failed"; exit 1; }
-
-openssl req -new -newkey rsa:2048 -nodes -sha256 \
-  -keyout "$TD/server.key" -out "$TD/server.csr" \
-  -subj "/CN=$SERVER_NAME" -config "$TD/openssl.cnf" >/dev/null 2>&1
-openssl x509 -req -sha256 -days 2 -in "$TD/server.csr" \
-  -CA "$TD/ca.crt" -CAkey "$TD/ca.key" -CAcreateserial \
-  -out "$TD/server.crt" -extfile "$TD/openssl.cnf" -extensions ext_server >/dev/null 2>&1 \
+# Certificates come from the broker's own CA mode (tmb-broker ca), built for
+# the harness host and run there: ca.key never enters an image or container.
+# Client keys are generated on the "sandbox" side and only the public key
+# is signed, as in production enrollment.
+(cd ../src && CGO_ENABLED=0 go build -trimpath -o "$TD/tmb-broker-ca" ./cmd/tmb-broker) \
+  || { echo "FATAL: building tmb-broker for the CA failed"; exit 1; }
+CA_BIN=$TD/tmb-broker-ca
+"$CA_BIN" ca init --dir "$TD" >/dev/null || { echo "FATAL: CA generation failed"; exit 1; }
+"$CA_BIN" ca issue-server --dir "$TD" --dns "$SERVER_NAME" >/dev/null \
   || { echo "FATAL: server certificate failed"; exit 1; }
 
 for n in 1 2 3; do
-  openssl req -new -newkey rsa:2048 -nodes -sha256 \
-    -keyout "$TD/client$n.key" -out "$TD/client$n.csr" \
-    -subj "/CN=tmb-pair-client$n" -config "$TD/openssl.cnf" >/dev/null 2>&1
-  openssl x509 -req -sha256 -days 2 -in "$TD/client$n.csr" \
-    -CA "$TD/ca.crt" -CAkey "$TD/ca.key" -CAcreateserial \
-    -out "$TD/client$n.crt" -extfile "$TD/openssl.cnf" -extensions ext_client >/dev/null 2>&1 \
-    || { echo "FATAL: client$n certificate failed"; exit 1; }
+  if ! { openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$TD/client$n.key" 2>/dev/null \
+      && openssl pkey -in "$TD/client$n.key" -pubout -out "$TD/client$n.pub" 2>/dev/null \
+      && "$CA_BIN" ca issue-sandbox --dir "$TD" --in "$TD/client$n.pub" --name "tmb-pair-client$n" \
+        --out "$TD/client$n.crt" >/dev/null; }; then
+    echo "FATAL: client$n certificate failed"; exit 1
+  fi
 done
 
 # lower-case hex SHA-256 of the DER, no colons - the broker's identity form
@@ -569,31 +548,12 @@ log "SCENARIO O8: foreign-CA broker endpoint -> client fail-closed (x509), no fr
 # certificate is signed by a SECOND, untrusted CA generated into the same
 # temp-dir lifecycle as the harness CA; the SAN is valid for the fake alias
 # on purpose, so the ONLY thing wrong is the trust chain.
-cat >"$TD/foreign-openssl.cnf" <<'EOF'
-[req]
-distinguished_name = dn
-[dn]
-[foreign_ca]
-basicConstraints = critical, CA:TRUE
-keyUsage = critical, keyCertSign, cRLSign
-[ext_foreign_server]
-basicConstraints = critical, CA:FALSE
-keyUsage = critical, digitalSignature, keyEncipherment
-extendedKeyUsage = serverAuth
-subjectAltName = DNS:fake.openshell.internal
-EOF
-openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 2 \
-  -keyout "$TD/foreign-ca.key" -out "$TD/foreign-ca.crt" \
-  -subj "/CN=TMB Pair Foreign CA (untrusted)" \
-  -config "$TD/foreign-openssl.cnf" -extensions foreign_ca >/dev/null 2>&1 \
+"$CA_BIN" ca init --dir "$TD/foreign" >/dev/null \
   || { echo "FATAL: foreign CA generation failed"; exit 1; }
-openssl req -new -newkey rsa:2048 -nodes -sha256 \
-  -keyout "$TD/foreign-server.key" -out "$TD/foreign-server.csr" \
-  -subj "/CN=fake.openshell.internal" -config "$TD/foreign-openssl.cnf" >/dev/null 2>&1
-openssl x509 -req -sha256 -days 2 -in "$TD/foreign-server.csr" \
-  -CA "$TD/foreign-ca.crt" -CAkey "$TD/foreign-ca.key" -CAcreateserial \
-  -out "$TD/foreign-server.crt" -extfile "$TD/foreign-openssl.cnf" -extensions ext_foreign_server >/dev/null 2>&1 \
+"$CA_BIN" ca issue-server --dir "$TD/foreign" --dns fake.openshell.internal >/dev/null \
   || { echo "FATAL: foreign server certificate failed"; exit 1; }
+cp "$TD/foreign/server.crt" "$TD/foreign-server.crt"
+cp "$TD/foreign/server.key" "$TD/foreign-server.key"
 chmod 644 "$TD/foreign-server.crt" "$TD/foreign-server.key"
 
 docker rm -f "$FAKE" >/dev/null 2>&1

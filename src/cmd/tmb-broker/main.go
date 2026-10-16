@@ -13,6 +13,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "ca" {
+		os.Exit(runCA(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	}
 	cfgPath := flag.String("config", "/etc/tmb/config.json", "config file path")
 	approval := flag.String("approval", "", "approval mode override: manual|mock-approve|mock-deny|mock-timeout")
 	ttlSec := flag.Int("ttl", 0, "token TTL seconds override (PoC: sign short TTLs, e.g. 2-3; production default 60)")
