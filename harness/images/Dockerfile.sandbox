@@ -4,12 +4,13 @@
 # N-series (unix path); the mTLS pair harness (run-pair.sh) additionally
 # puts this image on a dedicated network. openssl is present for the O-series
 # scenarios (openssl s_client probes).
-FROM golang:1.23-alpine AS build
+FROM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS build
 WORKDIR /src
 COPY src/ .
 RUN CGO_ENABLED=0 go build -trimpath -o /out/tmb ./cmd/tmb
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+# hadolint ignore=DL3008 # disposable test image: distro package versions roll; the built image is scanned by Trivy on every PR
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl openssl \
  && rm -rf /var/lib/apt/lists/*
@@ -17,6 +18,7 @@ RUN groupadd -g 4242 tmb \
  && useradd -u 4242 -g tmb -m -s /bin/bash tmb \
  && mkdir -p /run/tmb
 COPY --from=build /out/tmb /usr/local/bin/tmb
+# hadolint ignore=DL3066 # tmb is created above with uid/gid 4242
 USER tmb
 WORKDIR /home/tmb
 CMD ["sleep", "infinity"]

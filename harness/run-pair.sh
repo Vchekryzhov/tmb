@@ -22,7 +22,7 @@
 # Everything is logged to last-pair-run.log (tee'd).
 
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 HOST=tmb-pair-host
 SBX=tmb-pair-sandbox
@@ -45,6 +45,7 @@ ROWS=()
 
 exec > >(tee "$LOG") 2>&1
 
+# shellcheck disable=SC2329 # invoked by the EXIT trap
 cleanup() {
   echo "=== cleanup ==="
   exec 9>&- 2>/dev/null
@@ -81,8 +82,8 @@ run_tls_client() {
   docker exec \
     -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" \
     -e TMB_CA=/certs/ca.crt \
-    -e TMB_CERT=/certs/$cl.crt \
-    -e TMB_KEY=/certs/$cl.key \
+    -e TMB_CERT="/certs/$cl.crt" \
+    -e TMB_KEY="/certs/$cl.key" \
     "$SBX" "$@" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 }
 
@@ -93,8 +94,8 @@ run_tls_client_addr() {
   docker exec \
     -e TMB_ADDR="$addr" \
     -e TMB_CA=/certs/ca.crt \
-    -e TMB_CERT=/certs/$cl.crt \
-    -e TMB_KEY=/certs/$cl.key \
+    -e TMB_CERT="/certs/$cl.crt" \
+    -e TMB_KEY="/certs/$cl.key" \
     "$SBX" "$@" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 }
 
@@ -109,8 +110,8 @@ broker_log_lines() { # total line count of broker.log (proves "nothing new")
 }
 
 wait_broker_log_count() { # PATTERN N -> wait until count >= N
-  local i pat=$1 want=$2
-  for i in $(seq 1 150); do
+  local _ pat=$1 want=$2
+  for _ in $(seq 1 150); do
     [ "$(broker_log_count "$pat")" -ge "$want" ] 2>/dev/null && return 0
     sleep 0.1
   done
@@ -134,8 +135,8 @@ start_broker_console() { # MODE TTL LOGFILE
 stop_broker() {
   echo "-- stopping tmb-broker"
   docker exec "$HOST" pkill -TERM -x tmb-broker 2>/dev/null
-  local i
-  for i in $(seq 1 150); do
+  local _
+  for _ in $(seq 1 150); do
     docker exec "$HOST" sh -c 'pgrep -x tmb-broker >/dev/null' 2>/dev/null || return 0
     sleep 0.1
   done
@@ -259,7 +260,8 @@ log "STAGE 2: O0-pair prerequisites (dependency surface + cert hygiene)"
 
 echo "-- O0: go list -m all in src/ (in the pinned builder image)"
 GOLIST=$(docker run --rm -e GOCACHE=/tmp/gocache \
-  -v "$(cd .. && pwd)/src":/src:ro -w /src golang:1.23-alpine go list -m all 2>/dev/null)
+  -v "$(cd .. && pwd)/src":/src:ro -w /src golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d go list -m all 2>/dev/null)
+# shellcheck disable=SC2001 # prefixes every line of a multi-line value
 echo "$GOLIST" | sed 's/^/  | /'
 if [ "$(echo "$GOLIST" | tr -d '[:space:]')" = "tmb-poc" ]; then
   ok "O0-pair: go list -m all -> only tmb-poc (stdlib only)"
@@ -298,16 +300,31 @@ docker run -d --name "$SBX" \
 sleep 0.5
 
 echo "-- O0: ca.crt mounted, ca.key NOT in any container"
-docker exec "$HOST" test -f /etc/tmb/certs/ca.crt \
-  && ok "O0-pair: ca.crt present in host-sim" || bad "O0-pair: ca.crt missing in host-sim"
-docker exec "$HOST" test ! -e /etc/tmb/certs/ca.key \
-  && ok "O0-pair: ca.key NOT in host-sim" || bad "O0-pair: ca.key LEAKED into host-sim"
-docker exec "$SBX" test -f /certs/ca.crt \
-  && ok "O0-pair: ca.crt present in sandbox-sim" || bad "O0-pair: ca.crt missing in sandbox-sim"
-docker exec "$SBX" test ! -e /certs/ca.key \
-  && ok "O0-pair: ca.key NOT in sandbox-sim" || bad "O0-pair: ca.key LEAKED into sandbox-sim"
-docker exec "$SBX" test ! -e /certs/server.key \
-  && ok "O0-pair: server.key NOT in sandbox-sim" || bad "O0-pair: server.key LEAKED into sandbox-sim"
+if docker exec "$HOST" test -f /etc/tmb/certs/ca.crt; then
+  ok "O0-pair: ca.crt present in host-sim"
+else
+  bad "O0-pair: ca.crt missing in host-sim"
+fi
+if docker exec "$HOST" test ! -e /etc/tmb/certs/ca.key; then
+  ok "O0-pair: ca.key NOT in host-sim"
+else
+  bad "O0-pair: ca.key LEAKED into host-sim"
+fi
+if docker exec "$SBX" test -f /certs/ca.crt; then
+  ok "O0-pair: ca.crt present in sandbox-sim"
+else
+  bad "O0-pair: ca.crt missing in sandbox-sim"
+fi
+if docker exec "$SBX" test ! -e /certs/ca.key; then
+  ok "O0-pair: ca.key NOT in sandbox-sim"
+else
+  bad "O0-pair: ca.key LEAKED into sandbox-sim"
+fi
+if docker exec "$SBX" test ! -e /certs/server.key; then
+  ok "O0-pair: server.key NOT in sandbox-sim"
+else
+  bad "O0-pair: server.key LEAKED into sandbox-sim"
+fi
 
 echo "-- O0: sandbox tools required by the O-series (sh, id, test, openssl)"
 for tool in sh id test openssl; do
@@ -392,8 +409,8 @@ wait_broker_log_count '"event":"tls_listen"' 2
 echo "-- manual broker up (console captured to $MANLOG)"
 
 wait_prompt() { # Nth prompt
-  local i n
-  for i in $(seq 1 150); do
+  local n
+  for _ in $(seq 1 150); do
     n=$(grep -c 'Approve exactly this command' "$MANLOG" 2>/dev/null || true)
     if [ "${n:-0}" -ge "$1" ]; then return 0; fi
     sleep 0.1
@@ -589,7 +606,7 @@ docker cp "$TD/foreign-server.key" "$FAKE":/tmp/foreign-server.key >/dev/null
 docker exec -d "$FAKE" sh -c \
   "tail -f /dev/null | openssl s_server -accept $TLS_PORT -cert /tmp/foreign-server.crt -key /tmp/foreign-server.key >/tmp/fake-broker.log 2>&1"
 FAKE_UP=0
-for i in $(seq 1 100); do
+for _ in $(seq 1 100); do
   docker exec "$FAKE" bash -c "exec 3<>/dev/tcp/127.0.0.1/$TLS_PORT" 2>/dev/null && { FAKE_UP=1; break; }
   sleep 0.1
 done

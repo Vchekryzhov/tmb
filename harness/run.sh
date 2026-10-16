@@ -14,7 +14,7 @@
 # No host bind mounts, no docker.sock, no --privileged, sandbox has --network none.
 
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 HOST=tmb-host-sim
 SBX=tmb-sandbox
@@ -32,6 +32,7 @@ ROWS=()
 
 exec > >(tee "$LOG") 2>&1
 
+# shellcheck disable=SC2329 # invoked by the EXIT trap
 cleanup() {
   echo "=== cleanup ==="
   exec 9>&- 2>/dev/null
@@ -61,7 +62,7 @@ run_client() { # run_client <args...>  (client-side invocation, prints evidence)
   docker exec "$@" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 }
 run_client_json() { # run_client_json <tmb-subcommand...> <json-file>
-  local jsonf=${@: -1}
+  local jsonf=${*: -1}
   local cmd=("${@:1:$#-1}")
   docker exec -i "$SBX" "${cmd[@]}" --json - <"$jsonf" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 }
@@ -85,8 +86,8 @@ state_dump() {
 # --- broker lifecycle --------------------------------------------------------
 
 wait_socket() {
-  local i
-  for i in $(seq 1 150); do
+  local _
+  for _ in $(seq 1 150); do
     docker exec "$HOST" test -S /run/tmb/tmb.sock 2>/dev/null && return 0
     sleep 0.1
   done
@@ -102,8 +103,8 @@ start_broker() { # $1 mode, $2 ttl-seconds
 stop_broker() {
   echo "-- stopping tmb-broker"
   docker exec "$HOST" pkill -TERM -x tmb-broker 2>/dev/null
-  local i
-  for i in $(seq 1 150); do
+  local _
+  for _ in $(seq 1 150); do
     docker exec "$HOST" sh -c 'pgrep -x tmb-broker >/dev/null' 2>/dev/null || return 0
     sleep 0.1
   done
@@ -176,8 +177,8 @@ wait_socket
 echo "-- manual broker up (console captured to $MANLOG)"
 
 wait_prompt() { # $1 = nth prompt
-  local i n
-  for i in $(seq 1 150); do
+  local n
+  for _ in $(seq 1 150); do
     n=$(grep -c 'Approve exactly this command' "$MANLOG" 2>/dev/null || true)
     if [ "${n:-0}" -ge "$1" ]; then return 0; fi
     sleep 0.1

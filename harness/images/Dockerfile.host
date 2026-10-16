@@ -1,11 +1,13 @@
 # PROTOTYPE - throwaway PoC. host-sim container: runs tmb-broker as root.
 # Has normal human password sudo (the thing TMB must NEVER touch or break).
-FROM golang:1.23-alpine AS build
+FROM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS build
 WORKDIR /src
 COPY src/ .
 RUN CGO_ENABLED=0 go build -trimpath -o /out/tmb-broker ./cmd/tmb-broker
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# hadolint ignore=DL3008 # disposable test image: distro package versions roll; the built image is scanned by Trivy on every PR
 RUN apt-get update \
  && apt-get install -y --no-install-recommends sudo procps netcat-openbsd \
  && rm -rf /var/lib/apt/lists/*

@@ -6,7 +6,7 @@
 # Per-run client certificates are NOT baked here: run-openshell.sh layers
 # them on top with a second build whose context is the per-run cert temp
 # dir (see README-PROTOTYPE.md "Доставка сертификатов в песочницу").
-FROM golang:1.23-alpine AS build
+FROM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS build
 WORKDIR /src
 COPY src/ .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/tmb ./cmd/tmb
@@ -16,13 +16,16 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/tmb ./cmd/tmb
 # run unless the local image matches OPENCODE_IMAGE_REF.
 FROM ghcr.io/anomalyco/opencode@sha256:6911572e4a9b3ead5e4086b40e2c98bd82075dae617aff679767f358cf8f374e
 # base is Alpine; openssl is present for the O-series probes (s_client etc.)
+# hadolint ignore=DL3018 # base is digest-pinned; apk repository versions roll, the O-series needs only openssl
 RUN apk add --no-cache openssl
 # Workload identity must exist in the image: the gateway resolves the
 # workload uid/gid from /etc/passwd, and OpenShell rejects root workloads.
 # An image without USER would run as 1000:1000 anyway (default policy), but
 # an explicit named user keeps identity resolution deterministic.
+# hadolint ignore=DL3059 # kept separate from the apk layer to match the documented workload identity step
 RUN adduser -D -u 1000 sandbox
 COPY --from=build /out/tmb /usr/local/bin/tmb
+# hadolint ignore=DL3066 # named on purpose: the gateway resolves the workload from /etc/passwd (see above)
 USER sandbox
 WORKDIR /home/sandbox
 # canonical process for the harness; run-openshell.sh passes -- sleep infinity
