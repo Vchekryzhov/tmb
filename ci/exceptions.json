@@ -229,6 +229,106 @@
       "owner": "Vchekryzhov",
       "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
       "expires": "2026-11-16"
+    },
+    {
+      "scanner": "staticcheck",
+      "rule": "SA4023",
+      "location": "src/cmd/tmb-broker/main.go",
+      "match": "if err := b.ServeTLS(tls.NewListener(tlsLn, tlsCfg)); err != nil {",
+      "reason": "dead nil check (ServeTLS only returns on listener failure); harmless, product fix belongs to the product owner (#15)",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2026-11-16"
+    },
+    {
+      "scanner": "staticcheck",
+      "rule": "SA4023",
+      "location": "src/cmd/tmb-broker/main.go",
+      "match": "if err := b.Serve(ln); err != nil {",
+      "reason": "dead nil check (Serve only returns on listener failure); harmless, product fix belongs to the product owner (#15)",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2026-11-16"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G115",
+      "location": "src/cmd/tmb-broker/peercred_linux.go",
+      "match": "uint32(cred.Pid)",
+      "reason": "kernel pids are bounded by pid_max (at most 2^22), far below 2^32",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2026-11-16"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/pin_linux.go",
+      "match": "os.Open(exeReal)",
+      "reason": "exeReal is the validated realpath of the approved request; opening it read-only is the pinning primitive",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2026-11-16"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/pin_linux_test.go",
+      "match": "os.ReadFile(bb)",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2026-11-16"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/pin_linux_test.go",
+      "match": "os.ReadFile(goBin)",
+      "reason": "test copies the Go toolchain binary it runs under into t.TempDir()",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2026-11-16"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/pin_linux_test.go",
+      "match": "os.ReadFile(logPath)",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2026-11-16"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G306",
+      "location": "src/cmd/tmb-broker/pin_linux_test.go",
+      "match": "os.WriteFile(path, data, 0o755)",
+      "reason": "test executables must be executable",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2026-11-16"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/pin_linux_test.go",
+      "match": "os.WriteFile(path, data, 0o755)",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2026-11-16"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G301",
+      "location": "src/cmd/tmb-broker/pin_linux_test.go",
+      "match": "os.Mkdir(cwd, 0o755)",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2026-11-16"
     }
   ]
 }

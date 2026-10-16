@@ -125,3 +125,13 @@ func TestGateFixtures(t *testing.T) {
 		t.Fatalf("unreadable needs context: code %d\n%s", code, out)
 	}
 }
+
+func TestScanUnionOfReports(t *testing.T) {
+	// linux and darwin builds are scanned separately; a finding in either
+	// report counts, and an exception only needs to match one of them
+	code, out, r := tmbci(t, "security/gosec", "scan", "-check", "security/gosec", "-scanner", "gosec",
+		"-report", td("gosec-finding.json"), "-report", td("gosec-clean.json"), "-exceptions", td("exceptions-empty.json"), "-root", "/w/")
+	if code != 1 || r.Status != result.Fail || !strings.Contains(out, "G204") {
+		t.Fatalf("finding in the first report: code %d status %s\n%s", code, r.Status, out)
+	}
+}

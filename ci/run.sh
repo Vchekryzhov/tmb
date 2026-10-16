@@ -73,7 +73,7 @@ cmd_lint() {
   need_tmbci
   local L=$REPORTS/lint
   mkdir -p "$L"
-  local gv; gv=$(go_version)
+  local gv a; gv=$(go_version)
 
   log "gofmt"
   (cd "$ROOT" && gofmt -l src ci) >"$L/gofmt.txt" 2>&1
@@ -91,15 +91,20 @@ cmd_lint() {
   (cd "$ROOT/ci" && go vet ./...) >>"$L/vet.txt" 2>&1 || rc=1
   by_rc lint/vet $rc "$L/vet.txt" "1"
 
-  log "staticcheck (linux, darwin)"
-  : >"$L/staticcheck.txt"
+  log "staticcheck (product for linux and darwin, CI module)"
   rc=0
+  local sreports=()
   for os in linux darwin; do
-    (cd "$SRC" && GOOS=$os staticcheck ./...) >>"$L/staticcheck.txt" 2>&1 || rc=$?
+    (cd "$SRC" && GOOS=$os staticcheck -f json ./...) >"$L/staticcheck-$os.json" 2>"$L/staticcheck-$os.log"
+    a=$?; [ $a -le 1 ] || rc=$a
+    sreports+=(-report "$L/staticcheck-$os.json")
   done
-  (cd "$ROOT/ci" && staticcheck ./...) >>"$L/staticcheck.txt" 2>&1 || rc=$?
-  if grep -q 'internal error' "$L/staticcheck.txt"; then rc=3; fi
-  by_rc lint/staticcheck $rc "$L/staticcheck.txt" "1"
+  (cd "$ROOT/ci" && staticcheck -f json ./...) >"$L/staticcheck-ci.json" 2>"$L/staticcheck-ci.log"
+  a=$?; [ $a -le 1 ] || rc=$a
+  sreports+=(-report "$L/staticcheck-ci.json")
+  if [ $rc -ne 0 ]; then result lint/staticcheck ERROR "staticcheck rc=$rc" "$L/staticcheck-linux.log"
+  else "$BIN/tmbci" scan -check lint/staticcheck -scanner staticcheck "${sreports[@]}" -exceptions "$ROOT/ci/exceptions.json" \
+         -root "$ROOT/" -strict-unused -out "$RESULTS"; fi
 
   log "module metadata and stdlib-only contract"
   : >"$L/module.txt"
@@ -247,11 +252,13 @@ cmd_security() {
   need_tmbci
   local S=$REPORTS/security
   mkdir -p "$S"
-  log "gosec (all packages incl. tests, build tags of the host GOOS)"
-  (cd "$SRC" && gosec -quiet -tests -fmt json -out "$S/gosec.json" -no-fail ./...) >"$S/gosec.log" 2>&1
-  local rc=$?
+  log "gosec (all packages incl. tests, linux and darwin builds)"
+  local rc=0 os
+  for os in linux darwin; do
+    (cd "$SRC" && GOOS=$os gosec -quiet -tests -fmt json -out "$S/gosec-$os.json" -no-fail ./...) >>"$S/gosec.log" 2>&1 || rc=$?
+  done
   if [ $rc -ne 0 ]; then result security/gosec ERROR "gosec rc=$rc" "$S/gosec.log"
-  else "$BIN/tmbci" scan -check security/gosec -scanner gosec -report "$S/gosec.json" -exceptions "$ROOT/ci/exceptions.json" \
+  else "$BIN/tmbci" scan -check security/gosec -scanner gosec -report "$S/gosec-linux.json" -report "$S/gosec-darwin.json" -exceptions "$ROOT/ci/exceptions.json" \
          -root "$ROOT/" -strict-unused -tool "gosec=$(sed -n 's/.*securego\/gosec\/v2 \(v[^ ]*\).*/\1/p' "$ROOT/ci/tools/gosec/go.mod")" -out "$RESULTS"; fi
 
   log "govulncheck (source incl. tests, symbol level)"

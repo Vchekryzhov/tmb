@@ -44,11 +44,11 @@ ci/run.sh local
 
 | Job | Проверки | Лимит |
 | --- | --- | --- |
-| lint | gofmt, go vet и Staticcheck (linux и darwin), stdlib-only и `go mod tidy -diff`, согласованность pins, `bash -n`, ShellCheck, actionlint, zizmor, Hadolint, исключения, локальные ссылки | 15 мин |
+| lint | gofmt, go vet и Staticcheck (продукт под linux и darwin, находки через исключения), stdlib-only и `go mod tidy -diff`, согласованность pins, `bash -n`, ShellCheck, actionlint, zizmor, Hadolint, исключения, локальные ссылки | 15 мин |
 | test | Go 1.27.2 и 1.26.9 × Linux amd64/arm64 и macOS arm64; `-count=1`, timeout, JSON + JUnit; race detector на Linux | 20 мин |
 | ci-selftest | тесты `tmbci`, включая негативные и позитивные фикстуры gate | 10 мин |
 | coverage | профиль всего модуля, сравнение с merge-base, diff coverage, цели | 20 мин |
-| security | gosec (исходники и тесты), govulncheck на уровне символов | 15 мин |
+| security | gosec (исходники и тесты, сборки linux и darwin, находки объединяются), govulncheck на уровне символов | 15 мин |
 | build | `tmb` и `tmb-broker` для Linux amd64/arm64, `tmb` для macOS arm64; две чистые сборки с одинаковым SHA-256, build manifest, govulncheck по бинарникам | 15 мин |
 | fuzz | реестр fuzz targets; PR — до 30 с на target и 3 мин всего, nightly — до 5 мин и 15 мин | 25 мин |
 | secrets | Gitleaks: диапазон коммитов PR и дерево; nightly — вся история | 10 мин |
@@ -73,7 +73,6 @@ Mac-брокер собирается только как часть тесто�
 
 - интеграционное покрытие инструментированными бинарниками (`go build -cover`, GOCOVERDIR) не собирается, есть только Go-test профиль;
 - профиль покрытия снимается на linux/amd64, поэтому изменения в файлах только для darwin в diff coverage не видны;
-- gosec сканирует с build tags ОС runner (Linux);
 - образ `Dockerfile.opensbx` (база только linux/arm64) проверяется Trivy только как конфигурация, без сканирования уязвимостей;
 - харнессы используют фиксированные имена контейнеров. Конфликтов нет, потому что каждая job получает свою VM. Два одновременных локальных прогона на одной машине конфликтуют.
 
@@ -83,8 +82,8 @@ Mac-брокер собирается только как часть тесто�
 
 [ci/exceptions.json](../ci/exceptions.json) — единственное место для принятых находок. В каждой записи:
 
-- сканер и одно правило или advisory ID;
-- один файл или пакет, для gosec и Gitleaks ещё и фрагмент кода (`match`);
+- сканер (gosec, govulncheck, trivy, gitleaks, staticcheck) и одно правило или advisory ID;
+- один файл или пакет, для gosec, Gitleaks и Staticcheck ещё и фрагмент кода (`match`);
 - причина, владелец, issue этого репозитория и дата истечения не дальше 180 дней.
 
 Gate отвергает истёкшие и широкие записи (маски, каталоги). Запись, которая больше ничего не покрывает, тоже даёт красный результат. Подавление в конфигурации сканеров не используется. Исключение: точечные `hadolint ignore` и `zizmor: ignore` с причиной на той же строке.

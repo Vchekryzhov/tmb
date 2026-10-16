@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -48,6 +49,8 @@ func Parse(scanner string, r io.Reader, root string) ([]Finding, error) {
 		return parseTrivy(data)
 	case "gitleaks":
 		return parseGitleaks(data)
+	case "staticcheck":
+		return parseStaticcheck(data, root)
 	}
 	return nil, fmt.Errorf("unknown scanner %q", scanner)
 }
@@ -216,6 +219,44 @@ func parseGitleaks(data []byte) ([]Finding, error) {
 	return out, nil
 }
 
+// parseStaticcheck reads `staticcheck -f json` (one object per line). The
+// flagged source line becomes the snippet an exception's match refers to.
+// A "compile" diagnostic means the code could not be analysed: an error.
+func parseStaticcheck(data []byte, root string) ([]Finding, error) {
+	var out []Finding
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	for {
+		var d struct {
+			Code     string
+			Severity string
+			Message  string
+			Location struct {
+				File string
+				Line int
+			}
+		}
+		err := dec.Decode(&d)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("staticcheck: %w", err)
+		}
+		if d.Code == "compile" || d.Code == "" {
+			return nil, fmt.Errorf("staticcheck could not analyse the code: %s", d.Message)
+		}
+		snippet := ""
+		if src, err := os.ReadFile(d.Location.File); err == nil {
+			if lines := strings.Split(string(src), "\n"); d.Location.Line >= 1 && d.Location.Line <= len(lines) {
+				snippet = lines[d.Location.Line-1]
+			}
+		}
+		out = append(out, Finding{Scanner: "staticcheck", Rule: d.Code, Location: strings.TrimPrefix(d.Location.File, root),
+			Snippet: snippet, Severity: d.Severity, Detail: fmt.Sprintf("%s (line %d)", d.Message, d.Location.Line), Blocking: true})
+	}
+	return out, nil
+}
+
 const ExceptionsSchemaV1 = "tmb-ci/exceptions/v1"
 
 // maxHorizon caps how far ahead an exception may expire.
@@ -246,7 +287,7 @@ func ReadExceptions(r io.Reader) (Exceptions, error) {
 }
 
 // codeScanners report code snippets; their exceptions must name the code.
-var codeScanners = map[string]bool{"gosec": true, "gitleaks": true}
+var codeScanners = map[string]bool{"gosec": true, "gitleaks": true, "staticcheck": true}
 
 func (e Exception) problems(today time.Time) []string {
 	name := fmt.Sprintf("exception %s %s %s", e.Scanner, e.Rule, e.Location)
@@ -275,7 +316,7 @@ func (e Exception) covers(f Finding) bool {
 }
 
 // Scanners are the scanners an exception may name.
-var Scanners = []string{"gosec", "govulncheck", "trivy", "gitleaks"}
+var Scanners = []string{"gosec", "govulncheck", "trivy", "gitleaks", "staticcheck"}
 
 // Lint validates every exception, including ones for scanners that no run
 // would otherwise judge.

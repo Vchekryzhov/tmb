@@ -220,7 +220,8 @@ func cmdScan(e *env, args []string) int {
 	fs := e.flags("scan")
 	check := fs.String("check", "", "check id")
 	scanner := fs.String("scanner", "", strings.Join(scan.Scanners, "|"))
-	report := fs.String("report", "", "scanner JSON report")
+	var reports multi
+	fs.Var(&reports, "report", "scanner JSON report (repeatable; findings are united)")
 	exPath := fs.String("exceptions", "ci/exceptions.json", "exceptions file")
 	root := fs.String("root", "", "prefix stripped from absolute file paths")
 	strictUnused := fs.Bool("strict-unused", false, "fail on exceptions that cover nothing")
@@ -231,14 +232,27 @@ func cmdScan(e *env, args []string) int {
 	if err := readJSON(*exPath, &ex); err != nil {
 		return e.fail(*check, fmt.Errorf("exceptions: %w", err))
 	}
-	f, err := os.Open(*report)
-	if err != nil {
-		return e.fail(*check, err)
+	if len(reports) == 0 {
+		return e.fail(*check, errors.New("no -report given"))
 	}
-	findings, err := scan.Parse(*scanner, f, *root)
-	f.Close()
-	if err != nil {
-		return e.fail(*check, err)
+	var findings []scan.Finding
+	seen := map[string]bool{}
+	for _, p := range reports {
+		f, err := os.Open(p)
+		if err != nil {
+			return e.fail(*check, err)
+		}
+		got, err := scan.Parse(*scanner, f, *root)
+		f.Close()
+		if err != nil {
+			return e.fail(*check, fmt.Errorf("%s: %w", p, err))
+		}
+		for _, fd := range got {
+			if k := fd.String() + fd.Snippet; !seen[k] {
+				seen[k] = true
+				findings = append(findings, fd)
+			}
+		}
 	}
 	r := scan.Evaluate(*scanner, findings, ex, e.today, *strictUnused)
 	var summary []string

@@ -1,6 +1,7 @@
 package scan_test
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -169,5 +170,26 @@ func TestLintChecksEveryException(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("lint %q lacks %q", got, want)
 		}
+	}
+}
+
+func TestParseStaticcheckReadsTheFlaggedLine(t *testing.T) {
+	root, _ := filepath.Abs("testdata")
+	report := `{"code":"SA4023","severity":"error","location":{"file":"` + root + `/src/main.go","line":4,"column":24},"message":"this comparison is always true"}
+{"code":"compile","severity":"error","location":{"file":"","line":0,"column":0},"message":"ignored"}
+`
+	if _, err := scan.Parse("staticcheck", strings.NewReader(report), root+"/"); err == nil {
+		t.Fatal("a compile error means staticcheck could not analyse the code: want error")
+	}
+	got, err := scan.Parse("staticcheck", strings.NewReader(strings.SplitN(report, "\n", 2)[0]+"\n"), root+"/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Rule != "SA4023" || got[0].Location != "src/main.go" || !got[0].Blocking ||
+		!strings.Contains(got[0].Snippet, "if err := serve(); err != nil {") {
+		t.Fatalf("got %+v", got)
+	}
+	if empty, err := scan.Parse("staticcheck", strings.NewReader(""), root+"/"); err != nil || len(empty) != 0 {
+		t.Fatalf("a clean run prints nothing: got %v %v", empty, err)
 	}
 }
