@@ -3,8 +3,10 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -13,19 +15,42 @@ import (
 )
 
 func main() {
-	cfgPath := flag.String("config", "/etc/tmb/config.json", "config file path")
-	approval := flag.String("approval", "", "approval mode override: manual|mock-approve|mock-deny|mock-timeout")
-	ttlSec := flag.Int("ttl", 0, "token TTL seconds override (PoC: sign short TTLs, e.g. 2-3; production default 60)")
-	tlsAddrFlag := flag.String("tls-addr", "", "TLS listener addr override (host:port or :port; empty = config value/off)")
-	tlsCAFlag := flag.String("tls-ca", "", "TLS client CA file override")
-	tlsCertFlag := flag.String("tls-cert", "", "TLS server cert file override")
-	tlsKeyFlag := flag.String("tls-key", "", "TLS server key file override")
-	flag.Parse()
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, stop))
+}
+
+// chown is os.Chown; unprivileged tests replace it, since only root may
+// hand the socket to root.
+var chown = os.Chown
+
+// run starts the broker and serves until stop fires (exit 0, socket and
+// pidfile removed) or a listener fails (exit 1). Setup errors exit 1, flag
+// errors 2.
+func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
+	fs := flag.NewFlagSet("tmb-broker", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	cfgPath := fs.String("config", "/etc/tmb/config.json", "config file path")
+	approval := fs.String("approval", "", "approval mode override: manual|mock-approve|mock-deny|mock-timeout")
+	ttlSec := fs.Int("ttl", 0, "token TTL seconds override (PoC: sign short TTLs, e.g. 2-3; production default 60)")
+	tlsAddrFlag := fs.String("tls-addr", "", "TLS listener addr override (host:port or :port; empty = config value/off)")
+	tlsCAFlag := fs.String("tls-ca", "", "TLS client CA file override")
+	tlsCertFlag := fs.String("tls-cert", "", "TLS server cert file override")
+	tlsKeyFlag := fs.String("tls-key", "", "TLS server key file override")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+	fail := func(format string, a ...any) int {
+		fmt.Fprintf(stderr, "tmb-broker: "+format+"\n", a...)
+		return 1
+	}
 
 	cfg, err := loadConfig(*cfgPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmb-broker: config: %v\n", err)
-		os.Exit(1)
+		return fail("config: %v", err)
 	}
 	mode := cfg.ApprovalDefault
 	if *approval != "" {
@@ -34,8 +59,7 @@ func main() {
 	switch mode {
 	case ModeManual, ModeMockApprove, ModeMockDeny, ModeMockTimeout:
 	default:
-		fmt.Fprintf(os.Stderr, "tmb-broker: unknown approval mode %q\n", mode)
-		os.Exit(1)
+		return fail("unknown approval mode %q", mode)
 	}
 	ttl := time.Duration(cfg.TokenTTLSeconds) * time.Second
 	if *ttlSec > 0 {
@@ -44,47 +68,40 @@ func main() {
 
 	log, err := NewLogger(cfg.LogPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmb-broker: log: %v\n", err)
-		os.Exit(1)
+		return fail("log: %v", err)
 	}
 	defer log.Close()
 
 	claims, err := NewClaimStore(cfg.StateDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmb-broker: claim store: %v\n", err)
-		os.Exit(1)
+		return fail("claim store: %v", err)
 	}
 
 	// socket dir: root:tmb-gid 0755 so unprivileged clients can traverse
 	if err := os.MkdirAll(cfg.SocketPath[:lastSlash(cfg.SocketPath)], 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "tmb-broker: socket dir: %v\n", err)
-		os.Exit(1)
+		return fail("socket dir: %v", err)
 	}
-	if err := os.Chown(cfg.SocketPath[:lastSlash(cfg.SocketPath)], 0, int(cfg.SocketGID)); err != nil {
-		fmt.Fprintf(os.Stderr, "tmb-broker: socket dir chown (gid %d): %v\n", cfg.SocketGID, err)
-		os.Exit(1)
+	if err := chown(cfg.SocketPath[:lastSlash(cfg.SocketPath)], 0, int(cfg.SocketGID)); err != nil {
+		return fail("socket dir chown (gid %d): %v", cfg.SocketGID, err)
 	}
 
 	// remove a stale socket from a previous run
 	if err := os.Remove(cfg.SocketPath); err != nil && !os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "tmb-broker: stale socket: %v\n", err)
-		os.Exit(1)
+		return fail("stale socket: %v", err)
 	}
 
 	ln, err := net.Listen("unix", cfg.SocketPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tmb-broker: listen %s: %v\n", cfg.SocketPath, err)
-		os.Exit(1)
+		return fail("listen %s: %v", cfg.SocketPath, err)
 	}
+	defer ln.Close()
 	// 0660 root:<socket gid>: the sandbox group may connect; everyone else
 	// is refused by filesystem permissions even before SO_PEERCRED.
 	if err := os.Chmod(cfg.SocketPath, 0o660); err != nil {
-		fmt.Fprintf(os.Stderr, "tmb-broker: chmod socket: %v\n", err)
-		os.Exit(1)
+		return fail("chmod socket: %v", err)
 	}
-	if err := os.Chown(cfg.SocketPath, 0, int(cfg.SocketGID)); err != nil {
-		fmt.Fprintf(os.Stderr, "tmb-broker: chown socket: %v\n", err)
-		os.Exit(1)
+	if err := chown(cfg.SocketPath, 0, int(cfg.SocketGID)); err != nil {
+		return fail("chown socket: %v", err)
 	}
 
 	tlsAddr, tlsCA, tlsCert, tlsKey := cfg.TLSAddr, cfg.TLSCAFile, cfg.TLSCertFile, cfg.TLSKeyFile
@@ -105,24 +122,21 @@ func main() {
 	var tlsLn net.Listener
 	if tlsAddr != "" {
 		if tlsCA == "" || tlsCert == "" || tlsKey == "" {
-			fmt.Fprintf(os.Stderr, "tmb-broker: tls_addr %s requires tls_ca_file, tls_cert_file and tls_key_file\n", tlsAddr)
-			os.Exit(1)
+			return fail("tls_addr %s requires tls_ca_file, tls_cert_file and tls_key_file", tlsAddr)
 		}
 		tlsCfg, err = loadTLSConfig(tlsCA, tlsCert, tlsKey)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "tmb-broker: %v\n", err)
-			os.Exit(1)
+			return fail("%v", err)
 		}
 		tlsLn, err = net.Listen("tcp", tlsAddr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "tmb-broker: tls listen %s: %v\n", tlsAddr, err)
-			os.Exit(1)
+			return fail("tls listen %s: %v", tlsAddr, err)
 		}
+		defer tlsLn.Close()
 	}
 
 	if err := os.WriteFile(cfg.PidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "tmb-broker: pidfile: %v\n", err)
-		os.Exit(1)
+		return fail("pidfile: %v", err)
 	}
 
 	b := NewBroker(cfg, log, claims, mode, ttl)
@@ -135,24 +149,22 @@ func main() {
 		startEv["tls_addr"] = tlsAddr
 	}
 	log.Event("broker_start", startEv)
-	fmt.Printf("tmb-broker: listening on %s (mode=%s ttl=%s pid=%d)\n", cfg.SocketPath, mode, ttl, os.Getpid())
+	fmt.Fprintf(stdout, "tmb-broker: listening on %s (mode=%s ttl=%s pid=%d)\n", cfg.SocketPath, mode, ttl, os.Getpid())
+
+	// Both accept loops only ever return an error; the first one ends the
+	// broker unless a stop signal came first.
+	served := make(chan error, 2)
+	go func() { served <- fmt.Errorf("serve: %w", b.Serve(ln)) }()
 	if tlsLn != nil {
 		log.Event("tls_listen", map[string]any{"addr": tlsAddr})
-		fmt.Printf("tmb-broker: tls listening on %s (client certificates required, no plaintext)\n", tlsAddr)
-		go func() {
-			if err := b.ServeTLS(tls.NewListener(tlsLn, tlsCfg)); err != nil {
-				fmt.Fprintf(os.Stderr, "tmb-broker: tls serve: %v\n", err)
-				os.Exit(1)
-			}
-		}()
+		fmt.Fprintf(stdout, "tmb-broker: tls listening on %s (client certificates required, no plaintext)\n", tlsAddr)
+		go func() { served <- fmt.Errorf("tls serve: %w", b.ServeTLS(tls.NewListener(tlsLn, tlsCfg))) }()
 	}
 
-	// SIGTERM/SIGINT: remove socket + pidfile, then exit. A stale socket is
-	// also unlinked at next startup.
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sig
+	select {
+	case <-stop:
+		// SIGTERM/SIGINT: remove socket + pidfile, then exit. A stale socket
+		// is also unlinked at next startup.
 		ln.Close()
 		if tlsLn != nil {
 			tlsLn.Close()
@@ -160,12 +172,9 @@ func main() {
 		os.Remove(cfg.SocketPath)
 		os.Remove(cfg.PidFile)
 		log.Event("broker_stop", map[string]any{"pid": os.Getpid()})
-		os.Exit(0)
-	}()
-
-	if err := b.Serve(ln); err != nil {
-		fmt.Fprintf(os.Stderr, "tmb-broker: serve: %v\n", err)
-		os.Exit(1)
+		return 0
+	case err := <-served:
+		return fail("%v", err)
 	}
 }
 
