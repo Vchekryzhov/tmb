@@ -44,6 +44,17 @@ type canonicalRequest struct {
 	Nonce      string            `json:"nonce"`
 }
 
+// DecodeRequest parses one request frame body. Anything but exactly one
+// JSON object with correctly typed fields is an error; unknown fields are
+// ignored and the request type is checked by the broker.
+func DecodeRequest(raw []byte) (*Request, error) {
+	var req Request
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
 // Canonical returns the deterministic JSON encoding of the request tuple.
 // Go marshals struct fields in declaration order and map keys sorted, so
 // this is stable across processes.
@@ -115,11 +126,24 @@ func WriteFrame(w io.Writer, v any) error {
 	}
 	var hdr [4]byte
 	binary.BigEndian.PutUint32(hdr[:], uint32(len(b)))
-	if _, err := w.Write(hdr[:]); err != nil {
+	if err := writeAll(w, hdr[:]); err != nil {
 		return err
 	}
-	_, err = w.Write(b)
-	return err
+	return writeAll(w, b)
+}
+
+// writeAll treats a short write as a failure even from a writer that breaks
+// the io.Writer contract by not returning an error: a partly written frame
+// is never reported as delivered.
+func writeAll(w io.Writer, p []byte) error {
+	n, err := w.Write(p)
+	if err != nil {
+		return err
+	}
+	if n != len(p) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 
 // ReadRawFrame reads one frame and returns the raw JSON bytes.

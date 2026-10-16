@@ -158,8 +158,8 @@ func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
 		b.log.Event("bad_frame", ev)
 		return
 	}
-	var req proto.Request
-	if err := json.Unmarshal(raw, &req); err != nil {
+	req, err := proto.DecodeRequest(raw)
+	if err != nil {
 		ev := id.LogFields()
 		ev["error"] = err.Error()
 		b.log.Event("bad_request", ev)
@@ -182,12 +182,12 @@ func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
 
 	switch req.Type {
 	case "approve":
-		b.doApprove(&req, id, conn)
+		b.doApprove(req, id, conn)
 	case "claim":
-		b.doClaim(&req, id, conn)
+		b.doClaim(req, id, conn)
 	case "exec":
 		// approve + claim + exec from the SAME in-memory request object
-		if !b.approveStage(&req, id, conn) {
+		if !b.approveStage(req, id, conn) {
 			return
 		}
 		hash := req.Hash()
@@ -195,9 +195,9 @@ func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
 			Token:  proto.TokenID(hash),
 			Detail: fmt.Sprintf("one-shot token, ttl=%s", b.ttl)})
 		req.ClaimToken = proto.TokenID(hash) // broker-side binding
-		b.claimStage(&req, id, conn)
+		b.claimStage(req, id, conn)
 	default:
-		b.deny(&req, id, "unknown_request_type", req.Type, conn)
+		b.deny(req, id, "unknown_request_type", req.Type, conn)
 	}
 }
 
