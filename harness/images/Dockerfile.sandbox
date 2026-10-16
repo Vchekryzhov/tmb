@@ -10,8 +10,10 @@ COPY src/ .
 RUN CGO_ENABLED=0 go build -trimpath -o /out/tmb ./cmd/tmb
 
 FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+# upgrade: the digest-pinned base lags distro security fixes; Trivy gates the result
 # hadolint ignore=DL3008 # disposable test image: distro package versions roll; the built image is scanned by Trivy on every PR
 RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends curl openssl \
  && rm -rf /var/lib/apt/lists/*
 RUN groupadd -g 4242 tmb \

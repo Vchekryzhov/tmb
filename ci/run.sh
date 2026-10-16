@@ -456,7 +456,7 @@ cmd_images() {
       result images/sbom NOT_RUN "vulnerability DB not fresh"
     fi
   fi
-  if ! trivy config --no-progress --format json -o "$I/trivy-config.json" "$ROOT/harness/images" >"$I/config.log" 2>&1; then
+  if ! trivy config --format json -o "$I/trivy-config.json" "$ROOT/harness/images" >"$I/config.log" 2>&1; then
     result images/config ERROR "trivy config failed" "$I/config.log"
   else "$BIN/tmbci" scan -check images/config -scanner trivy -report "$I/trivy-config.json" -exceptions "$ROOT/ci/exceptions.json" -out "$RESULTS"; fi
   docker image rm -f "tmb-ci/host:$tag" "tmb-ci/sandbox:$tag" >/dev/null 2>&1
