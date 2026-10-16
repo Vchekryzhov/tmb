@@ -85,7 +85,7 @@ bash harness/run.sh          # сборка образов, матрица, harn
 
 ## Исходники
 
-- `src/cmd/tmb/`: клиент (не исполняет запрошенную команду на хосте; `exec`, плюс debug `approve`/`claim`/`raw` для двухфазных/враждебных запросов).
+- `src/cmd/tmb/`: клиент (не исполняет запрошенную команду на хосте; `exec`, плюс `debug approve|claim|raw` для двухфазных/враждебных запросов).
 - `src/cmd/tmb-broker/`: брокер: `broker.go` (SO_PEERCRED, approval, claim), `exec.go` (единственный execve + сборка env), `store.go` (O_EXCL+fsync claim store), `log.go` (JSONL), `config.go`, `main.go`.
 - `src/internal/proto/proto.go`: length-prefixed JSON-фреймы, канонический хэш запроса, токен/nonce.
 - `harness/images/`: Dockerfile.host (ubuntu:24.04 + нетронутый sudo + `human`-юзер), Dockerfile.sandbox (ubuntu:24.04, uid 4242, без sudo), config.json (политики).

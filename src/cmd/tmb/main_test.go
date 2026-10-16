@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"io"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -251,5 +252,27 @@ func TestDialTLSWrongCAIsTransportErrWithX509Reason(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "x509") {
 		t.Errorf("error must surface the x509 verification reason: %v", err)
+	}
+}
+
+// tmb debug routes to the requester protocol steps; each one fails on its
+// own input checks here, before any connection is attempted.
+func TestDebugDispatchesProtocolSteps(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.json")
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"approve", "--json", missing}, "missing.json"},
+		{[]string{"claim", "--json", missing}, "--token is required"},
+		{[]string{"raw", "--json", missing}, "missing.json"},
+		{nil, "expected approve, claim or raw"},
+		{[]string{"exec"}, `unknown step "exec"`},
+	} {
+		c := &cli{stdin: strings.NewReader(""), stdout: io.Discard, stderr: io.Discard}
+		_, err := c.cmdDebug(tc.args)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("cmdDebug(%q) = %v, want error containing %q", tc.args, err, tc.want)
+		}
 	}
 }

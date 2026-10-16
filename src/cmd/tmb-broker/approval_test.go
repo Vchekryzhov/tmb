@@ -2,6 +2,9 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -49,7 +52,7 @@ func TestManualApproval(t *testing.T) {
 				`argv      : ["` + req.Executable + `"]`,
 				"cwd       : /tmp",
 				"run as uid: 0",
-				`env       : {"LANG":"C.UTF-8"}`,
+				`env       : ["LANG=C.UTF-8","PATH=/usr/bin:/bin"]`,
 				"nonce     : manual-nonce-1",
 				c.console,
 			} {
@@ -92,5 +95,69 @@ func TestClaimAfterTTLIsDenied(t *testing.T) {
 	time.Sleep(60 * time.Millisecond)
 	if f := claimDo(t, b, req, id); f.Type != "denied" || f.Reason != "no_pending_approval" {
 		t.Fatalf("claim after TTL = %+v, want denied no_pending_approval", f)
+	}
+}
+
+// approvalEvents returns every "approval" JSONL event the broker logged.
+func approvalEvents(t *testing.T, b *Broker) []map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(b.log.f.Name())
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	var out []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		var ev map[string]any
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatalf("bad JSONL line %q: %v", line, err)
+		}
+		if ev["event"] == "approval" {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+func TestApprovalEventCarriesApproverAndDecision(t *testing.T) {
+	for _, tc := range []struct {
+		mode, decision string
+	}{
+		{ModeMockApprove, "approve"},
+		{ModeMockDeny, "deny"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			b := newTestBroker(t)
+			b.mode = tc.mode
+			approveDo(t, b, testReq(t, "approval-event-"+tc.mode), UIDRequester(4242, 1))
+			evs := approvalEvents(t, b)
+			if len(evs) != 1 {
+				t.Fatalf("want 1 approval event, got %d", len(evs))
+			}
+			if got := evs[0]["approver"]; got != "mode:"+tc.mode {
+				t.Errorf("approver = %v, want mode:%s", got, tc.mode)
+			}
+			if got := evs[0]["decision"]; got != tc.decision {
+				t.Errorf("decision = %v, want %s", got, tc.decision)
+			}
+		})
+	}
+}
+
+// The manual console shows the environment the process will start with
+// (fixed_env plus allowlisted request keys), not the request's env.
+func TestManualConsoleShowsFinalEnv(t *testing.T) {
+	b, out := manualBroker(t, "n\n")
+	req := testReq(t, "manual-env")
+	req.Env = map[string]string{"LANG": "ru_RU.UTF-8"}
+	exeReal, err := filepath.EvalSymlinks(req.Executable)
+	if err != nil {
+		t.Fatalf("realpath: %v", err)
+	}
+	if granted, _ := b.runApprovalInteraction(req, UIDRequester(4242, 1), exeReal, 0, 0); granted {
+		t.Fatalf("answer n must deny")
+	}
+	want := `  env       : ["LANG=ru_RU.UTF-8","PATH=/usr/bin:/bin"]`
+	if !strings.Contains(out.String(), want+"\n") {
+		t.Fatalf("console lacks final env line %q:\n%s", want, out.String())
 	}
 }

@@ -54,12 +54,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "exec":
 		code, err = c.cmdExec(args[1:])
-	case "approve": // debug: phase 1 only (get a token, do not execute)
-		err = c.cmdApprove(args[1:])
-	case "claim": // debug: phase 2 only (present token, execute if accepted)
-		code, err = c.cmdClaim(args[1:])
-	case "raw": // debug: send an arbitrary JSON request verbatim
-		err = c.cmdRaw(args[1:])
+	case "debug":
+		code, err = c.cmdDebug(args[1:])
 	default:
 		c.usage()
 		return 2
@@ -96,9 +92,9 @@ func (c *cli) usage() {
 	fmt.Fprintf(c.stderr, `tmb (PROTOTYPE client)
 usage:
   tmb exec [--root] [--cwd DIR] [--env K=V]... -- /abs/executable [args...]   full flow
-  tmb approve --json FILE|-                                                  debug: approval phase only
-  tmb claim --token TOKEN --json FILE|-                                      debug: claim phase only
-  tmb raw --json FILE|-                                                      debug: raw request verbatim
+  tmb debug approve --json FILE|-                                            debug: approval phase only
+  tmb debug claim --token TOKEN --json FILE|-                                debug: claim phase only
+  tmb debug raw --json FILE|-                                                debug: raw request verbatim
 endpoint selection (all subcommands):
   unix socket (default): --socket PATH (default %s, env TMB_SOCK)
   TLS (mTLS endpoint):   --addr HOST:PORT (env TMB_ADDR) plus --ca/--cert/--key
@@ -380,6 +376,23 @@ func (c *cli) cmdExec(args []string) (int, error) {
 }
 
 // --- debug subcommands ------------------------------------------------------
+
+// cmdDebug dispatches the requester protocol steps that exist for the
+// harness only: approve (phase 1), claim (phase 2) and raw (verbatim JSON).
+func (c *cli) cmdDebug(args []string) (int, error) {
+	if len(args) == 0 {
+		return 0, errors.New("debug: expected approve, claim or raw")
+	}
+	switch args[0] {
+	case "approve": // phase 1 only (get a token, do not execute)
+		return 0, c.cmdApprove(args[1:])
+	case "claim": // phase 2 only (present token, execute if accepted)
+		return c.cmdClaim(args[1:])
+	case "raw": // send an arbitrary JSON request verbatim
+		return 0, c.cmdRaw(args[1:])
+	}
+	return 0, fmt.Errorf("debug: unknown step %q, expected approve, claim or raw", args[0])
+}
 
 func (c *cli) cmdApprove(args []string) error {
 	fs := flag.NewFlagSet("approve", flag.ContinueOnError)

@@ -197,7 +197,7 @@ func TestRunDebugSubcommands(t *testing.T) {
 
 	t.Run("approve from file", func(t *testing.T) {
 		fb := newFakeBroker(t, frames(&proto.Frame{Type: "approved", Token: "t1"}))
-		r := runCLI(t, "", "approve", "--socket", fb.sock, "--json", file)
+		r := runCLI(t, "", "debug", "approve", "--socket", fb.sock, "--json", file)
 		if r.code != 0 || !strings.Contains(r.stderr, `FRAME: {"type":"approved","token":"t1"}`) {
 			t.Fatalf("code %d, stderr:\n%s", r.code, r.stderr)
 		}
@@ -208,14 +208,14 @@ func TestRunDebugSubcommands(t *testing.T) {
 	t.Run("approve from stdin, broker hangs up first", func(t *testing.T) {
 		fb := newFakeBroker(t, frames())
 		raw, _ := json.Marshal(base)
-		r := runCLI(t, string(raw), "approve", "--socket", fb.sock, "--json", "-")
+		r := runCLI(t, string(raw), "debug", "approve", "--socket", fb.sock, "--json", "-")
 		if r.code != 3 {
 			t.Fatalf("code %d, want 3; stderr:\n%s", r.code, r.stderr)
 		}
 	})
 	t.Run("claim", func(t *testing.T) {
 		fb := newFakeBroker(t, frames(proto.Chunk("stdout", []byte("o")), proto.Chunk("stderr", []byte("e")), exitFrame(4)))
-		r := runCLI(t, "", "claim", "--socket", fb.sock, "--token", "tok9", "--json", file)
+		r := runCLI(t, "", "debug", "claim", "--socket", fb.sock, "--token", "tok9", "--json", file)
 		if r.code != 4 || r.stdout != "o" || !strings.Contains(r.stderr, "EXIT: 4") {
 			t.Fatalf("code %d stdout %q stderr:\n%s", r.code, r.stdout, r.stderr)
 		}
@@ -224,13 +224,13 @@ func TestRunDebugSubcommands(t *testing.T) {
 		}
 	})
 	t.Run("claim without token", func(t *testing.T) {
-		if r := runCLI(t, "", "claim", "--json", file); r.code != 2 || !strings.Contains(r.stderr, "--token is required") {
+		if r := runCLI(t, "", "debug", "claim", "--json", file); r.code != 2 || !strings.Contains(r.stderr, "--token is required") {
 			t.Fatalf("code %d, stderr:\n%s", r.code, r.stderr)
 		}
 	})
 	t.Run("raw keeps the type and reports denial", func(t *testing.T) {
 		fb := newFakeBroker(t, frames(&proto.Frame{Type: "progress"}, &proto.Frame{Type: "denied", Reason: "unknown_request_type"}))
-		r := runCLI(t, "", "raw", "--socket", fb.sock, "--json", writeJSON(t, map[string]any{"type": "shutdown"}))
+		r := runCLI(t, "", "debug", "raw", "--socket", fb.sock, "--json", writeJSON(t, map[string]any{"type": "shutdown"}))
 		if r.code != 125 || !strings.Contains(r.stderr, "REQ-RAW:") || !strings.Contains(r.stderr, `"reason":"unknown_request_type"`) {
 			t.Fatalf("code %d, stderr:\n%s", r.code, r.stderr)
 		}
@@ -240,9 +240,9 @@ func TestRunDebugSubcommands(t *testing.T) {
 	})
 	for _, sub := range []string{"approve", "claim", "raw"} {
 		t.Run(sub+" bad input", func(t *testing.T) {
-			args := []string{sub, "--token", "t"}
+			args := []string{"debug", sub, "--token", "t"}
 			if sub != "claim" {
-				args = []string{sub}
+				args = []string{"debug", sub}
 			}
 			if r := runCLI(t, "", append(args, "--json", filepath.Join(t.TempDir(), "none"))...); r.code != 2 {
 				t.Errorf("missing file: code %d", r.code)
@@ -250,7 +250,7 @@ func TestRunDebugSubcommands(t *testing.T) {
 			if r := runCLI(t, "{", append(args, "--json", "-")...); r.code != 2 || !strings.Contains(r.stderr, "bad request JSON") {
 				t.Errorf("bad JSON: code %d, stderr:\n%s", r.code, r.stderr)
 			}
-			if r := runCLI(t, "", sub, "--bogus"); r.code != 2 {
+			if r := runCLI(t, "", "debug", sub, "--bogus"); r.code != 2 {
 				t.Errorf("bad flag: code %d", r.code)
 			}
 		})
