@@ -15,11 +15,13 @@ type Logger struct {
 	f  *os.File
 }
 
+// NewLogger opens the log owner-only: events carry request argv and env,
+// which may hold secrets. The modes apply only when the broker creates them.
 func NewLogger(path string) (*Logger, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o640)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, err
 	}
