@@ -7,13 +7,20 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"math"
 	"strings"
 	"testing"
 )
 
+// frameBytes frames payload exactly as WriteFrame would, without
+// validating it as JSON.
 func frameBytes(payload []byte) []byte {
+	n := len(payload)
+	if n < 0 || n > math.MaxUint32 {
+		panic("frameBytes: payload too large")
+	}
 	var hdr [4]byte
-	binary.BigEndian.PutUint32(hdr[:], uint32(len(payload)))
+	binary.BigEndian.PutUint32(hdr[:], uint32(n))
 	return append(hdr[:], payload...)
 }
 

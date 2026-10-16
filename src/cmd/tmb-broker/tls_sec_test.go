@@ -15,12 +15,11 @@ import (
 
 // tlsBroker runs ServeTLS on 127.0.0.1 with the given fingerprints
 // allowlisted and returns its address and log path.
-func tlsBroker(t *testing.T, ca *testCA, dir string, fps ...string) (addr, logPath string) {
+func tlsBroker(t *testing.T, ca *testCA, dir string, fps ...string) (addr string, b *Broker) {
 	t.Helper()
 	caFile := writePEM(t, filepath.Join(dir, "ca.crt"), "CERTIFICATE", ca.cert.Raw)
 	srvCert, srvKey, _ := ca.issue(t, dir, "server", []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, []string{"localhost"})
-	logPath = filepath.Join(dir, "broker.log")
-	log, err := NewLogger(logPath)
+	log, err := NewLogger(filepath.Join(dir, "broker.log"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +28,7 @@ func tlsBroker(t *testing.T, ca *testCA, dir string, fps ...string) (addr, logPa
 		t.Fatal(err)
 	}
 	cfg := &Config{AllowedRequesterFPs: fps, FixedEnv: map[string]string{"PATH": "/usr/bin:/bin"}, AllowedEnvKeys: []string{"LANG"}}
-	b := NewBroker(cfg, log, claims, ModeMockApprove, 30*time.Second)
+	b = NewBroker(cfg, log, claims, ModeMockApprove, 30*time.Second)
 	tlsCfg, err := loadTLSConfig(caFile, srvCert, srvKey)
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +39,7 @@ func tlsBroker(t *testing.T, ca *testCA, dir string, fps ...string) (addr, logPa
 	}
 	t.Cleanup(func() { ln.Close() })
 	go b.ServeTLS(tls.NewListener(ln, tlsCfg))
-	return ln.Addr().String(), logPath
+	return ln.Addr().String(), b
 }
 
 func loadPair(t *testing.T, certFile, keyFile string) tls.Certificate {
@@ -70,16 +69,16 @@ func execOverTLS(t *testing.T, addr string, cfg *tls.Config) (*proto.Frame, erro
 	return proto.ReadFrame(conn)
 }
 
-func waitLog(t *testing.T, path, needle string) string {
+func waitLog(t *testing.T, b *Broker, needle string) string {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		b, _ := os.ReadFile(path)
-		if strings.Contains(string(b), needle) {
-			return string(b)
+		log, _ := os.ReadFile(b.log.f.Name())
+		if strings.Contains(string(log), needle) {
+			return string(log)
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%s never logged; log:\n%s", needle, b)
+			t.Fatalf("%s never logged; log:\n%s", needle, log)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -121,7 +120,7 @@ func TestTLSListenerRejectsUnverifiedClientCerts(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			dir := t.TempDir()
 			certFile, keyFile, der := c.issue(dir)
-			addr, logPath := tlsBroker(t, ca, dir, certFingerprint(der))
+			addr, b := tlsBroker(t, ca, dir, certFingerprint(der))
 			pool := x509.NewCertPool()
 			pool.AddCert(ca.cert)
 			f, err := execOverTLS(t, addr, &tls.Config{
@@ -131,7 +130,7 @@ func TestTLSListenerRejectsUnverifiedClientCerts(t *testing.T) {
 			if err == nil {
 				t.Fatalf("broker answered %+v to an unverified client certificate", f)
 			}
-			log := waitLog(t, logPath, `"event":"tls_handshake_failed"`)
+			log := waitLog(t, b, `"event":"tls_handshake_failed"`)
 			if strings.Contains(log, `"event":"request"`) || strings.Contains(log, `"event":"exec_start"`) {
 				t.Fatalf("an unverified client reached the request stage:\n%s", log)
 			}
@@ -145,7 +144,7 @@ func TestTLSListenerRejectsMissingCertAndOldTLS(t *testing.T) {
 	ca := newTestCA(t)
 	dir := t.TempDir()
 	certFile, keyFile, der := ca.issue(t, dir, "client", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, nil)
-	addr, logPath := tlsBroker(t, ca, dir, certFingerprint(der))
+	addr, b := tlsBroker(t, ca, dir, certFingerprint(der))
 	pool := x509.NewCertPool()
 	pool.AddCert(ca.cert)
 
@@ -159,7 +158,7 @@ func TestTLSListenerRejectsMissingCertAndOldTLS(t *testing.T) {
 	}); err == nil {
 		t.Fatalf("broker answered %+v over TLS 1.2", f)
 	}
-	log := waitLog(t, logPath, `"event":"tls_handshake_failed"`)
+	log := waitLog(t, b, `"event":"tls_handshake_failed"`)
 	if strings.Contains(log, `"event":"request"`) {
 		t.Fatalf("a rejected client reached the request stage:\n%s", log)
 	}

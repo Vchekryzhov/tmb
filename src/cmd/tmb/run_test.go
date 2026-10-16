@@ -101,7 +101,7 @@ func TestRunExecStreamsAndReturnsRemoteExitCode(t *testing.T) {
 	))
 	dir := t.TempDir()
 	tool := filepath.Join(dir, "tool")
-	if err := os.WriteFile(tool, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	if err := os.Symlink("/bin/sh", tool); err != nil { // any executable on the host
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", "relative/dir:"+dir)

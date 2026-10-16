@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -85,10 +87,13 @@ func serveRaw(t *testing.T, b *Broker, body []byte) (*proto.Frame, error) {
 	server, client := net.Pipe()
 	go func() { defer server.Close(); b.serveRequest(server, UIDRequester(4242, 1), "unix") }()
 	defer client.Close()
-	go func() {
-		hdr := []byte{byte(len(body) >> 24), byte(len(body) >> 16), byte(len(body) >> 8), byte(len(body))}
-		client.Write(append(hdr, body...))
-	}()
+	n := len(body)
+	if n < 0 || n > math.MaxUint32 {
+		panic("test body does not fit a frame")
+	}
+	var hdr [4]byte
+	binary.BigEndian.PutUint32(hdr[:], uint32(n))
+	go client.Write(append(hdr[:], body...))
 	return proto.ReadFrame(client)
 }
 

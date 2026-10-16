@@ -309,6 +309,26 @@
       "owner": "Vchekryzhov",
       "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
       "expires": "2026-11-16"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G402",
+      "location": "src/cmd/tmb/tls_sec_test.go",
+      "match": "MaxVersion: tls.VersionTLS12",
+      "reason": "SEC-06 test: the TLS 1.2-only peer must be refused, so the test builds one on purpose",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G402",
+      "location": "src/cmd/tmb-broker/tls_sec_test.go",
+      "match": "MaxVersion: tls.VersionTLS12",
+      "reason": "SEC-06 test: the TLS 1.2-only peer must be refused, so the test builds one on purpose",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
+      "expires": "2027-04-14"
     }
   ]
 }

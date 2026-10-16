@@ -38,6 +38,6 @@
     {"id": "SEC-15", "title": "SIGKILL of the broker closes the agent path; human password sudo keeps working",
      "scenarios": ["N9"]},
     {"id": "SEC-16", "title": "client disconnects and concurrent connections do not bypass one-shot or identity checks",
-     "tests": ["tmb-poc/cmd/tmb-broker.TestServeUnixConcurrentConnectionsRunAtMostOnce", "tmb-poc/cmd/tmb-broker.TestServeUnixClientDisconnect"]}
+     "tests": ["tmb-poc/cmd/tmb-broker.TestServeUnixConcurrentConnectionsRunAtMostOnce", "tmb-poc/cmd/tmb-broker.TestServeUnixClientDisconnect", "tmb-poc/cmd/tmb-broker.TestServeUnixConcurrentForeignClaimsKeepIdentityBinding", "tmb-poc/cmd/tmb-broker.TestServeUnixDeniesNonAllowlistedUID"]}
   ]
 }

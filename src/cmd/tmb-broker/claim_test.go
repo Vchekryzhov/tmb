@@ -49,6 +49,8 @@ func TestClaimDeniedWhenRequestMutatedAfterApproval(t *testing.T) {
 		{"env key added", func(r *proto.Request) { r.Env = map[string]string{} }, "token_binding_mismatch"},
 		{"nonce", func(r *proto.Request) { r.Nonce += "-other" }, "token_binding_mismatch"},
 		{"cwd", func(r *proto.Request) { r.Cwd = "/" }, "token_binding_mismatch"},
+		// the broker accepts only uid 0, so a changed uid is refused before
+		// the token binding is even checked
 		{"uid", func(r *proto.Request) { r.UID = 1000 }, "uid_not_supported"},
 	}
 	for _, c := range cases {
@@ -190,7 +192,7 @@ func TestExecReturnsOutputAndExitStatus(t *testing.T) {
 			req.Executable, req.Argv = sh, []string{sh, "-c", c.script}
 			res := claimStream(t, b, approved(t, b, req, id), id)
 			if res.exit.Type != "exit" || *res.exit.Code != c.code {
-				t.Fatalf("terminal frame = %s %v, want exit %d", res.exit.Type, codeOf(res.exit), c.code)
+				t.Fatalf("terminal frame = %s %v, want exit %d", res.exit.Type, exitCodeOrReason(res.exit), c.code)
 			}
 			if c.stdoutLen >= 0 {
 				if res.stdout.Len() != c.stdoutLen {
@@ -205,7 +207,8 @@ func TestExecReturnsOutputAndExitStatus(t *testing.T) {
 	}
 }
 
-func codeOf(f *proto.Frame) any {
+// exitCodeOrReason renders a terminal frame for a failure message.
+func exitCodeOrReason(f *proto.Frame) any {
 	if f.Code == nil {
 		return f.Reason
 	}
@@ -232,13 +235,8 @@ func TestNonceReuseAcrossRequestsIsDenied(t *testing.T) {
 // SEC-10: an executable replaced at its path between approval and claim
 // is denied.
 func TestClaimDeniedWhenExecutableReplaced(t *testing.T) {
-	dir := t.TempDir()
-	src, err := os.ReadFile(trueExe(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	exe := filepath.Join(dir, "tool")
-	if err := os.WriteFile(exe, src, 0o755); err != nil {
+	exe := filepath.Join(t.TempDir(), "tool")
+	if err := os.Symlink(trueExe(t), exe); err != nil {
 		t.Fatal(err)
 	}
 	b := newTestBroker(t)
@@ -247,10 +245,11 @@ func TestClaimDeniedWhenExecutableReplaced(t *testing.T) {
 	req.Executable, req.Argv = exe, []string{exe}
 	req = approved(t, b, req, id)
 
+	// same request path, now a different file
 	if err := os.Remove(exe); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(exe, src, 0o755); err != nil { // same bytes, new inode
+	if err := os.Symlink(shExe(t), exe); err != nil {
 		t.Fatal(err)
 	}
 	if f := claimDo(t, b, req, id); f.Type != "denied" || f.Reason != "executable_changed" {

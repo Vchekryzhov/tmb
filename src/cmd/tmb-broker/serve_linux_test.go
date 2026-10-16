@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -18,7 +19,11 @@ func unixBroker(t *testing.T, allowSelf bool) (*Broker, string) {
 	t.Helper()
 	b := newTestBroker(t)
 	if allowSelf {
-		b.cfg.AllowedRequesterUIDs = []uint32{uint32(os.Getuid())}
+		uid := os.Getuid()
+		if uid < 0 || uid > math.MaxUint32 {
+			panic("uid does not fit a uint32")
+		}
+		b.cfg.AllowedRequesterUIDs = []uint32{uint32(uid)}
 	}
 	dir, err := os.MkdirTemp("", "tmbsock")
 	if err != nil {
@@ -147,5 +152,36 @@ func TestServeUnixClientDisconnect(t *testing.T) {
 	log, _ := os.ReadFile(b.log.f.Name())
 	if !strings.Contains(string(log), `"event":"bad_frame"`) {
 		t.Errorf("the empty connection left no bad_frame event:\n%s", log)
+	}
+}
+
+// SEC-16: an approval granted to one requester cannot be redeemed by
+// another one through concurrent connections, and stays redeemable by its
+// owner.
+func TestServeUnixConcurrentForeignClaimsKeepIdentityBinding(t *testing.T) {
+	b, sock := unixBroker(t, true)
+	owner := UIDRequester(4242, 1) // never the test process's own uid
+	req := approved(t, b, testReq(t, "unix-foreign"), owner)
+	req.Type = "claim"
+
+	const n = 32
+	var wg sync.WaitGroup
+	frames := make(chan *proto.Frame, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			frames <- terminal(t, send(t, sock, req))
+		}()
+	}
+	wg.Wait()
+	close(frames)
+	for f := range frames {
+		if f.Type != "denied" || f.Reason != "requester_mismatch" {
+			t.Fatalf("foreign claim = %+v, want denied requester_mismatch", f)
+		}
+	}
+	if f := claimDo(t, b, req, owner); f.Type != "exit" {
+		t.Fatalf("owner claim after foreign attempts = %+v, want exit", f)
 	}
 }

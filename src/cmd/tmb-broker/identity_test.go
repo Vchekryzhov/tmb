@@ -76,18 +76,7 @@ func approveDo(t *testing.T, b *Broker, req *proto.Request, id RequesterID) *pro
 // terminal frame (denied or exit).
 func claimDo(t *testing.T, b *Broker, req *proto.Request, id RequesterID) *proto.Frame {
 	t.Helper()
-	server, client := net.Pipe()
-	go func() { defer server.Close(); b.claimStage(req, id, server) }()
-	defer client.Close()
-	for {
-		f, err := proto.ReadFrame(client)
-		if err != nil {
-			t.Fatalf("claim: read frame: %v", err)
-		}
-		if f.Type == "denied" || f.Type == "exit" {
-			return f
-		}
-	}
+	return claimStream(t, b, req, id).exit
 }
 
 // --- identity rendering ------------------------------------------------------
