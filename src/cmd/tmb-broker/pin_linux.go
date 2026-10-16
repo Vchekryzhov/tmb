@@ -40,14 +40,8 @@ func pinApproval(p *pendingApproval, exeReal, cwdReal string, dev, ino uint64) (
 	}
 	p.ExeFile = f
 	p.ExeDev, p.ExeIno = pdev, pino
-	cf, err := os.OpenFile(cwdReal, os.O_RDONLY|syscall.O_DIRECTORY, 0) // O_CLOEXEC
-	if err != nil {
-		p.closePins()
-		return "cwd_invalid", cwdReal
-	}
-	cdev, cino, ok := fdIdentity(cf)
+	cf, cdev, cino, ok := pinDir(cwdReal)
 	if !ok {
-		cf.Close()
 		p.closePins()
 		return "cwd_invalid", cwdReal
 	}
@@ -83,6 +77,21 @@ func pinExe(exeReal string, dev, ino uint64) (f *os.File, pdev, pino uint64, den
 	}
 	f.Close()
 	return nil, 0, 0, "exe_changed"
+}
+
+// pinDir opens a directory read-only (O_DIRECTORY, O_CLOEXEC) and returns
+// the fd with its identity; the fd is what the child later chdirs through.
+func pinDir(path string) (*os.File, uint64, uint64, bool) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_DIRECTORY, 0)
+	if err != nil {
+		return nil, 0, 0, false
+	}
+	dev, ino, ok := fdIdentity(f)
+	if !ok {
+		f.Close()
+		return nil, 0, 0, false
+	}
+	return f, dev, ino, true
 }
 
 func fdIdentity(f *os.File) (uint64, uint64, bool) {

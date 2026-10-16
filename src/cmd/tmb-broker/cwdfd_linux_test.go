@@ -9,6 +9,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -149,3 +150,41 @@ func TestCwdPinClosedOnEveryOutcome(t *testing.T) {
 func dirPinFds(path string) int { return exePinFds(path) }
 
 func waitDirPinsClosed(path string, d time.Duration) bool { return waitPinsClosed(path, d) }
+
+// A cwd that is not a directory by the time it is pinned fails closed, and
+// a pending approval without a held fd chdirs by path.
+func TestPinDirFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, _, _, ok := pinDir(file); ok {
+		t.Errorf("pinDir on a regular file must fail")
+	}
+	if _, _, _, ok := pinDir(filepath.Join(dir, "missing")); ok {
+		t.Errorf("pinDir on a missing path must fail")
+	}
+	exe := busyboxApplet(t, dir, "echo")
+	p := &pendingApproval{}
+	if code, _ := pinApproval(p, exe, file, 0, 0); code != "exe_changed" && code != "cwd_invalid" {
+		t.Errorf("pinApproval with a file as cwd: code %q, want a denial", code)
+	}
+	if p.ExeFile != nil || p.CwdFile != nil {
+		t.Errorf("failed pin left fds open")
+	}
+	st, err := os.Stat(exe)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	sys := st.Sys().(*syscall.Stat_t)
+	if code, _ := pinApproval(p, exe, file, uint64(sys.Dev), uint64(sys.Ino)); code != "cwd_invalid" {
+		t.Errorf("pinApproval with a file as cwd: code %q, want cwd_invalid", code)
+	}
+	if p.ExeFile != nil || p.CwdFile != nil {
+		t.Errorf("cwd_invalid left fds open")
+	}
+	if target, viaFd := (&pendingApproval{}).cwdTarget("/srv/x"); target != "/srv/x" || viaFd {
+		t.Errorf("cwdTarget without a held fd = %q %v, want the path", target, viaFd)
+	}
+}
