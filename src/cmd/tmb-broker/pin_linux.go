@@ -23,6 +23,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"syscall"
 )
 
@@ -123,4 +124,21 @@ func (p *pendingApproval) execTarget() (string, bool) {
 		return p.ExePath, false
 	}
 	return fmt.Sprintf("/proc/self/fd/%d", p.ExeFile.Fd()), true
+}
+
+// closeOnExecInherited marks every descriptor above stderr close-on-exec, so
+// the child ends with only the fds os/exec sets up (0, 1, 2). Go opens its
+// own descriptors O_CLOEXEC; this covers descriptors the broker inherited
+// from whatever started it. Failing to enumerate them denies the exec.
+func closeOnExecInherited() error {
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		return fmt.Errorf("enumerate inherited fds: %w", err)
+	}
+	for _, e := range entries {
+		if fd, err := strconv.Atoi(e.Name()); err == nil && fd > 2 {
+			syscall.CloseOnExec(fd)
+		}
+	}
+	return nil
 }
