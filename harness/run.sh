@@ -551,6 +551,29 @@ if docker exec "$HOST" grep '"event":"exec_start"' /var/log/tmb/broker.log | gre
 state_dump
 
 # -----------------------------------------------------------------------------
+log "SCENARIO N21: claim-file GC at start removes expired files, keeps replay protection"
+# Every claim file carries expires_at = creation + TTL + 24h. The harness
+# plants one file already expired and one far in the future, restarts the
+# broker, and checks the start-up pass removed exactly the expired one while
+# a token redeemed just before the restart is still refused.
+cat >"$TD/n21.json" <<'EOF'
+{"type":"exec","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"n21-replay-nonce-0021"}
+EOF
+run_client_json tmb debug raw "$TD/n21.json"
+assert_rc "N21: fresh request runs, exit 0" 0
+if docker exec "$HOST" sh -c 'grep -l "\"expires_at\"" /var/lib/tmb-proto/claims/*.claim | head -1 | grep -q .'; then ok "N21: claim files carry expires_at"; else bad "N21: claim files lack expires_at"; fi
+docker exec "$HOST" sh -c 'echo "{\"kind\":\"token\",\"expires_at\":1}" >/var/lib/tmb-proto/claims/n21-expired.claim && echo "{\"kind\":\"token\",\"expires_at\":4102444800}" >/var/lib/tmb-proto/claims/n21-future.claim'
+stop_broker
+start_broker mock-approve 10
+host_absent "N21: expired claim file removed at start" /var/lib/tmb-proto/claims/n21-expired.claim
+if docker exec "$HOST" test -e /var/lib/tmb-proto/claims/n21-future.claim; then ok "N21: unexpired claim file kept"; else bad "N21: unexpired claim file removed"; fi
+if docker exec "$HOST" sh -c 'grep "\"event\":\"claim_gc\"" /var/log/tmb/broker.log | tail -1 | grep -q "\"removed\":1"'; then ok "N21: JSONL claim_gc removed=1"; else bad "N21: JSONL claim_gc removed=1 missing"; fi
+run_client_json tmb debug raw "$TD/n21.json"
+assert_rc      "N21: replay of the redeemed token after restart -> exit 125" 125
+assert_err_has "N21: deny reason token_consumed_replay" "token_consumed_replay"
+state_dump
+
+# -----------------------------------------------------------------------------
 log "SCENARIO N3a: mock-deny -> deny, nothing runs"
 stop_broker
 start_broker mock-deny "$TTL"

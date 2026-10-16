@@ -253,6 +253,36 @@
     {
       "scanner": "gosec",
       "rule": "G304",
+      "location": "src/cmd/tmb-broker/store.go",
+      "match": "b, err := os.ReadFile(path)",
+      "reason": "GC reads claim files the broker listed in its own state directory; names come from ReadDir, not from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/gc_test.go",
+      "match": "os.ReadFile(logPath)",
+      "reason": "test reads the broker log it created under t.TempDir()",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G302",
+      "location": "src/cmd/tmb-broker/gc_test.go",
+      "match": "os.Chmod(s.dir, 0o",
+      "reason": "test makes its own t.TempDir() claim directory read-only and back to provoke a remove failure",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
       "location": "src/cmd/tmb-broker/pin_linux_test.go",
       "match": "os.ReadFile(bb)",
       "reason": "test fixture under t.TempDir(): path built by the test itself",

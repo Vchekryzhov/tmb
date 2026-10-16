@@ -49,11 +49,12 @@ func main() {
 	}
 	defer log.Close()
 
-	claims, err := NewClaimStore(cfg.StateDir)
+	claims, err := NewClaimStore(cfg.StateDir, ttl)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmb-broker: claim store: %v\n", err)
 		os.Exit(1)
 	}
+	startClaimGC(claims, log, claimGCInterval, nil) // before any socket opens
 
 	// socket dir: root:tmb-gid 0755 so unprivileged clients can traverse
 	if err := os.MkdirAll(cfg.SocketPath[:lastSlash(cfg.SocketPath)], 0o755); err != nil {

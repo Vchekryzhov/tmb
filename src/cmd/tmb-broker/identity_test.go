@@ -20,7 +20,7 @@ func newTestBroker(t *testing.T) *Broker {
 	if err != nil {
 		t.Fatalf("logger: %v", err)
 	}
-	claims, err := NewClaimStore(t.TempDir())
+	claims, err := NewClaimStore(t.TempDir(), time.Minute)
 	if err != nil {
 		t.Fatalf("claim store: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestDenyRequesterNotAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("logger: %v", err)
 	}
-	claims, err := NewClaimStore(dir)
+	claims, err := NewClaimStore(dir, time.Minute)
 	if err != nil {
 		t.Fatalf("claim store: %v", err)
 	}

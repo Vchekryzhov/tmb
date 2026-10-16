@@ -50,6 +50,9 @@
      "scenarios": ["N19", "N20"]},
     {"id": "SEC-19", "title": "the approved cwd directory is held by fd until exec and the child chdirs through it; a swap after the last check does not move the command; the fd closes on every outcome",
      "tests": ["tmb-poc/cmd/tmb-broker.TestExecChdirsThroughHeldCwdDespiteSwapAfterCheck", "tmb-poc/cmd/tmb-broker.TestCwdPinClosedOnEveryOutcome"],
-     "scenarios": ["N22"]}
+     "scenarios": ["N22"]},
+    {"id": "SEC-20", "title": "claim files expire at TTL + 24h and are collected at start and hourly; unreadable files stay; replay inside the TTL is still denied after restart",
+     "tests": ["tmb-poc/cmd/tmb-broker.TestClaimFilesCarryExpiresAt", "tmb-poc/cmd/tmb-broker.TestClaimGCRemovesOnlyExpired", "tmb-poc/cmd/tmb-broker.TestClaimGCKeepsLiveReplayProtection", "tmb-poc/cmd/tmb-broker.TestClaimGCLoopRepeats"],
+     "scenarios": ["N21", "N8"]}
   ]
 }
