@@ -42,16 +42,21 @@ type pendingApproval struct {
 	CwdReal   string
 	CwdDev    uint64 // cwd directory identity pinned at approval (linux)
 	CwdIno    uint64
+	CwdFile   *os.File // O_DIRECTORY fd held on CwdDev/CwdIno until exec (linux); nil once closed
 	CwdPinned bool
 	Requester RequesterID
 }
 
-// closePins releases the pinned exe fd (idempotent). Every path that drops
-// or finishes a pending approval calls this, so pins never leak.
+// closePins releases the pinned exe and cwd fds (idempotent). Every path
+// that drops or finishes a pending approval calls this, so pins never leak.
 func (p *pendingApproval) closePins() {
 	if p.ExeFile != nil {
 		p.ExeFile.Close()
 		p.ExeFile = nil
+	}
+	if p.CwdFile != nil {
+		p.CwdFile.Close()
+		p.CwdFile = nil
 	}
 }
 

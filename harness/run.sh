@@ -519,6 +519,38 @@ start_broker mock-approve 10
 state_dump
 
 # -----------------------------------------------------------------------------
+log "SCENARIO N22: held cwd fd from approval to exec; rename before claim -> cwd_changed"
+# The approval holds an O_DIRECTORY fd on the cwd and the child chdirs
+# through /proc/self/fd/N. A rename between approve and claim is still
+# caught by the identity check (as N12); the window after that check is
+# covered by TestExecChdirsThroughHeldCwdDespiteSwapAfterCheck.
+docker exec "$HOST" sh -c 'rm -rf /tmp/n22 /tmp/n22-old && mkdir /tmp/n22'
+cat >"$TD/n22.json" <<'EOF'
+{"type":"approve","executable":"/usr/bin/touch","argv":["/usr/bin/touch","marker"],"cwd":"/tmp/n22","uid":0,"nonce":"n22-nonce-fixed-000022"}
+EOF
+run_client_json tmb debug approve "$TD/n22.json"
+assert_rc "N22: approve phase ok" 0
+T22=$(token_of)
+docker exec "$HOST" sh -c 'mv /tmp/n22 /tmp/n22-old && mkdir /tmp/n22'
+run_client_json tmb debug claim --token "$T22" "$TD/n22.json"
+assert_rc      "N22: claim after cwd rename -> exit 125" 125
+assert_err_has "N22: deny reason cwd_changed" "cwd_changed"
+host_absent    "N22: no marker in the renamed directory" /tmp/n22-old/marker
+host_absent    "N22: no marker in the new directory" /tmp/n22/marker
+
+echo "-- positive control: same request, cwd untouched"
+cat >"$TD/n22b.json" <<'EOF'
+{"type":"approve","executable":"/usr/bin/touch","argv":["/usr/bin/touch","marker"],"cwd":"/tmp/n22","uid":0,"nonce":"n22-nonce-fixed-000023"}
+EOF
+run_client_json tmb debug approve "$TD/n22b.json"
+T22B=$(token_of)
+run_client_json tmb debug claim --token "$T22B" "$TD/n22b.json"
+assert_rc "N22: claim with intact cwd -> exit 0" 0
+if docker exec "$HOST" test -e /tmp/n22/marker; then ok "N22: marker created in /tmp/n22"; else bad "N22: marker missing in /tmp/n22"; fi
+if docker exec "$HOST" grep '"event":"exec_start"' /var/log/tmb/broker.log | grep -q '"cwd_via_fd":true'; then ok "N22: exec_start records cwd_via_fd=true"; else bad "N22: exec_start lacks cwd_via_fd=true"; fi
+state_dump
+
+# -----------------------------------------------------------------------------
 log "SCENARIO N3a: mock-deny -> deny, nothing runs"
 stop_broker
 start_broker mock-deny "$TTL"

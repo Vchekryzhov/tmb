@@ -233,6 +233,26 @@
     {
       "scanner": "gosec",
       "rule": "G304",
+      "location": "src/cmd/tmb-broker/pin_linux.go",
+      "match": "os.OpenFile(path, os.O_RDONLY|syscall.O_DIRECTORY, 0)",
+      "reason": "pinDir gets the validated realpath of the approved cwd inside allowed_cwd_roots; holding it open read-only is the pinning primitive",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/cwdfd_linux_test.go",
+      "match": "os.ReadFile(logPath)",
+      "reason": "test reads the broker log it created under t.TempDir()",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
       "location": "src/cmd/tmb-broker/pin_linux_test.go",
       "match": "os.ReadFile(bb)",
       "reason": "test fixture under t.TempDir(): path built by the test itself",

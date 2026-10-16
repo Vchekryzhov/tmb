@@ -15,9 +15,11 @@ package main
 // child still ends with only fds 0,1,2. Verified empirically by
 // TestExecChildFdHygieneViaPinnedExec and harness scenario N11.
 //
-// The cwd is pinned by directory identity (dev/ino via O_DIRECTORY fd at
-// approval); at exec the path is reopened and re-fstat'ed, and a mismatch
-// (same path, new inode) denies with cwd_changed instead of silently
+// The cwd is pinned the same way: an O_DIRECTORY fd opened at approval is
+// held until exec, and the child chdirs to /proc/self/fd/<N>, so it starts
+// in EXACTLY the approved directory even if the path is swapped after the
+// last check. The path is still reopened and re-fstat'ed at claim time, and
+// a mismatch (same path, new inode) denies with cwd_changed instead of
 // running the command in a directory the human did not approve.
 
 import (
@@ -38,11 +40,12 @@ func pinApproval(p *pendingApproval, exeReal, cwdReal string, dev, ino uint64) (
 	}
 	p.ExeFile = f
 	p.ExeDev, p.ExeIno = pdev, pino
-	cdev, cino, ok := cwdIdentity(cwdReal)
+	cf, cdev, cino, ok := pinDir(cwdReal)
 	if !ok {
 		p.closePins()
 		return "cwd_invalid", cwdReal
 	}
+	p.CwdFile = cf
 	p.CwdDev, p.CwdIno, p.CwdPinned = cdev, cino, true
 	return "", ""
 }
@@ -76,25 +79,24 @@ func pinExe(exeReal string, dev, ino uint64) (f *os.File, pdev, pino uint64, den
 	return nil, 0, 0, "exe_changed"
 }
 
+// pinDir opens a directory read-only (O_DIRECTORY, O_CLOEXEC) and returns
+// the fd with its identity; the fd is what the child later chdirs through.
+func pinDir(path string) (*os.File, uint64, uint64, bool) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_DIRECTORY, 0)
+	if err != nil {
+		return nil, 0, 0, false
+	}
+	dev, ino, ok := fdIdentity(f)
+	if !ok {
+		f.Close()
+		return nil, 0, 0, false
+	}
+	return f, dev, ino, true
+}
+
 func fdIdentity(f *os.File) (uint64, uint64, bool) {
 	var st syscall.Stat_t
 	if err := syscall.Fstat(int(f.Fd()), &st); err != nil {
-		return 0, 0, false
-	}
-	return uint64(st.Dev), uint64(st.Ino), true
-}
-
-// cwdIdentity records the directory identity of the approved cwd via an
-// O_DIRECTORY fd; the fd itself is closed immediately - only the identity
-// is kept for re-verification at exec time.
-func cwdIdentity(cwdReal string) (uint64, uint64, bool) {
-	fd, err := syscall.Open(cwdReal, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
-	if err != nil {
-		return 0, 0, false
-	}
-	defer syscall.Close(fd)
-	var st syscall.Stat_t
-	if err := syscall.Fstat(fd, &st); err != nil {
 		return 0, 0, false
 	}
 	return uint64(st.Dev), uint64(st.Ino), true
@@ -124,6 +126,16 @@ func (p *pendingApproval) execTarget() (string, bool) {
 		return p.ExePath, false
 	}
 	return fmt.Sprintf("/proc/self/fd/%d", p.ExeFile.Fd()), true
+}
+
+// cwdTarget returns the directory the child chdirs to: the held directory
+// via /proc/self/fd/N (inherited across fork, resolved by chdir before
+// execve), or the plain resolved path when no fd is pinned.
+func (p *pendingApproval) cwdTarget(cwdReal string) (string, bool) {
+	if p.CwdFile == nil {
+		return cwdReal, false
+	}
+	return fmt.Sprintf("/proc/self/fd/%d", p.CwdFile.Fd()), true
 }
 
 // closeOnExecInherited marks every descriptor above stderr close-on-exec, so
