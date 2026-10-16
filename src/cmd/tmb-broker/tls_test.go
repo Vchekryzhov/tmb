@@ -69,6 +69,16 @@ func writePEM(t *testing.T, path, blockType string, der []byte) string {
 // (certFile, keyFile, certDER).
 func (ca *testCA) issue(t *testing.T, dir, name string, eku []x509.ExtKeyUsage, dnsNames []string) (string, string, []byte) {
 	t.Helper()
+	return ca.issueWith(t, dir, name, func(c *x509.Certificate) {
+		c.ExtKeyUsage = eku
+		c.DNSNames = dnsNames
+	})
+}
+
+// issueWith is issue with full control over the leaf template: edit sees a
+// one-hour certificate for name and may change any field.
+func (ca *testCA) issueWith(t *testing.T, dir, name string, edit func(*x509.Certificate)) (string, string, []byte) {
+	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatalf("ecdsa: %v", err)
@@ -83,9 +93,8 @@ func (ca *testCA) issue(t *testing.T, dir, name string, eku []x509.ExtKeyUsage, 
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  eku,
-		DNSNames:     dnsNames,
 	}
+	edit(tmpl)
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, key.Public(), ca.key)
 	if err != nil {
 		t.Fatalf("cert %s: %v", name, err)
