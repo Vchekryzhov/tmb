@@ -94,7 +94,7 @@ Mac-брокер собирается только как часть тесто�
 [![tool-hadolint](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-hadolint.json)](../ci/tools.lock)
 
 - `tool-*.json` выводятся из пинов (`.go-version`, `ci/tools.lock`, `ci/tools/*/go.mod`) командой `ci/run.sh badges tools`. `lint/pins` падает, если файлы отстали от пинов: после обновления пина команду нужно повторить и закоммитить результат.
-- `coverage`, `image-vulns`, `gosec`, `govulncheck`, `secrets` и `ci-results` берутся из результатов одного прогона на main: `gh run download <run-id> -D out/ci/run && ci/run.sh badges results out/ci/run`. Бейдж `ci-results` показывает SHA и номер прогона, из которого взяты цифры, поэтому устаревание видно. Локальный `ci/run.sh local` не даёт результатов `images/*`, для них нужен прогон Actions.
+- `coverage`, `image-vulns`, `gosec`, `govulncheck`, `secrets` и `ci-results` обновляет job `badges`: после зелёного `ci-gate` на push в main она собирает результаты всех jobs, перегенерирует оба набора и коммитит `docs/badges` в main от имени `github-actions[bot]`. Это единственная job с `contents: write`; push токеном GITHUB_TOKEN не запускает workflow, поэтому цикла нет. Бейдж `ci-results` показывает SHA и номер прогона, из которого взяты цифры. Вручную то же самое: `gh run download <run-id> -D out/ci/run && ci/run.sh badges results out/ci/run`.
 
 ## Исключения
 
@@ -108,7 +108,7 @@ Gate отвергает истёкшие и широкие записи (мас�
 
 ## Безопасность CI
 
-- `permissions: {}` на уровне workflow, `contents: read` у jobs; checkout без сохранённых credentials. Секретов, OIDC и write-токенов нет. `pull_request_target` и `workflow_run` не используются.
+- `permissions: {}` на уровне workflow, `contents: read` у jobs; checkout без сохранённых credentials. Секретов и OIDC нет. Единственный write-токен у job `badges` (push в main после зелёного gate): она коммитит только `docs/badges`, в PR не запускается и артефактов не загружает. `pull_request_target` и `workflow_run` не используются.
 - Actions закреплены полным SHA. Инструменты: Go-утилиты собираются из отдельных модулей `ci/tools/<name>` с проверкой go.sum, бинарные проверяются по SHA-256 из [ci/tools.lock](../ci/tools.lock). Базовые образы закреплены digest.
 - Кеши отключены (`cache: false`, свежий кеш Trivy). Данные PR попадают в shell только через переменные окружения.
 - Стенды работают на одноразовых GitHub-hosted VM. Ключи CA и per-run ключи остаются во временных каталогах стенда. Отчёт с PEM-ключом удаляется до загрузки, проверка становится ERROR.
