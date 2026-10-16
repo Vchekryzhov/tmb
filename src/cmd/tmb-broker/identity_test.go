@@ -217,6 +217,29 @@ func TestDenyRequesterNotAllowed(t *testing.T) {
 	}
 }
 
+// A real client writes its request before reading the answer. The deny path
+// must consume that request before replying and closing; otherwise a fast
+// client's write races the close (EPIPE on unix sockets) and a clean denial
+// surfaces as a transport error (harness N7 on GitHub-hosted Linux).
+func TestDenyRequesterNotAllowedAfterClientWrites(t *testing.T) {
+	b := newTestBroker(t)
+	server, client := net.Pipe() // synchronous: an unread write blocks
+	go func() { defer server.Close(); b.denyRequesterNotAllowed(server, UIDRequester(1000, 7)) }()
+	defer client.Close()
+	_ = client.SetDeadline(time.Now().Add(2 * time.Second))
+	req := &proto.Request{Type: "exec", Executable: "/usr/bin/id", Argv: []string{"/usr/bin/id"}, Cwd: "/tmp", Nonce: "n7"}
+	if err := proto.WriteFrame(client, req); err != nil {
+		t.Fatalf("client write before reading the answer: %v", err)
+	}
+	f, err := proto.ReadFrame(client)
+	if err != nil {
+		t.Fatalf("read frame: %v", err)
+	}
+	if f.Type != "denied" || f.Reason != "requester_not_allowed" {
+		t.Fatalf("frame = %+v, want denied requester_not_allowed", f)
+	}
+}
+
 // --- approval bound to requester identity ------------------------------------
 
 // A claim presented by a DIFFERENT allowlisted identity must be denied with
