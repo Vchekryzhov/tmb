@@ -74,6 +74,11 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 		return
 	}
 
+	if err := closeOnExecInherited(); err != nil {
+		b.deny(req, id, "exec_error", err.Error(), conn)
+		return
+	}
+
 	evStart := id.LogFields()
 	evStart["token"] = tokenID
 	evStart["executable"] = p.ExePath

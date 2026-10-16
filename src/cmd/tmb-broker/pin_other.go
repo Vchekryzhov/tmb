@@ -16,3 +16,5 @@ func pinApproval(p *pendingApproval, exeReal, cwdReal string, dev, ino uint64) (
 func cwdStillPinned(cwdReal string, dev, ino uint64) bool { return true }
 
 func (p *pendingApproval) execTarget() (string, bool) { return p.ExePath, false }
+
+func closeOnExecInherited() error { return nil }
