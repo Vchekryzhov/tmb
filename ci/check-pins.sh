@@ -20,7 +20,14 @@ for f in "$ROOT"/harness/images/Dockerfile.*; do
     esac
   done < <(sed -n 's/^FROM[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$f")
 done
-for wf in "$ROOT"/.github/workflows/*.yml; do
+for s in "$ROOT"/harness/*.sh; do
+  while read -r img; do
+    v=${img#golang:}; v=${v%%-*}
+    [ "$v" = "$want" ] || { echo "$(basename "$s"): $img does not match .go-version $want"; rc=1; }
+    case "$img" in *@sha256:*) ;; *) echo "$(basename "$s"): $img is not pinned by digest"; rc=1 ;; esac
+  done < <(grep -oE 'golang:[^[:space:]"]+' "$s" || true)
+done
+for wf in "$ROOT"/.github/workflows/*.yml "$ROOT"/.github/actions/*/action.yml; do
   while IFS=: read -r ln _ v; do
     v=$(echo "$v" | tr -d " \"'")
     [ "$v" = "$want" ] || { echo "$(basename "$wf"):$ln GO_PRIMARY $v != $want"; rc=1; }

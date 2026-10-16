@@ -332,6 +332,7 @@ func cmdCoverage(e *env, args []string) int {
 	headMeta := fs.String("head-meta", "", "head measurement metadata")
 	baseMeta := fs.String("base-meta", "", "base measurement metadata")
 	bootstrap := fs.String("bootstrap", "", "reason the base has no product (first baseline)")
+	skipCompare := fs.Bool("skip-compare", false, "the caller already recorded coverage/compare (base unusable)")
 	diffPath := fs.String("diff", "", "git diff -U0 -M base...head")
 	module := fs.String("module", "tmb-poc=src", "importpath=repodir")
 	policyPath := fs.String("policy", "ci/coverage-policy.json", "coverage policy")
@@ -396,6 +397,7 @@ func cmdCoverage(e *env, args []string) int {
 
 	// compare
 	switch missing := head.MissingPackages(pkgs); {
+	case *skipCompare:
 	case len(missing) > 0:
 		note(e.emit(cCompare, result.Error, "packages absent from the profile (excluded or not measured): "+strings.Join(missing, ", ")))
 	case *bootstrap != "":

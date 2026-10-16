@@ -114,6 +114,9 @@
         "check": "images/vulns"
       },
       {
+        "check": "images/sbom"
+      },
+      {
         "check": "images/config"
       },
       {
@@ -251,6 +254,9 @@
       },
       {
         "check": "images/vulns"
+      },
+      {
+        "check": "images/sbom"
       },
       {
         "check": "images/config"
@@ -392,6 +398,9 @@
         "check": "images/vulns"
       },
       {
+        "check": "images/sbom"
+      },
+      {
         "check": "images/config"
       },
       {
@@ -529,6 +538,9 @@
       },
       {
         "check": "images/vulns"
+      },
+      {
+        "check": "images/sbom"
       },
       {
         "check": "images/config"
@@ -680,6 +692,9 @@
         "check": "images/vulns"
       },
       {
+        "check": "images/sbom"
+      },
+      {
         "check": "images/config"
       },
       {
@@ -716,6 +731,9 @@
   },
   "openshell": {
     "checks": [
+      {
+        "check": "openshell/runner-exit"
+      },
       {
         "check": "openshell/n-series"
       },

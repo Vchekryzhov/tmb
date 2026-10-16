@@ -13,8 +13,8 @@ mkdir -p "$OUT"
 # id | file (relative to src/) | exact original | replacement | property
 MUTANTS=(
   "M1-client-cert|cmd/tmb-broker/tls.go|ClientAuth:   tls.RequireAndVerifyClientCert,|ClientAuth:   tls.RequestClientCert,|mTLS listener stops verifying client certificates"
-  "M2-allowlist-uid|cmd/tmb-broker/broker.go|if u == id.UID {|if true {|any uid passes the requester allowlist"
-  "M3-allowlist-cert|cmd/tmb-broker/broker.go|if fp == id.FP {|if true {|any certificate fingerprint passes the allowlist"
+  "M2-allowlist-uid|cmd/tmb-broker/broker.go|if u == id.UID {|if u == id.UID \|\| true {|any uid passes the requester allowlist"
+  "M3-allowlist-cert|cmd/tmb-broker/broker.go|if fp == id.FP {|if fp == id.FP \|\| true {|any certificate fingerprint passes the allowlist"
   "M4-requester-binding|cmd/tmb-broker/broker.go|has \&\& !p.Requester.Equal(id) {|has \&\& false {|another requester may redeem an approval"
   "M5-request-binding|cmd/tmb-broker/broker.go|if req.ClaimToken != tokenID {|if false {|token no longer binds to the exact request"
   "M6-one-shot|cmd/tmb-broker/store.go|os.O_CREATE\|os.O_EXCL\|os.O_WRONLY, 0o600|os.O_CREATE\|os.O_TRUNC\|os.O_WRONLY, 0o600|claim file no longer exclusive: replay possible"
@@ -35,7 +35,11 @@ for m in "${MUTANTS[@]}"; do
   fi
   ORIG="$orig" REPL="$repl" python3 -c 'import os,sys
 p=sys.argv[1]; s=open(p).read(); open(p,"w").write(s.replace(os.environ["ORIG"], os.environ["REPL"], 1))' "$work/src/$file"
-  if (cd "$work/src" && go vet ./... >/dev/null 2>&1 && go test -count=1 -timeout=5m ./... >"$OUT/$id.log" 2>&1); then
+  if ! (cd "$work/src" && go build ./... && go test -count=1 -run '^$' ./... ) >"$OUT/$id.build.log" 2>&1; then
+    echo "$id: ERROR mutant does not compile; a build failure is not a kill (see $id.build.log)" >>"$OUT/summary.txt"
+    errors=1; rm -rf "$work"; continue
+  fi
+  if (cd "$work/src" && go test -count=1 -timeout=5m ./... >"$OUT/$id.log" 2>&1); then
     echo "$id: SURVIVED - $what ($file). No product test noticed; GAP in https://github.com/Vchekryzhov/tmb/issues/15" >>"$OUT/summary.txt"
     survived=$((survived + 1))
   else

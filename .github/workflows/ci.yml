@@ -16,7 +16,8 @@ permissions: {}
 
 concurrency:
   # A new commit cancels the stale PR run; trusted events never cancel each other.
-  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  # (a pending trusted run would otherwise be replaced by the next one in its group)
+  group: ci-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -24,9 +25,11 @@ env:
   TMB_CI_SHA: ${{ github.sha }}
   TMB_CI_RUN_ID: ${{ github.run_id }}
   # base for coverage and secrets: the target branch for PRs, the previous main otherwise
-  TMB_CI_BASE: ${{ github.event_name == 'pull_request' && 'origin/main' || github.event_name == 'merge_group' && 'origin/main' || 'HEAD^' }}
+  TMB_CI_BASE: ${{ github.event_name == 'pull_request' && 'origin/main' || github.event_name == 'merge_group' && github.event.merge_group.base_sha || 'HEAD^' }}
   NIGHTLY: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
-  RETENTION: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 30 || 14 }}
+  # diagnostic artifacts 14 days; reports of scheduled security audits 30 days
+  RETENTION: 14
+  AUDIT_RETENTION: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 30 || 14 }}
 
 jobs:
   lint:
@@ -173,7 +176,7 @@ jobs:
         with:
           name: reports-security
           path: out/ci/reports
-          retention-days: ${{ env.RETENTION }}
+          retention-days: ${{ env.AUDIT_RETENTION }}
           overwrite: true
 
   build:
@@ -261,13 +264,13 @@ jobs:
         with:
           name: reports-secrets
           path: out/ci/reports
-          retention-days: ${{ env.RETENTION }}
+          retention-days: ${{ env.AUDIT_RETENTION }}
           overwrite: true
 
   harness:
     # disposable GitHub-hosted VM: real Linux SO_PEERCRED, Docker, nothing persists
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 22
     permissions:
       contents: read
     steps:
@@ -318,14 +321,14 @@ jobs:
         with:
           name: reports-images
           path: out/ci/reports/images
-          retention-days: ${{ env.RETENTION }}
+          retention-days: ${{ env.AUDIT_RETENTION }}
           overwrite: true
 
   manifest:
     needs: [test, harness]
     if: always()
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 3
     permissions:
       contents: read
     steps:
@@ -397,7 +400,7 @@ jobs:
     needs: [lint, test, ci-selftest, coverage, security, build, fuzz, secrets, harness, images, manifest, nightly]
     if: always()
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 3
     permissions:
       contents: read
     steps:
@@ -407,11 +410,11 @@ jobs:
       - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
         with:
           tools: "false"
+      # one directory per artifact: a duplicated check id stays visible to the gate
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: results-*
           path: out/ci/results
-          merge-multiple: true
       - name: ci-gate
         env:
           TMB_CI_NEEDS: ${{ toJSON(needs) }}

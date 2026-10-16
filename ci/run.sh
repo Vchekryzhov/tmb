@@ -227,11 +227,16 @@ cmd_coverage() {
     log "base profile at merge-base $base"
     local WT; WT=$(mktemp -d)
     git -C "$ROOT" worktree add --detach "$WT/base" "$base" >/dev/null 2>&1
-    if profile "$WT/base" "$C/base.cov" "$C/base.meta.json"; then :; else
-      echo "base tests failed; comparison uses what the base profile recorded" >>"$C/base.cov.log"
-    fi
+    local base_ok=1
+    profile "$WT/base" "$C/base.cov" "$C/base.meta.json" || base_ok=0
     git -C "$ROOT" worktree remove --force "$WT/base" >/dev/null 2>&1; rm -rf "$WT"
-    args+=(-base "$C/base.cov" -base-meta "$C/base.meta.json")
+    if [ $base_ok -eq 0 ]; then
+      # a partial base profile would weaken "no decrease"; refuse to compare
+      result coverage/compare ERROR "base tests failed at $base; no comparable base" "$C/base.cov.log"
+      args+=(-skip-compare)
+    else
+      args+=(-base "$C/base.cov" -base-meta "$C/base.meta.json")
+    fi
   else
     args+=(-bootstrap "merge-base $base has no product module (src/go.mod)")
   fi
@@ -242,7 +247,7 @@ cmd_security() {
   need_tmbci
   local S=$REPORTS/security
   mkdir -p "$S"
-  log "gosec (all packages incl. tests, linux and darwin build tags)"
+  log "gosec (all packages incl. tests, build tags of the host GOOS)"
   (cd "$SRC" && gosec -quiet -tests -fmt json -out "$S/gosec.json" -no-fail ./...) >"$S/gosec.log" 2>&1
   local rc=$?
   if [ $rc -ne 0 ]; then result security/gosec ERROR "gosec rc=$rc" "$S/gosec.log"
@@ -326,6 +331,7 @@ cmd_fuzz() {
   fi
   # corpus runs as part of every go test; this is the bounded mutation phase
   [ $((per * n)) -gt "$total" ] && per=$((total / n))
+  [ "$per" -ge 1 ] || { result "fuzz/$mode" ERROR "$n targets do not fit the ${total}s budget"; return; }
   local failed=0
   : >"$F/fuzz.log"
   while read -r pkg name; do
@@ -334,7 +340,7 @@ cmd_fuzz() {
   done <"$F/targets.txt"
   # failing inputs land in testdata/fuzz/<Target>/; collect them for the artifact
   (cd "$SRC" && git ls-files --others --exclude-standard -- '**/testdata/fuzz/**') >"$F/new-corpus.txt"
-  if [ -s "$F/new-corpus.txt" ]; then mkdir -p "$F/corpus"; (cd "$SRC" && xargs -I{} cp --parents {} "$F/corpus/" <"$F/new-corpus.txt" 2>/dev/null || true); fi
+  if [ -s "$F/new-corpus.txt" ]; then mkdir -p "$F/corpus"; (cd "$SRC" && tar -cf - -T "$F/new-corpus.txt" | tar -xf - -C "$F/corpus"); fi
   if [ $failed -gt 0 ]; then result "fuzz/$mode" FAIL "$failed target(s) found failing inputs (artifact fuzz-corpus)" "$F/new-corpus.txt"
   else result "fuzz/$mode" PASS "$n target(s), ${per}s each"; fi
 }
@@ -414,7 +420,7 @@ cmd_images() {
   need_tmbci
   local I=$REPORTS/images
   mkdir -p "$I"
-  docker info >/dev/null 2>&1 || { for c in images/build images/trivy-db images/vulns images/config; do result $c ERROR "docker unavailable"; done; return; }
+  docker info >/dev/null 2>&1 || { for c in images/build images/trivy-db images/vulns images/sbom images/config; do result $c ERROR "docker unavailable"; done; return; }
   local tag=${TMB_CI_RUN_ID}-${TMB_CI_SHA:0:12}
   local rc=0
   for img in host sandbox; do
@@ -422,7 +428,7 @@ cmd_images() {
   done
   if [ $rc -ne 0 ]; then
     result images/build FAIL "image build failed" "$I/build.log"
-    for c in images/trivy-db images/vulns; do result $c NOT_RUN "images did not build"; done
+    for c in images/trivy-db images/vulns images/sbom; do result $c NOT_RUN "images did not build"; done
   else
     result images/build PASS "tmb-ci/host and tmb-ci/sandbox built"
     export TRIVY_CACHE_DIR; TRIVY_CACHE_DIR=$(mktemp -d)   # fresh DB every run, never a stale cache
@@ -430,11 +436,12 @@ cmd_images() {
     trivy version --format json >"$I/trivy-version.json" 2>>"$I/trivy-db.log"
     if "$BIN/tmbci" trivy-db -check images/trivy-db -version-json "$I/trivy-version.json" -out "$RESULTS"; then
       : >"$I/vulns.log"
-      local worst=PASS
+      local worst=PASS sbom=0
       for img in host sandbox; do
         trivy image --skip-db-update --no-progress --scanners vuln --format json -o "$I/trivy-$img.json" "tmb-ci/$img:$tag" >>"$I/vulns.log" 2>&1 || worst=ERROR
-        trivy image --skip-db-update --no-progress --scanners vuln,license --format cyclonedx -o "$I/sbom-$img.cdx.json" "tmb-ci/$img:$tag" >>"$I/vulns.log" 2>&1
-        trivy image --skip-db-update --no-progress --scanners license --format table -o "$I/licenses-$img.txt" "tmb-ci/$img:$tag" >>"$I/vulns.log" 2>&1
+        trivy image --skip-db-update --no-progress --scanners vuln,license --format cyclonedx -o "$I/sbom-$img.cdx.json" "tmb-ci/$img:$tag" >>"$I/sbom.log" 2>&1 || sbom=1
+        trivy image --skip-db-update --no-progress --scanners license --format table -o "$I/licenses-$img.txt" "tmb-ci/$img:$tag" >>"$I/sbom.log" 2>&1 || sbom=1
+        [ -s "$I/sbom-$img.cdx.json" ] || sbom=1
         "$BIN/tmbci" scan -check "images/vulns-$img" -scanner trivy -report "$I/trivy-$img.json" -exceptions "$ROOT/ci/exceptions.json" \
           -tool "trivy=$(trivy --version | sed -n 's/^Version: //p')" -out "$RESULTS" >>"$I/vulns.log" || [ "$worst" = ERROR ] || worst=FAIL
       done
@@ -442,8 +449,11 @@ cmd_images() {
         PASS) result images/vulns PASS "no unexcepted HIGH/CRITICAL in host/sandbox images" ;;
         *) result images/vulns "$worst" "see images/vulns-host and images/vulns-sandbox" "$I/vulns.log" ;;
       esac
+      if [ $sbom -eq 0 ]; then result images/sbom PASS "CycloneDX SBOM and license tables for host/sandbox"
+      else result images/sbom ERROR "SBOM or license report missing" "$I/sbom.log"; fi
     else
       result images/vulns ERROR "vulnerability DB not fresh; no scan accepted"
+      result images/sbom NOT_RUN "vulnerability DB not fresh"
     fi
   fi
   if ! trivy config --no-progress --format json -o "$I/trivy-config.json" "$ROOT/harness/images" >"$I/config.log" 2>&1; then
@@ -525,6 +535,8 @@ cmd_openshell() {
   # O4 dropped/recreated prints CHECK WARN: the verifier turns it into NOT_PROVEN
   "$BIN/tmbci" harness -check openshell/rig -log "$O/openshell.log" -registry "$ROOT/ci/scenarios/openshell.txt" -rc $orc -since "$since" -out "$RESULTS"
   echo "run-all.sh rc=$rc" >>"$O/console.log"
+  if [ $rc -eq 0 ]; then result openshell/runner-exit PASS "run-all.sh exited 0"
+  else result openshell/runner-exit FAIL "run-all.sh exited $rc" "$O/console.log"; fi
   assert_no_keys "$O" openshell/artifact-hygiene && result openshell/artifact-hygiene PASS "no private key material in acceptance reports"
 }
 
