@@ -324,6 +324,10 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 	granted, reason := b.runApprovalInteraction(req, id, exeReal, dev, ino)
 	aev := id.LogFields()
 	aev["mode"] = b.mode
+	// every bench mode decides on its own; the queue (ADR 0004) puts the
+	// approver's identity here instead
+	aev["approver"] = "mode:" + b.mode
+	aev["decision"] = decision(granted)
 	aev["result"] = boolRes(granted)
 	aev["reason"] = reason
 	aev["executable"] = req.Executable
@@ -362,7 +366,6 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 // the exact request to the broker console and reads y/n from stdin; mock
 // modes are deterministic stand-ins for tests.
 func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeReal string, dev, ino uint64) (bool, string) {
-	envJ, _ := json.Marshal(req.Env)
 	switch b.mode {
 	case ModeMockApprove:
 		return true, ""
@@ -382,6 +385,8 @@ func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeR
 		fmt.Printf("  argv      : %s\n", argvJ)
 		fmt.Printf("  cwd       : %s\n", req.Cwd)
 		fmt.Printf("  run as uid: %d\n", req.UID)
+		// the environment the process will actually get, not the request's
+		envJ, _ := json.Marshal(b.buildEnv(req))
 		fmt.Printf("  env       : %s\n", envJ)
 		fmt.Printf("  nonce     : %s\n", req.Nonce)
 		fmt.Printf("Approve exactly this command? [y/N]: ")
@@ -518,6 +523,15 @@ func boolRes(b bool) string {
 		return "granted"
 	}
 	return "denied"
+}
+
+// decision is the approval event's verdict, in the words of the approver
+// protocol (approve or deny).
+func decision(granted bool) string {
+	if granted {
+		return "approve"
+	}
+	return "deny"
 }
 
 func short(s string, n int) string {

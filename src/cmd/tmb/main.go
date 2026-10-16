@@ -39,12 +39,8 @@ func main() {
 	switch os.Args[1] {
 	case "exec":
 		err = cmdExec(os.Args[2:])
-	case "approve": // debug: phase 1 only (get a token, do not execute)
-		err = cmdApprove(os.Args[2:])
-	case "claim": // debug: phase 2 only (present token, execute if accepted)
-		err = cmdClaim(os.Args[2:])
-	case "raw": // debug: send an arbitrary JSON request verbatim
-		err = cmdRaw(os.Args[2:])
+	case "debug":
+		err = cmdDebug(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -59,9 +55,9 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `tmb (PROTOTYPE client)
 usage:
   tmb exec [--root] [--cwd DIR] [--env K=V]... -- /abs/executable [args...]   full flow
-  tmb approve --json FILE|-                                                  debug: approval phase only
-  tmb claim --token TOKEN --json FILE|-                                      debug: claim phase only
-  tmb raw --json FILE|-                                                      debug: raw request verbatim
+  tmb debug approve --json FILE|-                                            debug: approval phase only
+  tmb debug claim --token TOKEN --json FILE|-                                debug: claim phase only
+  tmb debug raw --json FILE|-                                                debug: raw request verbatim
 endpoint selection (all subcommands):
   unix socket (default): --socket PATH (default %s, env TMB_SOCK)
   TLS (mTLS endpoint):   --addr HOST:PORT (env TMB_ADDR) plus --ca/--cert/--key
@@ -348,6 +344,26 @@ func cmdExec(args []string) error {
 }
 
 // --- debug subcommands ------------------------------------------------------
+
+// cmdDebug dispatches the requester protocol steps that exist for the
+// harness only: approve (phase 1), claim (phase 2) and raw (verbatim JSON).
+func cmdDebug(args []string) error {
+	if len(args) == 0 {
+		usage()
+		os.Exit(2)
+	}
+	switch args[0] {
+	case "approve": // phase 1 only (get a token, do not execute)
+		return cmdApprove(args[1:])
+	case "claim": // phase 2 only (present token, execute if accepted)
+		return cmdClaim(args[1:])
+	case "raw": // send an arbitrary JSON request verbatim
+		return cmdRaw(args[1:])
+	}
+	usage()
+	os.Exit(2)
+	return nil
+}
 
 func cmdApprove(args []string) error {
 	fs := flag.NewFlagSet("approve", flag.ExitOnError)
