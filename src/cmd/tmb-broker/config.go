@@ -28,7 +28,11 @@ type Config struct {
 	// (realpath equal to a root or below it). Empty denies every cwd.
 	AllowedCwdRoots []string `json:"allowed_cwd_roots"`
 	TokenTTLSeconds int      `json:"token_ttl_seconds"`
-	ApprovalDefault string   `json:"approval_default"`
+	ApprovalDefault string   `json:"approval_default"` // empty = queue
+	// Approver role (ADR 0004): its own unix socket, SO_PEERCRED only, and
+	// its own uid list, separate from the requester allowlist.
+	ApproverSocketPath string   `json:"approver_socket_path"`
+	ApproverUIDs       []uint32 `json:"approver_uids"`
 	// TLS listener (second listener, mTLS only). When tls_addr is set (config
 	// or -tls-addr flag), all three files must be set as well; empty
 	// tls_addr keeps the broker unix-socket-only.
@@ -55,6 +59,15 @@ func loadConfig(path string) (*Config, error) {
 	}
 	if c.PidFile == "" {
 		c.PidFile = "/var/run/tmb-broker.pid"
+	}
+	if c.ApprovalDefault == "" {
+		c.ApprovalDefault = ModeQueue
+	}
+	if c.ApproverSocketPath == "" {
+		c.ApproverSocketPath = "/run/tmb/approve.sock"
+	}
+	if c.ApproverSocketPath == c.SocketPath {
+		return nil, fmt.Errorf("config: approver_socket_path must differ from socket_path")
 	}
 	for _, k := range c.AllowedEnvKeys {
 		if k == "PATH" {

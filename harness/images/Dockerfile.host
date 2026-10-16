@@ -3,7 +3,8 @@
 FROM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS build
 WORKDIR /src
 COPY src/ .
-RUN CGO_ENABLED=0 go build -trimpath -o /out/tmb-broker ./cmd/tmb-broker
+RUN CGO_ENABLED=0 go build -trimpath -o /out/tmb-broker ./cmd/tmb-broker \
+ && CGO_ENABLED=0 go build -trimpath -o /out/tmb ./cmd/tmb
 
 FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -17,11 +18,12 @@ RUN apt-get update \
 # run-openshell.sh inside host-sim (ticket #9); harmless for run-pair.sh.
 # dedicated group matching the sandbox user gid (socket group perms)
 RUN groupadd -g 4242 tmb
-# human user with normal password sudo - used to prove sudo stays untouched
-RUN useradd -m -s /bin/bash human \
+# human user with normal password sudo - used to prove sudo stays untouched;
+# uid 1500 is the bench's only approver_uids entry (tmb approve)
+RUN useradd -m -u 1500 -s /bin/bash human \
  && echo 'human:human' | chpasswd \
  && usermod -aG sudo human
-COPY --from=build /out/tmb-broker /usr/local/bin/tmb-broker
+COPY --from=build /out/tmb-broker /out/tmb /usr/local/bin/
 COPY harness/images/config.json /etc/tmb/config.json
 RUN mkdir -p /run/tmb /var/lib/tmb-proto /var/log/tmb \
  && chown root:4242 /run/tmb && chmod 0755 /run/tmb
