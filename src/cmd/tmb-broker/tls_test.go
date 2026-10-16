@@ -135,6 +135,7 @@ func TestTLSListenerCertIdentity(t *testing.T) {
 		AllowedRequesterFPs: []string{fp1},
 		AllowedEnvKeys:      []string{"LANG"},
 		FixedEnv:            map[string]string{"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+		AllowedCwdRoots:     []string{"/"},
 	}
 	log, err := NewLogger(filepath.Join(dir, "broker.log"))
 	if err != nil {

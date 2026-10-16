@@ -27,7 +27,7 @@ func tlsBroker(t *testing.T, ca *testCA, dir string, fps ...string) (addr string
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := &Config{AllowedRequesterFPs: fps, FixedEnv: map[string]string{"PATH": "/usr/bin:/bin"}, AllowedEnvKeys: []string{"LANG"}}
+	cfg := &Config{AllowedRequesterFPs: fps, FixedEnv: map[string]string{"PATH": "/usr/bin:/bin"}, AllowedEnvKeys: []string{"LANG"}, AllowedCwdRoots: []string{"/"}}
 	b = NewBroker(cfg, log, claims, ModeMockApprove, 30*time.Second)
 	tlsCfg, err := loadTLSConfig(caFile, srvCert, srvKey)
 	if err != nil {
