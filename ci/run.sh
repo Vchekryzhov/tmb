@@ -557,10 +557,24 @@ cmd_local() {
   echo; echo "results in $RESULTS"; grep -h '"status"' "$RESULTS"/*.json | sort | uniq -c
 }
 
+# The command exits 1 when any check it recorded is not PASS/NOT_APPLICABLE,
+# so the job conclusion matches its results (ci-gate checks both).
+MARK=$(mktemp)
+worst_of_run() {
+  local bad
+  bad=$(find "$RESULTS" -name '*.json' -newer "$MARK" -exec grep -lE '"status": "(FAIL|ERROR|NOT_RUN|UNAVAILABLE)"' {} + 2>/dev/null)
+  rm -f "$MARK"
+  if [ -n "$bad" ]; then
+    echo "not green:"
+    local f; for f in $bad; do echo "  ${f##*/}"; done
+    exit 1
+  fi
+}
+
 cmd=${1:-}
 shift || true
 case "$cmd" in
-  tools) cmd_tools "$@" ;;
+  tools) rm -f "$MARK"; cmd_tools "$@"; exit $? ;;
   lint) cmd_lint ;;
   test) cmd_test "$@" ;;
   ci-selftest) cmd_ci_selftest ;;
@@ -576,8 +590,9 @@ case "$cmd" in
   mutation) cmd_mutation ;;
   bench) cmd_bench ;;
   links-external) cmd_links_external ;;
-  gate) cmd_gate "$@" ;;
+  gate) rm -f "$MARK"; cmd_gate "$@"; exit $? ;;
   openshell) cmd_openshell ;;
   local) cmd_local ;;
-  *) sed -n '2,25p' "$0"; exit 2 ;;
+  *) rm -f "$MARK"; sed -n '2,25p' "$0"; exit 2 ;;
 esac
+worst_of_run
