@@ -1,0 +1,21 @@
+# tmb client deb and rpm from one description (nfpm, pinned in ci/tools.lock).
+# ci/run.sh dist stages bin/tmb and sets TMB_VERSION and TMB_ARCH; see tmb-broker.nfpm.yaml.
+name: tmb
+arch: ${TMB_ARCH}
+platform: linux
+version: ${TMB_VERSION}
+version_schema: semver
+release: "1"
+section: admin
+priority: optional
+maintainer: Viktor Chekryzhov <Vchekryzhov@users.noreply.github.com>
+homepage: https://github.com/Vchekryzhov/tmb
+description: |-
+  TMB client.
+  tmb exec asks the TMB broker to run one command as root; tmb approve
+  decides queued requests; tmb keygen and tmb fingerprint manage the
+  sandbox key.
+contents:
+  - src: bin/tmb
+    dst: /usr/bin/tmb
+    file_info: {mode: 0755}
