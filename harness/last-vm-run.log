@@ -1,16 +1,16 @@
 
 ================================================================
-== TMB VM RUNNER: milestone B on a systemd host in Lima (2026-10-17T12:02:34Z)
+== TMB VM RUNNER: milestone B on a systemd host in Lima (2026-10-17T12:24:16Z)
 ================================================================
-VM: tmb-vm (template harness/vm/tmb-vm.yaml), sandbox: tmbv-tn1w4a, temp dir: /tmp/tmb-vm.dAxp8f
-commit: 5a88add8a7b506be91f261e4dd12888777a1bd13
+VM: tmb-vm (template harness/vm/tmb-vm.yaml), sandbox: tmbv-tn1x4g, temp dir: /tmp/tmb-vm.1TFNNl
+commit: b4413e12615c9ad6d3cd6c3da294f74fa81b26a0
 
 ================================================================
 == STAGE 1: packages of the current commit, VM from scratch
 ================================================================
--- ci/run.sh dist into /tmp/tmb-vm.dAxp8f/dist (log: /tmp/tmb-vm.dAxp8f/dist.log)
-CHECK PASS: STAGE 1: arm64 debs built: tmb-broker_0.0.0~dev+5a88add8a7b5-1_arm64.deb, tmb_0.0.0~dev+5a88add8a7b5-1_arm64.deb
--- limactl start tmb-vm (cloud-init: Docker, OpenShell 0.1.3; log: /tmp/tmb-vm.dAxp8f/limactl.log)
+-- ci/run.sh dist into /tmp/tmb-vm.1TFNNl/dist (log: /tmp/tmb-vm.1TFNNl/dist.log)
+CHECK PASS: STAGE 1: arm64 debs built: tmb-broker_0.0.0~dev+b4413e12615c-1_arm64.deb, tmb_0.0.0~dev+b4413e12615c-1_arm64.deb
+-- limactl start tmb-vm (cloud-init: Docker, OpenShell 0.1.3; log: /tmp/tmb-vm.1TFNNl/limactl.log)
 CHECK PASS: STAGE 1: VM tmb-vm created from scratch and provisioned in 46s
 CHECK PASS: STAGE 1: provisioning finished (marker file)
 CHECK PASS: STAGE 1: no host directory is mounted in the VM
@@ -23,8 +23,8 @@ CHECK PASS: V0: limactl is Lima 2.x
   | Ubuntu 24.04.5 LTS aarch64 kernel 6.8.0-142-generic
 CHECK PASS: V0: guest is Ubuntu 24.04 LTS on aarch64
 CHECK PASS: V0: guest runs systemd as PID 1
--- tmb-broker deb version: 0.0.0~dev+5a88add8a7b5-1 (want it to carry 5a88add8a7b5)
-CHECK PASS: V0: the deb is built from the current commit (5a88add8a7b5)
+-- tmb-broker deb version: 0.0.0~dev+b4413e12615c-1 (want it to carry b4413e12615c)
+CHECK PASS: V0: the deb is built from the current commit (b4413e12615c)
 -- docker in the VM: 29.1.3 linux/arm64
 29.1.3
 CHECK PASS: V0: Docker engine answers in the VM
@@ -56,13 +56,13 @@ CHECK PASS: STAGE 2: packages copied into /tmp/tmb-vm
 -- stdout --
   | Selecting previously unselected package tmb-broker.
   | (Reading database ... 78017 files and directories currently installed.)
-  | Preparing to unpack .../tmb-broker_0.0.0~dev+5a88add8a7b5-1_arm64.deb ...
-  | Unpacking tmb-broker (0.0.0~dev+5a88add8a7b5-1) ...
+  | Preparing to unpack .../tmb-broker_0.0.0~dev+b4413e12615c-1_arm64.deb ...
+  | Unpacking tmb-broker (0.0.0~dev+b4413e12615c-1) ...
   | Selecting previously unselected package tmb.
-  | Preparing to unpack .../tmb_0.0.0~dev+5a88add8a7b5-1_arm64.deb ...
-  | Unpacking tmb (0.0.0~dev+5a88add8a7b5-1) ...
-  | Setting up tmb-broker (0.0.0~dev+5a88add8a7b5-1) ...
-  | Setting up tmb (0.0.0~dev+5a88add8a7b5-1) ...
+  | Preparing to unpack .../tmb_0.0.0~dev+b4413e12615c-1_arm64.deb ...
+  | Unpacking tmb (0.0.0~dev+b4413e12615c-1) ...
+  | Setting up tmb-broker (0.0.0~dev+b4413e12615c-1) ...
+  | Setting up tmb (0.0.0~dev+b4413e12615c-1) ...
 CHECK PASS: V1: dpkg -i tmb-broker + tmb -> exit 0 (rc=0)
 CHECK PASS: V1: /usr/bin/tmb-broker installed
 CHECK PASS: V1: /usr/bin/tmb installed
@@ -70,7 +70,7 @@ CHECK PASS: V1: /usr/lib/systemd/system/tmb-broker.service installed
 CHECK PASS: V1: /etc/tmb/config.json.example installed
 CHECK PASS: V1: /etc/logrotate.d/tmb-broker installed
 CHECK PASS: V1: /usr/lib/tmpfiles.d/tmb.conf installed
--- tmb-broker v0.0.0-dev+5a88add8a7b5
+-- tmb-broker v0.0.0-dev+b4413e12615c
 CHECK PASS: V1: package does not enable the service
 CHECK PASS: V1: /etc/tmb/config.json is not shipped
 -- rc=1
@@ -97,13 +97,13 @@ CHECK PASS: V1: tmb-broker is active
 CHECK PASS: V1: requester socket /run/tmb/tmb.sock
 CHECK PASS: V1: approver socket /run/tmb/approve.sock
   | total 4
-  | srw-rw-rw- 1 root root 0 Oct 17 15:03 approve.sock
-  | -rw-r--r-- 1 root root 5 Oct 17 15:03 tmb-broker.pid
-  | srw-rw---- 1 root root 0 Oct 17 15:03 tmb.sock
+  | srw-rw-rw- 1 root root 0 Oct 17 15:25 approve.sock
+  | -rw-r--r-- 1 root root 5 Oct 17 15:25 tmb-broker.pid
+  | srw-rw---- 1 root root 0 Oct 17 15:25 tmb.sock
 CHECK PASS: V1: broker_start in /var/log/tmb/journal.jsonl
 ---- broker journal (last 3 lines) ----
-  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T12:03:50.772870594Z"}
-  | {"allowed_requester_keys":[],"allowed_requester_uids":[],"event":"broker_start","mode":"queue","pid":3444,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T12:03:50.774322176Z","ttl_seconds":60}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T12:25:30.179865719Z"}
+  | {"allowed_requester_keys":[],"allowed_requester_uids":[],"event":"broker_start","mode":"queue","pid":3507,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T12:25:30.180932655Z","ttl_seconds":60}
 
 ================================================================
 == SCENARIO V2: ca init, ca issue-server, systemctl reload serves the new certificate
@@ -125,13 +125,13 @@ CHECK PASS: V2: ca issue-server --dns host.openshell.internal --ip 127.0.0.1 -> 
   | subject=CN = host.openshell.internal
   | X509v3 Subject Alternative Name: 
   |     DNS:host.openshell.internal, IP Address:127.0.0.1
-  | notBefore=Oct 17 12:03:51 2026 GMT
-  | notAfter=Oct 17 12:03:51 2027 GMT
+  | notBefore=Oct 17 12:25:30 2026 GMT
+  | notAfter=Oct 17 12:25:30 2027 GMT
 CHECK PASS: V2: server certificate valid for 1 year
 CHECK PASS: V2: server certificate SAN has DNS:host.openshell.internal
 -- tls_addr is a startup-only field: set it and restart once
 CHECK PASS: V2: tls_listen on 127.0.0.1:17600 after restart
-CHECK PASS: V2: listener serves serial F48BB2BC9D0B5E7FDCE0DFB0B8D9BC59
+CHECK PASS: V2: listener serves serial 854872E2276957AA009DD5889EADAC88
 -- rc=0
 -- stderr --
 -- stdout --
@@ -143,29 +143,30 @@ CHECK PASS: V2: reissued server certificate -> exit 0 (rc=0)
 -- stdout --
 CHECK PASS: V2: systemctl reload -> exit 0 (rc=0)
 CHECK PASS: V2: reload event names tls_material
-CHECK PASS: V2: after reload the listener serves the new serial C97279CB051D0ECDFF1F5AA98EFB221F
-CHECK PASS: V2: reload kept the broker pid 3548
+CHECK PASS: V2: after reload the listener serves the new serial 84B84350BA41AFCF2A75811616C27CCD
+CHECK PASS: V2: reload kept the broker pid 3610
 ---- broker journal (last 2 lines) ----
-  | {"changed":["tls_material"],"event":"reload","ignored":[],"pid":3548,"schema":1,"ts":"2026-10-17T12:03:52.155737682Z"}
-  | {"error":"tls: client didn't provide a certificate","event":"tls_handshake_failed","remote":"127.0.0.1:41632","schema":1,"ts":"2026-10-17T12:03:52.325725166Z"}
+  | {"changed":["tls_material"],"event":"reload","ignored":[],"pid":3610,"schema":1,"ts":"2026-10-17T12:25:31.516011879Z"}
+  | {"error":"tls: client didn't provide a certificate","event":"tls_handshake_failed","remote":"127.0.0.1:34344","schema":1,"ts":"2026-10-17T12:25:31.682896618Z"}
 
 ================================================================
 == STAGE 3: sandbox up (OpenShell, opencode image + tmb from the tmb deb, single rule)
 ================================================================
 CHECK PASS: STAGE 3: sandbox image tmb-vm/sandbox built
-CHECK PASS: STAGE 3: sandbox tmbv-tn1w4a Ready
+CHECK PASS: STAGE 3: sandbox tmbv-tn1x4g Ready
 -- rc=0
 -- stderr --
 -- stdout --
   | 1000
 CHECK PASS: STAGE 3: sandbox runs as uid 1000, not root
-  | openshell-default--tmbv-tn1w4a-9cb9aa77-f82e-4925-ada2-58709c6237f5-supervisor network=host
-  | openshell-default--tmbv-tn1w4a-9cb9aa77-f82e-4925-ada2-58709c6237f5 network=none
+  | openshell-default--tmbv-tn1x4g-a98b50a3-738e-46ae-bba6-88ca5603df7a-supervisor network=host
+  | openshell-default--tmbv-tn1x4g-a98b50a3-738e-46ae-bba6-88ca5603df7a network=none
 CHECK PASS: STAGE 3: sandbox container has network none
 CHECK PASS: STAGE 3: /run/tmb is not visible in the sandbox
   | {"tmb":{"binaries":[{"path":"/usr/local/bin/tmb"}],"endpoints":[{"host":"host.openshell.internal","port":17600,"protocol":"tcp","tls":"skip"}],"name":"tmb"}}
 true
 CHECK PASS: STAGE 3: effective policy is the single rule tcp + tls skip -> host.openshell.internal:17600 for /usr/local/bin/tmb
+CHECK PASS: STAGE 3: Lima forwards neither the broker (17600) nor the gateway (17670) port to the Mac
 
 ================================================================
 == SCENARIO V3: tmb keygen in the sandbox, ca issue-sandbox, allowlist, reload, approval from a second session
@@ -174,17 +175,17 @@ CHECK PASS: STAGE 3: effective policy is the single rule tcp + tls skip -> host.
 -- stderr --
 -- stdout --
   | -----BEGIN PUBLIC KEY-----
-  | MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEpphMD6OrtnZrzqEyxIuk1UbU4I/J
-  | IK635j6+ZF6AVl4n++u/6bry1EtafMuinUkwJGVAiS5wqoe4snY0i6IZwg==
+  | MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEewwhjpYxYCgG9tvaHBUBKe6QHFCG
+  | 1My2KONclRhIV7o/ZDcpQovRNZFgSmZc3oXeN5aajG9DdmiaBjeIyFRYhQ==
   | -----END PUBLIC KEY-----
-  | fingerprint: 3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6142a491e3e5
+  | fingerprint: 428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01b7a9243a7a4
 CHECK PASS: V3: tmb keygen in the sandbox -> exit 0 (rc=0)
 CHECK PASS: V3: sandbox key file is 0600
 CHECK PASS: V3: keygen printed only the public key
 -- public key goes to the host; the CA signs it
-  | fingerprint: 3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6142a491e3e5
+  | fingerprint: 428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01b7a9243a7a4
   | certificate: /etc/tmb/ca/sandbox-v.crt
-CHECK PASS: V3: ca issue-sandbox prints the fingerprint keygen printed (3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6142a491e3e5)
+CHECK PASS: V3: ca issue-sandbox prints the fingerprint keygen printed (428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01b7a9243a7a4)
 CHECK PASS: V3: sandbox certificate valid for 7 days
 CHECK PASS: V3: certificate in the sandbox carries the key fingerprint
 CHECK PASS: V3: the sandbox private key never reached the host
@@ -194,66 +195,66 @@ CHECK PASS: V3: the sandbox private key never reached the host
 -- stdout --
 CHECK PASS: V3: systemctl reload after adding the fingerprint -> exit 0 (rc=0)
 CHECK PASS: V3: reload event names allowed_requester_keys
-CHECK PASS: V3: request queued as item 5bcb6794148dc8d0
+CHECK PASS: V3: request queued as item 5949aeaf6dad7b0d
 CHECK PASS: V3: tmb exec in the sandbox waits for approval
 CHECK PASS: V3: queued event carries requester_fp of the sandbox key
 -- rc=0
 -- stderr --
 -- stdout --
-  | === 5bcb6794148dc8d0 ===
-  |   requester : key fp=3131bd8013888a95
+  | === 5949aeaf6dad7b0d ===
+  |   requester : key fp=428b96f514e444e1
   |   executable: /usr/bin/id
   |   argv      : ["/usr/bin/id","-u"]
   |   cwd       : /tmp
   |   run as uid: 0
   |   env       : ["LANG=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
-  |   nonce     : e395d9b9ec2c8cae9b4f7d4deb02dba6
-  |   queued at : 2026-10-17T12:04:05.473037307Z
-  |   hash      : 5bcb6794148dc8d025c068d797dd3a171bb78e6e03e5d6c8222227d39d7f83b5
+  |   nonce     : 9a9803d56cc3e0c395c0828f35a4045a
+  |   queued at : 2026-10-17T12:25:45.333877883Z
+  |   hash      : 5949aeaf6dad7b0dbd2d7c9089082538124c822a318d7ff85e51b823a192ac38
 CHECK PASS: V3: human sees the item in tmb approve --list
 -- rc=0
 -- stderr --
 -- stdout --
-  | 5bcb6794148dc8d0: approve
+  | 5949aeaf6dad7b0d: approve
 CHECK PASS: V3: tmb approve --yes as human (uid 1000) -> exit 0 (rc=0)
 -- rc=0
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"e395d9b9ec2c8cae9b4f7d4deb02dba6"}
-  | tmb: waiting for approval (item 5bcb6794148dc8d0, at most 5m0s)
-  | TOK: 5bcb6794148dc8d0 (one-shot token, ttl=1m0s)
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"9a9803d56cc3e0c395c0828f35a4045a"}
+  | tmb: waiting for approval (item 5949aeaf6dad7b0d, at most 5m0s)
+  | TOK: 5949aeaf6dad7b0d (one-shot token, ttl=1m0s)
   | EXIT: 0
 -- stdout --
   | 0
 CHECK PASS: V3: tmb exec --root -- /usr/bin/id -u -> exit 0 (rc=0)
 CHECK PASS: V3: stdout is exactly '0' (stdout='0')
 ---- broker journal (last 4 lines) ----
-  | {"approver":"uid:1000","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"e395d9b9ec2c...","reason":"","requester_fp":"3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6
-  | {"event":"claim","executable":"/usr/bin/id","hash":"5bcb6794148dc8d025c068d797dd3a171bb78e6e03e5d6c8222227d39d7f83b5","nonce":"e395d9b9ec2c...","requester_fp":"3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6142a491e3e5","result":"ok",
-  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":64769,"exe_ino":1743,"exe_via_fd":true,"executable":"/usr/bin/id","requester_fp":"3131bd8013888a95b1888725240d582bc
-  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_fp":"3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6142a491e3e5","schema":1,"token":"5bcb6794148dc8d0","ts":"2026-10-17T12:04:07.995577793Z"}
+  | {"approver":"uid:1000","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"9a9803d56cc3...","reason":"","requester_fp":"428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01
+  | {"event":"claim","executable":"/usr/bin/id","hash":"5949aeaf6dad7b0dbd2d7c9089082538124c822a318d7ff85e51b823a192ac38","nonce":"9a9803d56cc3...","requester_fp":"428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01b7a9243a7a4","result":"ok",
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":64769,"exe_ino":1743,"exe_via_fd":true,"executable":"/usr/bin/id","requester_fp":"428b96f514e444e1180330adf754bc366
+  | {"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_fp":"428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01b7a9243a7a4","schema":1,"token":"5949aeaf6dad7b0d","ts":"2026-10-17T12:25:47.990004234Z"}
 
 ================================================================
 == SCENARIO V4: reissue on the same key, allowlist untouched -> passes, same requester_fp
 ================================================================
-  | fingerprint: 3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6142a491e3e5
+  | fingerprint: 428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01b7a9243a7a4
   | certificate: /etc/tmb/ca/sandbox-v.crt
 CHECK PASS: V4: reissue prints the same fingerprint
-CHECK PASS: V4: new certificate (serial=B1EC5DAF8BA7A9B1A18833B50040353A, was serial=803BBA01B791353665EE2A078D2947D0)
+CHECK PASS: V4: new certificate (serial=D876EB3D25DFD00B792C5AC4D95A93B7, was serial=88DD569550C02919F160EA22A76D3199)
 CHECK PASS: V4: the sandbox holds the reissued certificate
 CHECK PASS: V4: /etc/tmb/config.json untouched, no reload
--- queued item 9e9bc3641ac70536; human approves it from a second session
-  | human: 9e9bc3641ac70536: approve
+-- queued item 941ec5035529a5d4; human approves it from a second session
+  | human: 941ec5035529a5d4: approve
 -- rc=0
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"cbb2021499ff7f51ae8a5f67ffdd8016"}
-  | tmb: waiting for approval (item 9e9bc3641ac70536, at most 5m0s)
-  | TOK: 9e9bc3641ac70536 (one-shot token, ttl=1m0s)
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"37589c0640f87105927d47cab1c72f02"}
+  | tmb: waiting for approval (item 941ec5035529a5d4, at most 5m0s)
+  | TOK: 941ec5035529a5d4 (one-shot token, ttl=1m0s)
   | EXIT: 0
 -- stdout --
   | 0
 CHECK PASS: V4: request with the reissued certificate -> exit 0 (rc=0)
 CHECK PASS: V4: stdout '0' (stdout='0')
-CHECK PASS: V4: request event carries the same requester_fp 3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6142a491e3e5
+CHECK PASS: V4: request event carries the same requester_fp 428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01b7a9243a7a4
 
 ================================================================
 == SCENARIO V5: fingerprint removed, reload -> requester_not_allowed
@@ -264,8 +265,8 @@ CHECK PASS: V4: request event carries the same requester_fp 3131bd8013888a95b188
 CHECK PASS: V5: systemctl reload after removing the fingerprint -> exit 0 (rc=0)
 -- rc=125
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"cbdd3b85aea3bc6f65dde0314fdc58e4"}
-  | tmb: DENIED: requester_not_allowed (key fp 3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6142a491e3e5 is not in the broker allowlist)
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"60d5914afef45f46c0815aa434089cab"}
+  | tmb: DENIED: requester_not_allowed (key fp 428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01b7a9243a7a4 is not in the broker allowlist)
 -- stdout --
 CHECK PASS: V5: removed key -> client exit 125 (denied) (rc=125)
 CHECK PASS: V5: deny reason requester_not_allowed
@@ -281,19 +282,19 @@ CHECK PASS: V5: nothing reached the approval queue
 -- stdout --
 CHECK PASS: V6: logrotate --force /etc/logrotate.d/tmb-broker -> exit 0 (rc=0)
   | total 12
-  | 526356 -rw------- 1 root root  105 Oct 17 15:04 journal.jsonl
-  | 526193 -rw------- 1 root root 5520 Oct 17 15:04 journal.jsonl.1
+  | 265014 -rw------- 1 root root  105 Oct 17 15:25 journal.jsonl
+  | 264839 -rw------- 1 root root 5521 Oct 17 15:25 journal.jsonl.1
 CHECK PASS: V6: old journal renamed to journal.jsonl.1 (same inode)
 CHECK PASS: V6: new journal.jsonl created with mode 0600
 CHECK PASS: V6: postrotate reload wrote its event into the new file
 CHECK PASS: V6: broker_start stays in the rotated file only
--- queued item 809f4ec9fe8d8908; human approves it from a second session
-  | human: 809f4ec9fe8d8908: approve
+-- queued item 22f00eb8dcda2741; human approves it from a second session
+  | human: 22f00eb8dcda2741: approve
 -- rc=0
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"f7cadf6bb6e7a82308ccad58668e75c1"}
-  | tmb: waiting for approval (item 809f4ec9fe8d8908, at most 5m0s)
-  | TOK: 809f4ec9fe8d8908 (one-shot token, ttl=1m0s)
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"5cbfef8e1d18edb7d0290f09a67fd492"}
+  | tmb: waiting for approval (item 22f00eb8dcda2741, at most 5m0s)
+  | TOK: 22f00eb8dcda2741 (one-shot token, ttl=1m0s)
   | EXIT: 0
 -- stdout --
   | 0
@@ -301,30 +302,30 @@ CHECK PASS: V6: request after rotation -> exit 0 (rc=0)
 CHECK PASS: V6: stdout '0' (stdout='0')
 CHECK PASS: V6: events of the new request are in the new journal.jsonl
   | tail: '/var/log/tmb/journal.jsonl' has been replaced;  following new file
-  | {"changed":[],"event":"reload","ignored":[],"pid":3548,"schema":1,"ts":"2026-10-17T12:04:11.411252443Z"}
-  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"f7cadf6bb6e7...","requester_fp":"3131bd8013888a95b1888725240d582bc100e50
-  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","event":"queued","executable":"/usr/bin/id","hash":"809f4ec9fe8d89080f2f18ab3fb0b3de4eddc88624da8ca67506fd8c4f13df66","item":"809f4ec9fe8d8908","nonce":"f
-  | {"approver":"uid:1000","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"f7cadf6bb6e7...","reason":"","requester_fp":"3131bd801
-  | {"event":"claim","executable":"/usr/bin/id","hash":"809f4ec9fe8d89080f2f18ab3fb0b3de4eddc88624da8ca67506fd8c4f13df66","nonce":"f7cadf6bb6e7...","requester_fp":"3131bd8013888a95b1888725240d582bc100
+  | {"changed":[],"event":"reload","ignored":[],"pid":3610,"schema":1,"ts":"2026-10-17T12:25:50.984534076Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"5cbfef8e1d18...","requester_fp":"428b96f514e444e1180330adf754bc366c5a679
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","event":"queued","executable":"/usr/bin/id","hash":"22f00eb8dcda274140d4c261bcb42ae13d8c0f9472cf1289494d6607ef6fbb41","item":"22f00eb8dcda2741","nonce":"5
+  | {"approver":"uid:1000","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"5cbfef8e1d18...","reason":"","requester_fp":"428b96f51
+  | {"event":"claim","executable":"/usr/bin/id","hash":"22f00eb8dcda274140d4c261bcb42ae13d8c0f9472cf1289494d6607ef6fbb41","nonce":"5cbfef8e1d18...","requester_fp":"428b96f514e444e1180330adf754bc366c5a
   | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":64769,"exe_ino":1743,"exe_via_fd":true,"executable":"/usr/bin/id","requ
-  | {"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_fp":"3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6142a491e3e5","schema":1,"token":"809f4ec9fe8d89
+  | {"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_fp":"428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01b7a9243a7a4","schema":1,"token":"22f00eb8dcda27
 CHECK PASS: V6: tail -F saw the events written after the rotation
 (the rotated file is renamed; delaycompress gzips it on the next rotation; 4 reload events before rotation)
 
 ================================================================
 == SCENARIO V7: systemctl kill -s KILL -> in-flight request exits 3, Restart=on-failure, human sudo works
 ================================================================
--- item e2c2c458390cff4b waits for approval; SIGKILL to the broker (pid 3548)
+-- item c5061f0e92d1b0a0 waits for approval; SIGKILL to the broker (pid 3610)
 -- rc=3
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"220861a9ae31cd6880a5e6f842390f15"}
-  | tmb: waiting for approval (item e2c2c458390cff4b, at most 5m0s)
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"50692a882153fec912bc53b1745b7916"}
+  | tmb: waiting for approval (item c5061f0e92d1b0a0, at most 5m0s)
   | tmb: connection to broker lost: EOF
 -- stdout --
 CHECK PASS: V7: in-flight request after SIGKILL -> client exit 3 (fail closed) (rc=3)
 CHECK PASS: V7: client reports the lost broker
-CHECK PASS: V7: nothing executed for item e2c2c458390cff4b
-CHECK PASS: V7: Restart=on-failure brought the broker back (pid 3548 -> 5939, NRestarts 0 -> 1)
+CHECK PASS: V7: nothing executed for item c5061f0e92d1b0a0
+CHECK PASS: V7: Restart=on-failure brought the broker back (pid 3610 -> 5961, NRestarts 0 -> 1)
 -- rc=0
 -- stderr --
 -- stdout --
@@ -332,13 +333,13 @@ CHECK PASS: V7: Restart=on-failure brought the broker back (pid 3548 -> 5939, NR
 CHECK PASS: V7: human sudo -S id -> exit 0 (rc=0)
 CHECK PASS: V7: sudo -S id returns uid=0(root)
 CHECK PASS: V7: /etc/sudo.conf has 0 Plugin lines
--- queued item 5b6362fb889a9f84; human approves it from a second session
-  | human: 5b6362fb889a9f84: approve
+-- queued item f7c675a981bb05ec; human approves it from a second session
+  | human: f7c675a981bb05ec: approve
 -- rc=0
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"b979736c14d691a47346184edfdb2f7a"}
-  | tmb: waiting for approval (item 5b6362fb889a9f84, at most 5m0s)
-  | TOK: 5b6362fb889a9f84 (one-shot token, ttl=1m0s)
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"4dceac8245f70e559fabb8e722dbc797"}
+  | tmb: waiting for approval (item f7c675a981bb05ec, at most 5m0s)
+  | TOK: f7c675a981bb05ec (one-shot token, ttl=1m0s)
   | EXIT: 0
 -- stdout --
   | 0
@@ -348,22 +349,22 @@ CHECK PASS: V7: the restarted broker serves the sandbox again -> exit 0 (rc=0)
 == SCENARIO V8: an approved sleep 30 survives systemctl restart; its marker appears
 ================================================================
 CHECK PASS: V8: /usr/bin/python3 present on the host
-  | human: 611e9e21af76c8c7: approve
+  | human: e144b6e330f41433: approve
 CHECK PASS: V8: approved command started (exec_start)
 CHECK PASS: V8: no exec_exit yet: the command runs
 -- rc=0
 -- stderr --
 -- stdout --
 CHECK PASS: V8: systemctl restart -> exit 0 (rc=0)
-CHECK PASS: V8: broker active again with a new pid 6426
+CHECK PASS: V8: broker active again with a new pid 6403
 CHECK PASS: V8: the approved command still runs after the restart (KillMode=process)
 CHECK PASS: V8: no marker yet right after the restart
-CHECK PASS: V8: marker /var/lib/tmb-v8.marker appeared 27s after the restart
+CHECK PASS: V8: marker /var/lib/tmb-v8.marker appeared 28s after the restart
 -- rc=3
 -- stderr --
-  | REQ: {"executable":"/usr/bin/python3","argv":["/usr/bin/python3","-c","import time; time.sleep(30); open('/var/lib/tmb-v8.marker', 'w').close()"],"cwd":"/tmp","uid":0,"env":{},"nonce":"2ba3f49e8933d5789d7c693aad96b75e"}
-  | tmb: waiting for approval (item 611e9e21af76c8c7, at most 5m0s)
-  | TOK: 611e9e21af76c8c7 (one-shot token, ttl=1m0s)
+  | REQ: {"executable":"/usr/bin/python3","argv":["/usr/bin/python3","-c","import time; time.sleep(30); open('/var/lib/tmb-v8.marker', 'w').close()"],"cwd":"/tmp","uid":0,"env":{},"nonce":"5a9ec0cbf4b61f9424b8e1b1eec2fda8"}
+  | tmb: waiting for approval (item e144b6e330f41433, at most 5m0s)
+  | TOK: e144b6e330f41433 (one-shot token, ttl=1m0s)
   | tmb: connection to broker lost: EOF
 -- stdout --
 -- the client lost its broker with the restart (rc=3); the command itself finished on the host
@@ -391,7 +392,7 @@ CHECK PASS: V8: broker active at the end
   | No containers need to be restarted.
   | 
   | User sessions running outdated binaries:
-  |  lima @ session #5: sshd[1515]
+  |  lima @ session #6: sshd[1727]
   | 
   | No VM guests are running outdated hypervisor (qemu) binaries on this host.
 -- stdout --
@@ -401,9 +402,9 @@ CHECK PASS: V8: broker active at the end
   | The following packages will be REMOVED:
   |   tmb-broker
   | 0 upgraded, 0 newly installed, 1 to remove and 50 not upgraded.
-  | After this operation, 8888 kB disk space will be freed.
+  | After this operation, 7844 kB disk space will be freed.
   | (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 78026 files and directories currently installed.)
-  | Removing tmb-broker (0.0.0~dev+5a88add8a7b5-1) ...
+  | Removing tmb-broker (0.0.0~dev+b4413e12615c-1) ...
 CHECK PASS: V9: apt-get remove -y tmb-broker -> exit 0 (rc=0)
 CHECK PASS: V9: /usr/bin/tmb-broker removed
 CHECK PASS: V9: unit file removed
@@ -416,37 +417,37 @@ CHECK PASS: V9: /var/log/tmb/journal.jsonl kept
 CHECK PASS: V9: /var/log/tmb/journal.jsonl.1 kept
   | /etc/tmb:
   | total 20
-  | drwxr-xr-x   3 root root 4096 Oct 17 15:03 .
-  | drwxr-xr-x 111 root root 4096 Oct 17 15:03 ..
-  | drwx------   2 root root 4096 Oct 17 15:04 ca
-  | -rw-r--r--   1 root root 1480 Oct 17 15:04 config.json
-  | -rw-r--r--   1 root root 1311 Oct 17 15:02 config.json.example
+  | drwxr-xr-x   3 root root 4096 Oct 17 15:25 .
+  | drwxr-xr-x 111 root root 4096 Oct 17 15:25 ..
+  | drwx------   2 root root 4096 Oct 17 15:25 ca
+  | -rw-r--r--   1 root root 1480 Oct 17 15:25 config.json
+  | -rw-r--r--   1 root root 1311 Oct 17 15:24 config.json.example
   | 
   | /var/lib/tmb:
   | total 12
-  | drwx------  3 root root 4096 Oct 17 15:03 .
-  | drwxr-xr-x 44 root root 4096 Oct 17 15:04 ..
-  | drwx------  2 root root 4096 Oct 17 15:04 claims
+  | drwx------  3 root root 4096 Oct 17 15:25 .
+  | drwxr-xr-x 44 root root 4096 Oct 17 15:26 ..
+  | drwx------  2 root root 4096 Oct 17 15:25 claims
   | 
   | /var/log/tmb:
   | total 24
-  | drwxr-x---  2 root root   4096 Oct 17 15:04 .
-  | drwxrwxr-x 10 root syslog 4096 Oct 17 15:03 ..
-  | -rw-------  1 root root   7531 Oct 17 15:04 journal.jsonl
-  | -rw-------  1 root root   5520 Oct 17 15:04 journal.jsonl.1
+  | drwxr-x---  2 root root   4096 Oct 17 15:25 .
+  | drwxrwxr-x 10 root syslog 4096 Oct 17 15:25 ..
+  | -rw-------  1 root root   7528 Oct 17 15:25 journal.jsonl
+  | -rw-------  1 root root   5521 Oct 17 15:25 journal.jsonl.1
 
 ================================================================
 == SUMMARY
 ================================================================
 ------------------------------------------------------------------
-PASS | STAGE 1: arm64 debs built: tmb-broker_0.0.0~dev+5a88add8a7b5-1_arm64.deb, tmb_0.0.0~dev+5a88add8a7b5-1_arm64.deb
+PASS | STAGE 1: arm64 debs built: tmb-broker_0.0.0~dev+b4413e12615c-1_arm64.deb, tmb_0.0.0~dev+b4413e12615c-1_arm64.deb
 PASS | STAGE 1: VM tmb-vm created from scratch and provisioned in 46s
 PASS | STAGE 1: provisioning finished (marker file)
 PASS | STAGE 1: no host directory is mounted in the VM
 PASS | V0: limactl is Lima 2.x
 PASS | V0: guest is Ubuntu 24.04 LTS on aarch64
 PASS | V0: guest runs systemd as PID 1
-PASS | V0: the deb is built from the current commit (5a88add8a7b5)
+PASS | V0: the deb is built from the current commit (b4413e12615c)
 PASS | V0: Docker engine answers in the VM
 PASS | V0: openshell version is 0.1.3 (got '0.1.3')
 PASS | V0: sandbox base image is the opencode digest of the OpenShell rig
@@ -476,28 +477,29 @@ PASS | V2: ca issue-server --dns host.openshell.internal --ip 127.0.0.1 -> exit 
 PASS | V2: server certificate valid for 1 year
 PASS | V2: server certificate SAN has DNS:host.openshell.internal
 PASS | V2: tls_listen on 127.0.0.1:17600 after restart
-PASS | V2: listener serves serial F48BB2BC9D0B5E7FDCE0DFB0B8D9BC59
+PASS | V2: listener serves serial 854872E2276957AA009DD5889EADAC88
 PASS | V2: reissued server certificate -> exit 0 (rc=0)
 PASS | V2: systemctl reload -> exit 0 (rc=0)
 PASS | V2: reload event names tls_material
-PASS | V2: after reload the listener serves the new serial C97279CB051D0ECDFF1F5AA98EFB221F
-PASS | V2: reload kept the broker pid 3548
+PASS | V2: after reload the listener serves the new serial 84B84350BA41AFCF2A75811616C27CCD
+PASS | V2: reload kept the broker pid 3610
 PASS | STAGE 3: sandbox image tmb-vm/sandbox built
-PASS | STAGE 3: sandbox tmbv-tn1w4a Ready
+PASS | STAGE 3: sandbox tmbv-tn1x4g Ready
 PASS | STAGE 3: sandbox runs as uid 1000, not root
 PASS | STAGE 3: sandbox container has network none
 PASS | STAGE 3: /run/tmb is not visible in the sandbox
 PASS | STAGE 3: effective policy is the single rule tcp + tls skip -> host.openshell.internal:17600 for /usr/local/bin/tmb
+PASS | STAGE 3: Lima forwards neither the broker (17600) nor the gateway (17670) port to the Mac
 PASS | V3: tmb keygen in the sandbox -> exit 0 (rc=0)
 PASS | V3: sandbox key file is 0600
 PASS | V3: keygen printed only the public key
-PASS | V3: ca issue-sandbox prints the fingerprint keygen printed (3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6142a491e3e5)
+PASS | V3: ca issue-sandbox prints the fingerprint keygen printed (428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01b7a9243a7a4)
 PASS | V3: sandbox certificate valid for 7 days
 PASS | V3: certificate in the sandbox carries the key fingerprint
 PASS | V3: the sandbox private key never reached the host
 PASS | V3: systemctl reload after adding the fingerprint -> exit 0 (rc=0)
 PASS | V3: reload event names allowed_requester_keys
-PASS | V3: request queued as item 5bcb6794148dc8d0
+PASS | V3: request queued as item 5949aeaf6dad7b0d
 PASS | V3: tmb exec in the sandbox waits for approval
 PASS | V3: queued event carries requester_fp of the sandbox key
 PASS | V3: human sees the item in tmb approve --list
@@ -505,12 +507,12 @@ PASS | V3: tmb approve --yes as human (uid 1000) -> exit 0 (rc=0)
 PASS | V3: tmb exec --root -- /usr/bin/id -u -> exit 0 (rc=0)
 PASS | V3: stdout is exactly '0' (stdout='0')
 PASS | V4: reissue prints the same fingerprint
-PASS | V4: new certificate (serial=B1EC5DAF8BA7A9B1A18833B50040353A, was serial=803BBA01B791353665EE2A078D2947D0)
+PASS | V4: new certificate (serial=D876EB3D25DFD00B792C5AC4D95A93B7, was serial=88DD569550C02919F160EA22A76D3199)
 PASS | V4: the sandbox holds the reissued certificate
 PASS | V4: /etc/tmb/config.json untouched, no reload
 PASS | V4: request with the reissued certificate -> exit 0 (rc=0)
 PASS | V4: stdout '0' (stdout='0')
-PASS | V4: request event carries the same requester_fp 3131bd8013888a95b1888725240d582bc100e509b27f6915d67e6142a491e3e5
+PASS | V4: request event carries the same requester_fp 428b96f514e444e1180330adf754bc366c5a67991b8269a3f0a01b7a9243a7a4
 PASS | V5: systemctl reload after removing the fingerprint -> exit 0 (rc=0)
 PASS | V5: removed key -> client exit 125 (denied) (rc=125)
 PASS | V5: deny reason requester_not_allowed
@@ -527,8 +529,8 @@ PASS | V6: events of the new request are in the new journal.jsonl
 PASS | V6: tail -F saw the events written after the rotation
 PASS | V7: in-flight request after SIGKILL -> client exit 3 (fail closed) (rc=3)
 PASS | V7: client reports the lost broker
-PASS | V7: nothing executed for item e2c2c458390cff4b
-PASS | V7: Restart=on-failure brought the broker back (pid 3548 -> 5939, NRestarts 0 -> 1)
+PASS | V7: nothing executed for item c5061f0e92d1b0a0
+PASS | V7: Restart=on-failure brought the broker back (pid 3610 -> 5961, NRestarts 0 -> 1)
 PASS | V7: human sudo -S id -> exit 0 (rc=0)
 PASS | V7: sudo -S id returns uid=0(root)
 PASS | V7: /etc/sudo.conf has 0 Plugin lines
@@ -537,10 +539,10 @@ PASS | V8: /usr/bin/python3 present on the host
 PASS | V8: approved command started (exec_start)
 PASS | V8: no exec_exit yet: the command runs
 PASS | V8: systemctl restart -> exit 0 (rc=0)
-PASS | V8: broker active again with a new pid 6426
+PASS | V8: broker active again with a new pid 6403
 PASS | V8: the approved command still runs after the restart (KillMode=process)
 PASS | V8: no marker yet right after the restart
-PASS | V8: marker /var/lib/tmb-v8.marker appeared 27s after the restart
+PASS | V8: marker /var/lib/tmb-v8.marker appeared 28s after the restart
 PASS | V8: broker active at the end
 PASS | V9: apt-get remove -y tmb-broker -> exit 0 (rc=0)
 PASS | V9: /usr/bin/tmb-broker removed
@@ -553,7 +555,7 @@ PASS | V9: /var/lib/tmb kept
 PASS | V9: /var/log/tmb/journal.jsonl kept
 PASS | V9: /var/log/tmb/journal.jsonl.1 kept
 ------------------------------------------------------------------
-PASS: 113  FAIL: 0
+PASS: 114  FAIL: 0
 RESULT: GREEN - the packaged broker behaves as designed on a systemd host (OpenShell gateway on Linux, no topology deviation)
 === cleanup ===
 -- VM tmb-vm deleted
