@@ -1,0 +1,14 @@
+# Sections of harness/run-vm.sh (VM proof on Lima, local only: CI has no Lima; verified from harness/last-vm-run.log).
+STAGE 1
+V0
+STAGE 2
+V1
+V2
+STAGE 3
+V3
+V4
+V5
+V6
+V7
+V8
+V9

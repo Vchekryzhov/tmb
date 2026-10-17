@@ -575,7 +575,7 @@ func cmdManifest(e *env, args []string) int {
 	}
 	r := manifest.Verify(m, tests, scen, e.today)
 	summary := append(append(append(r.Problems, prefixed("proven ", r.Proven)...), prefixed("GAP ", r.Gaps)...), prefixed("deferred ", r.Deferred)...)
-	reason := fmt.Sprintf("%d cases: %d proofs, %d GAP, %d deferred to OpenShell", len(m.Cases), len(r.Proven), len(r.Gaps), len(r.Deferred))
+	reason := fmt.Sprintf("%d cases: %d proofs, %d GAP, %d deferred to OpenShell or the VM proof", len(m.Cases), len(r.Proven), len(r.Gaps), len(r.Deferred))
 	return e.emit(*check, r.Status, reason, summary...)
 }
 

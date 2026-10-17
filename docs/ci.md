@@ -23,7 +23,7 @@ ci/run.sh tools
 ci/run.sh local
 ```
 
-`tools` собирает `tmbci` и закреплённые инструменты в `out/ci/bin`. `local` прогоняет lint, тесты, самопроверку CI, покрытие, gosec/govulncheck, сборку и короткий fuzz. Отдельные проверки: `ci/run.sh lint`, `test <метка> [race]`, `coverage [base-ref]`, `security`, `build`, `dist`, `package`, `fuzz short|long`, `secrets range|full`, `harness`, `images`, `manifest`, `stress`, `mutation`, `bench`. Полный список выводит `ci/run.sh` без аргументов.
+`tools` собирает `tmbci` и закреплённые инструменты в `out/ci/bin`. `local` прогоняет lint, тесты, самопроверку CI, покрытие, gosec/govulncheck, сборку и короткий fuzz. Отдельные проверки: `ci/run.sh lint`, `test <метка> [race]`, `coverage [base-ref]`, `security`, `build`, `dist`, `package`, `fuzz short|long`, `secrets range|full`, `harness`, `vm`, `images`, `manifest`, `stress`, `mutation`, `bench`. Полный список выводит `ci/run.sh` без аргументов.
 
 Каждая проверка пишет `out/ci/results/<check>.json`. В файле есть статус (PASS, FAIL, ERROR, NOT_RUN, UNAVAILABLE или NOT_APPLICABLE), проверенный SHA, номер запуска, версии инструментов и сводка. Отчёты лежат в `out/ci/reports/`. Красная проверка воспроизводится той же командой, что указана в шаге workflow.
 
@@ -170,6 +170,16 @@ ci/run.sh openshell
 ```
 
 `openshell` запускает `harness/run-all.sh` и сверяет три лога с реестрами. Ветка O4 dropped/recreated (`CHECK WARN`) считается NOT_PROVEN, и приёмка красная, даже если runner вернул 0. Ответы через PTY в O6 это автоматическая проверка консоли, не Touch ID и не одобрение человеком.
+
+## VM-пруф
+
+`harness/run-vm.sh` доказывает майлстоун B на настоящем хосте с systemd ([#45](https://github.com/Vchekryzhov/tmb/issues/45)): собирает пакеты текущего коммита через `ci/run.sh dist`, создаёт с нуля Lima-VM `tmb-vm` по шаблону [harness/vm/tmb-vm.yaml](../harness/vm/tmb-vm.yaml) (Ubuntu 24.04 LTS arm64, образ закреплён по digest; cloud-init ставит Docker из архива Ubuntu и OpenShell 0.1.3 из release-deb с проверкой SHA-256), копирует пакеты внутрь через `limactl copy`, ставит их и прогоняет V0–V9: пререквизиты, установка и старт без конфига и с ним, CA и `systemctl reload` с новым сертификатом, анроллмент ключом из песочницы OpenShell с одобрением из второй сессии, перевыпуск, отзыв, `logrotate --force`, `systemctl kill -s KILL`, `systemctl restart` при работающей одобренной команде, `apt remove`. Gateway OpenShell идёт пользовательским unit из пакета с драйвером docker; песочница собирается из [harness/images/Dockerfile.vmsbx](../harness/images/Dockerfile.vmsbx) (тот же digest opencode, что в OpenShell-риге, клиент `tmb` из пакета). Каталоги Mac в VM не монтируются, порты VM наружу не пробрасываются.
+
+```bash
+ci/run.sh vm
+```
+
+`vm` запускает `run-vm.sh` и сверяет `harness/last-vm-run.log` с реестром [ci/scenarios/v-series.txt](../ci/scenarios/v-series.txt). VM удаляется при любом исходе; `TMB_VM_KEEP=1` оставляет её для отладки, следующий прогон всё равно начинает с удаления. Затрагивается только инстанс `TMB_VM_NAME` (по умолчанию `tmb-vm`). `harness/run-all.sh --vm` добавляет VM-часть четвёртой, и `FULL-RUN VERDICT` её учитывает. Прогон занимает несколько минут и требует Lima 2.x на Mac arm64, поэтому в Actions его нет: CI проверяет закоммиченный `harness/last-vm-run.log` в `ci-selftest` (тест `TestCommittedVMLogIsGreen`: лог зелёный и сходится с реестром), а случаи SEC-27 и SEC-28 манифеста имеют уровень `vm` и в переносимой проверке манифеста считаются отложенными, как O-серия. Изменение `run-vm.sh` или реестра требует нового прогона и коммита лога.
 
 ## Phase C
 

@@ -25,6 +25,8 @@ var RequiredIDs = []string{
 	"SEC-24", // spec #39: reload by SIGHUP
 	"SEC-25", // spec #27: approver output escaped
 	"SEC-26", // spec #39: fsynced journal, audit_unavailable, reopen, schema
+	"SEC-27", // spec #39: journal rotation by the packaged logrotate on a systemd host (V6)
+	"SEC-28", // spec #39: fail-closed on a systemd host (V7)
 }
 
 // Level says where a case's evidence can be produced.
@@ -33,6 +35,7 @@ type Level string
 const (
 	Portable  Level = ""          // Go tests and Linux N/pair harnesses
 	OpenShell Level = "openshell" // only the full OpenShell acceptance rig
+	VM        Level = "vm"        // only the VM proof (harness/run-vm.sh, Lima, local)
 )
 
 type Gap struct {
@@ -95,10 +98,18 @@ func Verify(m Manifest, tests, scenarios Evidence, today time.Time) Report {
 			r.Problems = append(r.Problems, accountable.Problems(c.ID+": GAP", c.Gap.Owner, c.Gap.Issue, c.Gap.Due, today)...)
 			r.Gaps = append(r.Gaps, fmt.Sprintf("%s: %s (owner %s, %s, due %s)", c.ID, c.Gap.What, c.Gap.Owner, c.Gap.Issue, c.Gap.Due))
 		}
-		if c.Level == OpenShell {
+		if c.Level == OpenShell || c.Level == VM {
 			if len(c.Tests)+len(c.Scenarios) > 0 {
-				r.Deferred = append(r.Deferred, fmt.Sprintf("%s: %v proven only by the full OpenShell acceptance", c.ID, append(c.Tests, c.Scenarios...)))
+				where := "the full OpenShell acceptance"
+				if c.Level == VM {
+					where = "the VM proof (harness/run-vm.sh)"
+				}
+				r.Deferred = append(r.Deferred, fmt.Sprintf("%s: %v proven only by %s", c.ID, append(c.Tests, c.Scenarios...), where))
 			}
+			continue
+		}
+		if c.Level != Portable {
+			bad("%s: unknown level %q", c.ID, c.Level)
 			continue
 		}
 		for _, id := range c.Tests {

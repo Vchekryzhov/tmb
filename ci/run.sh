@@ -19,6 +19,7 @@
 #   ci/run.sh links-external        external documentation links
 #   ci/run.sh gate <event>          ci-gate over every result
 #   ci/run.sh openshell             full acceptance (phase B): run-all.sh on the dedicated Mac, all three logs verified
+#   ci/run.sh vm                    VM proof (local only, Lima on a Mac): harness/run-vm.sh, last-vm-run.log verified
 #   ci/run.sh dist                  release files in out/dist: deb/rpm, tmb tar.gz, SHA256SUMS (version: TMB_VERSION or git)
 #   ci/run.sh package               dist + a second build compared byte for byte + deb/rpm install tests in containers
 #   ci/run.sh local                 lint + test + ci-selftest + coverage + security + build + fuzz short
@@ -705,6 +706,26 @@ cmd_openshell() {
   assert_no_keys "$O" openshell/artifact-hygiene && result openshell/artifact-hygiene PASS "no private key material in acceptance reports"
 }
 
+# VM proof (#45): Lima on a Mac, so local only; CI checks the committed
+# harness/last-vm-run.log against ci/scenarios/v-series.txt in ci-selftest.
+cmd_vm() {
+  need_tmbci
+  local V=$REPORTS/vm
+  rm -rf "$V"; mkdir -p "$V"
+  command -v limactl >/dev/null || { result vm/v-series ERROR "limactl not found (Lima is required)"; return; }
+  local since; since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  rm -f "$ROOT/harness/last-vm-run.log"
+  log "run-vm.sh: V-series in a throwaway Lima VM"
+  bash "$ROOT/harness/run-vm.sh" >"$V/console.log" 2>&1
+  local rc=$?
+  cp "$ROOT/harness/last-vm-run.log" "$V/vm.log" 2>/dev/null
+  "$BIN/tmbci" harness -check vm/v-series -log "$V/vm.log" -registry "$ROOT/ci/scenarios/v-series.txt" -rc $rc -since "$since" -out "$RESULTS"
+  if limactl list -q 2>/dev/null | grep -qx "${TMB_VM_NAME:-tmb-vm}" && [ "${TMB_VM_KEEP:-0}" != 1 ]; then
+    result vm/cleanup FAIL "VM ${TMB_VM_NAME:-tmb-vm} left after the run"
+  else result vm/cleanup PASS "no VM left (or TMB_VM_KEEP=1)"; fi
+  assert_no_keys "$V" vm/artifact-hygiene && result vm/artifact-hygiene PASS "no private key material in VM reports"
+}
+
 cmd_gate() {
   need_tmbci
   "$BIN/tmbci" gate -requirements "$ROOT/ci/required-checks.json" -event "${1:?event}" -results "$RESULTS" -summary "$OUT/gate-summary.md"
@@ -753,6 +774,7 @@ case "$cmd" in
   badges) rm -f "$MARK"; cmd_badges "$@"; exit $? ;;
   gate) rm -f "$MARK"; cmd_gate "$@"; exit $? ;;
   openshell) cmd_openshell ;;
+  vm) cmd_vm ;;
   local) cmd_local ;;
   *) rm -f "$MARK"; sed -n '2,28p' "$0"; exit 2 ;;
 esac
