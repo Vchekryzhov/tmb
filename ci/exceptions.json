@@ -124,6 +124,26 @@
     {
       "scanner": "gosec",
       "rule": "G304",
+      "location": "src/cmd/tmb-broker/journal_test.go",
+      "match": "raw, err := os.ReadFile(path)",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/audit_test.go",
+      "match": "f, err := os.Open(path)",
+      "reason": "the schema document in the repository (docs/audit-schema.md), fixed by the test",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
       "location": "src/cmd/tmb-broker/identity_test.go",
       "match": "os.ReadFile(filepath.Join(dir, \"broker.log\"))",
       "reason": "test fixture under t.TempDir(): path built by the test itself",
