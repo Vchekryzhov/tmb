@@ -33,7 +33,8 @@
         "tmb-poc/cmd/tmb-broker/broker.go",
         "tmb-poc/cmd/tmb-broker/pin_linux.go",
         "tmb-poc/cmd/tmb-broker/queue.go",
-        "tmb-poc/cmd/tmb/approve.go"
+        "tmb-poc/cmd/tmb/approve.go",
+        "tmb-poc/cmd/tmb/keys.go"
       ],
       "gap": {
         "owner": "Vchekryzhov",

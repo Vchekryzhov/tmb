@@ -114,17 +114,17 @@ func TestRequesterIDRendering(t *testing.T) {
 	fp := strings.Repeat("a", 8) + strings.Repeat("b", 8) + strings.Repeat("c", 48)
 	cert := KeyRequester(fp)
 	if got, want := cert.ConsoleLine(), "key fp=aaaaaaaabbbbbbbb"; got != want {
-		t.Errorf("cert console line = %q, want %q (first 16 hex)", got, want)
+		t.Errorf("key console line = %q, want %q (first 16 hex)", got, want)
 	}
 	clf := cert.LogFields()
 	if clf["requester_fp"] != fp {
-		t.Errorf("cert log fields = %v, want requester_fp=%s", clf, fp)
+		t.Errorf("key log fields = %v, want requester_fp=%s", clf, fp)
 	}
 	if _, has := clf["requester_uid"]; has {
-		t.Errorf("cert log fields must not carry requester_uid: %v", clf)
+		t.Errorf("key log fields must not carry requester_uid: %v", clf)
 	}
 	if cert.Key() != "keyfp:"+fp {
-		t.Errorf("cert key = %q, want %q", cert.Key(), "keyfp:"+fp)
+		t.Errorf("key identity key = %q, want %q", cert.Key(), "keyfp:"+fp)
 	}
 }
 
@@ -138,7 +138,7 @@ func TestRequesterIDEquality(t *testing.T) {
 		t.Error("different uid must be a different requester")
 	}
 	if alice.Equal(KeyRequester(strings.Repeat("aa", 32))) {
-		t.Error("uid and cert identities must never be equal")
+		t.Error("uid and key identities must never be equal")
 	}
 	if !KeyRequester("aa").Equal(KeyRequester("aa")) {
 		t.Error("same fingerprint must be the same requester")

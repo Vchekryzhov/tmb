@@ -63,6 +63,7 @@ func writeNewKey(path string) ([]byte, error) {
 		werr = cerr
 	}
 	if werr != nil {
+		_ = os.Remove(path) // a half-written key must not block the next keygen
 		return nil, werr
 	}
 	return x509.MarshalPKIXPublicKey(&key.PublicKey)
