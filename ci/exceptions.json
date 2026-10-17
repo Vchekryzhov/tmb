@@ -45,7 +45,7 @@
       "scanner": "gosec",
       "rule": "G304",
       "location": "src/cmd/tmb-broker/log.go",
-      "match": "os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600",
+      "match": "os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o600",
       "reason": "log path comes from the root-owned broker config",
       "owner": "Vchekryzhov",
       "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
