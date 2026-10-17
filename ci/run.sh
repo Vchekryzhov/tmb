@@ -685,7 +685,7 @@ cmd_openshell() {
   local O=$REPORTS/openshell
   rm -rf "$O"; mkdir -p "$O"
   local since; since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  rm -f "$ROOT"/harness/last-*run.log
+  rm -f "$ROOT"/harness/last-{,pair-,openshell-,full-}run.log   # not last-vm-run.log: the VM proof is its own run
   log "run-all.sh: N-series + docker-pair + OpenShell rig"
   bash "$ROOT/harness/run-all.sh" >"$O/console.log" 2>&1
   local rc=$?
