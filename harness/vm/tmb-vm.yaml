@@ -20,9 +20,16 @@ mounts: []
 containerd:
   system: false
   user: false
-# Ports are reached from inside the VM only.
+# Ports are reached from inside the VM only. Without guestIPMustBeZero: false
+# a 0.0.0.0 rule matches only 0.0.0.0 binds, and Lima's fallback rule would
+# forward every guest 127.0.0.1 listener (broker, gateway) to the Mac.
 portForwards:
 - guestIP: "0.0.0.0"
+  guestIPMustBeZero: false
+  guestPortRange: [1, 65535]
+  proto: any
+  ignore: true
+- guestIP: "127.0.0.1"
   guestPortRange: [1, 65535]
   proto: any
   ignore: true

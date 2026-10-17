@@ -365,6 +365,11 @@ vm_user_sh "openshell policy get $SBX --full -o json | jq -c '.policy.network_po
 # shellcheck disable=SC2016 # jq variables
 check "STAGE 3: effective policy is the single rule tcp + tls skip -> $SERVER_NAME:$TLS_PORT for /usr/local/bin/tmb" \
   jq -e --arg h "$SERVER_NAME" --argjson p "$TLS_PORT" '(keys == ["tmb"]) and (.tmb.endpoints | length == 1) and (.tmb.endpoints[0] | .host == $h and .port == $p and .protocol == "tcp" and .tls == "skip") and (.tmb.binaries == [{"path": "/usr/local/bin/tmb"}])' "$OUT_FILE"
+# Lima forwards guest loopback listeners to the Mac unless the template
+# ignores them; the broker and the gateway have listened for a while by now
+LIMA_LISTEN=$(lsof -nP -a -c limactl -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $9}' | grep -E ":($TLS_PORT|$GW_PORT)\$")
+if [ -z "$LIMA_LISTEN" ]; then ok "STAGE 3: Lima forwards neither the broker ($TLS_PORT) nor the gateway ($GW_PORT) port to the Mac"
+else bad "STAGE 3: Lima forwards guest ports to the Mac: $(echo "$LIMA_LISTEN" | tr '\n' ' ')"; fi
 
 # -----------------------------------------------------------------------------
 log "SCENARIO V3: tmb keygen in the sandbox, ca issue-sandbox, allowlist, reload, approval from a second session"
