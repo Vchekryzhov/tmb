@@ -1,0 +1,408 @@
+
+================================================================
+== TMB OPENSHELL RUNNER: tickets #8 + #9 + #10 (2026-10-17T06:46:44Z)
+================================================================
+docker 29.6.1 (linux/arm64)
+workdir: /Users/chekryhov.viktor/projects/tmb/.claude/worktrees/night-driver-83eaa6/harness, cert dir: /tmp/tmb-osh.XivJf5 (temp, never committed), run id: 1792219604-12909
+
+================================================================
+== STAGE 0: pre-clean leftovers from previous runs
+================================================================
+
+================================================================
+== STAGE 1: O0 prerequisites (any failure aborts the run)
+================================================================
+-- O0: openshell version pin
+CHECK PASS: O0: openshell version == 0.1.3
+-- O0: Docker Desktop settings (host networking ON, ECI OFF)
+settings ok: HostNetworkingEnabled=true, EnhancedContainerIsolation=false
+CHECK PASS: O0: Docker Desktop host networking ON, ECI OFF
+-- O0: opencode base image pinned by digest, present locally
+CHECK PASS: O0: local image matches ghcr.io/anomalyco/opencode@sha256:6911572e4a9b3ead5e4086b40e2c98bd82075dae617aff679767f358cf8f374e
+  | base: linux/arm64
+-- O0: stdlib-only dependency surface (go list -m all in src/)
+  | tmb-poc
+CHECK PASS: O0: go list -m all -> only tmb-poc (stdlib only)
+
+================================================================
+== STAGE 2: gateway reach (host.openshell.internal pin + VM-loopback forwarder)
+================================================================
+CHECK PASS: GW: gateway Connected via https://127.0.0.1:17671 (forwarder tmb-osh-gwreach up)
+
+================================================================
+== STAGE 3: harness CA + server + client certs into /tmp/tmb-osh.XivJf5 (run-pair recipe)
+================================================================
+-- fp1=ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd (the ONLY allowlisted requester identity)
+
+================================================================
+== STAGE 4: images
+================================================================
+-- host-sim image (existing images/Dockerfile.host, context: repo root)
+sha256:110294e769fe1e9b7607860c76b8fdf3296d38754e9e882bfc5bf912f486e48d
+-- sandbox base image (opencode@ghcr.io/anomalyco/opencode@sha256:6911572e4a9b3ead5e4086b40e2c98bd82075dae617aff679767f358cf8f374e + openssl + tmb)
+sha256:d4512a4ee0753d53fda90382e098f757ec722b43962a036c4e734f5e5e2c63b4
+-- per-run cert layer (context: /tmp/tmb-osh.XivJf5; the ONLY place certs enter an image)
+sha256:1ff021d34223c59c543fbce3a7fd5c048a9fbd10bca21d7d262d7099d883cf06
+-- O0: sandbox image has sh, id, test, openssl (run refuses to start without them)
+CHECK PASS: O0: sandbox image has sh
+CHECK PASS: O0: sandbox image has id
+CHECK PASS: O0: sandbox image has test
+CHECK PASS: O0: sandbox image has openssl
+  | /usr/local/bin/tmb
+
+================================================================
+== STAGE 5: topology up (host-sim broker + sandbox + single rule)
+================================================================
+-- host-sim: broker host, TLS port 17600 + O1 control port 19999 published on ALL VM interfaces
+-- broker: TLS listener (mock-approve, ttl=3s)
+CHECK PASS: TOP: broker logged tls_listen on :17600
+  | {"addr":":17600","event":"tls_listen","ts":"2026-10-17T06:46:49.764872508Z"}
+-- sandbox: create (block mode; the single rule is hot-added next - see README deviations)
+-- create attempt: tmb8-tn1hhwp9yl
+CHECK PASS: TOP: sandbox tmb8-tn1hhwp9yl Ready (opencode image, uid 1000, NET=none)
+  | uid=1000(sandbox) gid=1000(sandbox) groups=1000(sandbox)
+-- sandbox policy: hot-add the SINGLE rule (protocol: tcp + tls: skip)
+-- verify effective policy: exactly one rule, tcp + tls skip, binary tmb
+CHECK PASS: TOP: effective policy = single rule tcp+tls:skip -> host.openshell.internal:17600 (binary /usr/local/bin/tmb)
+-- effective network policy:
+  | {
+  |  "tmb": {
+  |   "binaries": [
+  |    {
+  |     "path": "/usr/local/bin/tmb"
+  |    }
+  |   ],
+  |   "endpoints": [
+  |    {
+  |     "host": "host.openshell.internal",
+  |     "port": 17600,
+  |     "protocol": "tcp",
+  |     "tls": "skip"
+  |    }
+  |   ],
+  |   "name": "tmb"
+  |  }
+  | }
+
+================================================================
+== SCENARIO O2a: tmb exec over mTLS from the sandbox, mock-approve
+================================================================
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"a7794a7ee88090daf3bba0f4011e72e7"}
+  | TOK: fcaa1895e6d93e4a (one-shot token, ttl=3s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: O2a: exit code 0 (rc=0)
+CHECK PASS: O2a: stdout is exactly '0' (stdout='0')
+-- broker JSONL (request..exec_exit) for the O2a call:
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"a7794a7ee880...","requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","transport":"tls","ts":"2026-10-17T06:47:01.471001388Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"a7794a7ee880...","reason":"","requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","result":"granted","ts":"2026-10-17T06:47:01.471548847Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"fcaa1895e6d93e4aa71bc5f65aa5c824439bd98d9cc06eaff41775d16bc3f0ca","nonce":"a7794a7ee880...","requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","result":"ok","token":"fcaa1895e6d93e4a","ts":"2026-10-17T06:47:01.475330055Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","token":"fcaa1895e6d93e4a","ts":"2026-10-17T06:47:01.475567263Z","uid":0}
+  | {"duration_ms":3,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","token":"fcaa1895e6d93e4a","ts":"2026-10-17T06:47:01.478787388Z"}
+
+================================================================
+== SCENARIO O3: host isolation from inside the sandbox
+================================================================
+-- rc=0
+-- stderr --
+-- stdout --
+  | 1000
+CHECK PASS: O3: sbx-exec id -u != 0 (uid 1000)
+-- rc=127
+-- stderr --
+-- stdout --
+CHECK PASS: O3: sudo path absent or no passwordless sudo (rc=127)
+-- rc=1
+-- stderr --
+-- stdout --
+CHECK PASS: O3: test -e /run/tmb/tmb.sock -> exit 1 (socket absent) (rc=1)
+-- rc=0
+-- stderr --
+-- stdout --
+  | 0
+CHECK PASS: O3: no /run/tmb mount inside the sandbox (mount|grep -c -> 0)
+
+================================================================
+== SCENARIO O1a: egress to a port without a rule is denied (nc gets zero bytes)
+================================================================
+-- rc=3
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"a054f60abbd6abf22ec7a8c7f54c4864"}
+  | tmb: broker unreachable at host.openshell.internal:19999: dial tcp 198.18.0.2:19999: connect: permission denied - FAIL CLOSED, nothing executed
+-- stdout --
+CHECK PASS: O1a: tmb exec --addr :19999 (no rule) -> exit 3 (rc=3)
+CHECK PASS: O1a: stderr carries FAIL CLOSED
+CHECK PASS: O1a: nc received ZERO bytes (no connection reached host-sim)
+
+================================================================
+== SCENARIO O1b: positive control - temporary rule on :19999 lets the ClientHello through
+================================================================
+-- live policy now: broker rule + host.openshell.internal:19999 (same tmb rule, two endpoints)
+-- rc=3
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"51f9e72089595e97400dbaa1e9cc37b9"}
+  | tmb: TLS handshake with host.openshell.internal:19999 failed: read tcp 127.0.0.1:54346->127.0.0.1:43115: i/o timeout - FAIL CLOSED, nothing executed
+-- stdout --
+CHECK PASS: O1b: same call under the temporary rule -> still exit 3 (nc is not the broker: TLS handshake dies = transport error) (rc=3)
+CHECK PASS: O1b: stderr carries FAIL CLOSED
+CHECK PASS: O1b: nc received 273 bytes (TLS ClientHello passed the rule)
+
+================================================================
+== SCENARIO O1c: temporary rule removed -> port closed again (back to O1a posture)
+================================================================
+-- rc=3
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"5d063da92c00110f79a9a8ca9125c433"}
+  | tmb: broker unreachable at host.openshell.internal:19999: dial tcp 198.18.0.2:19999: connect: permission denied - FAIL CLOSED, nothing executed
+-- stdout --
+CHECK PASS: O1c: same call after rule removal -> exit 3 again (rc=3)
+CHECK PASS: O1c: stderr carries FAIL CLOSED
+CHECK PASS: O1c: nc received ZERO bytes again
+
+================================================================
+== SCENARIO O2b: the single rule removed -> the entry point itself is gone
+================================================================
+-- broker JSONL request events before the attempt: 1
+-- live policy now: network_policies empty (fs section intact)
+-- rc=3
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/o2-marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"a22deeced33aa5dd5296ded97cca34bb"}
+  | tmb: broker unreachable at host.openshell.internal:17600: dial tcp: lookup host.openshell.internal on 127.0.0.53:53: server misbehaving - FAIL CLOSED, nothing executed
+-- stdout --
+CHECK PASS: O2b: tmb exec with the rule removed -> exit 3 (rc=3)
+CHECK PASS: O2b: stderr carries FAIL CLOSED
+CHECK PASS: O2b: /tmp/o2-marker absent in host-sim (nothing was executed) (rc=1)
+CHECK PASS: O2b: broker JSONL gained no request event (1 -> 1)
+
+================================================================
+== SCENARIO O2c: rule hot-added back on the SAME live sandbox -> O2a again
+================================================================
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"cd3f5f4bc88d2ac804fb8cd23c162f5b"}
+  | TOK: fd53333ff4a27934 (one-shot token, ttl=3s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: O2c: tmb exec --root id -u -> exit 0 (rule restored without recreation) (rc=0)
+CHECK PASS: O2c: stdout is exactly '0' (stdout='0')
+
+================================================================
+== SCENARIO O4: gateway restart - policy and deny-by-default survive
+================================================================
+-- restarting the gateway the clean way (brew service, no kill -9)
+CHECK PASS: O4: gateway re-Connected after brew services restart (forwarder tmb-osh-gwreach kept)
+CHECK PASS: O4: sandbox tmb8-tn1hhwp9yl still Ready after the gateway restart
+-- observed gateway-restart behavior: sandbox survived; policy source of truth = gateway-side sandbox state
+-- O4: O1a repeat - a port without a rule stays denied after the restart
+-- rc=3
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"ec81db4d6543a3d1f2a9ce2dec2a340e"}
+  | tmb: broker unreachable at host.openshell.internal:19999: dial tcp 198.18.0.2:19999: connect: permission denied - FAIL CLOSED, nothing executed
+-- stdout --
+CHECK PASS: O4: O1a repeat after restart -> exit 3 (rc=3)
+CHECK PASS: O4: O1a repeat stderr carries FAIL CLOSED
+CHECK PASS: O4: O1a repeat - nc received ZERO bytes
+-- O4: O2a repeat - the single rule still carries exec
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"db2d444b7583021badefc089c0d781f8"}
+  | TOK: 40fe13d38446545e (one-shot token, ttl=3s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: O4: O2a repeat after restart -> exit 0 (rc=0)
+CHECK PASS: O4: O2a repeat stdout is exactly '0' (stdout='0')
+-- O4: rule removal still closes the entry point
+-- rc=3
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"c2e2aa0dd3b87aae06f008143454e1a3"}
+  | tmb: broker unreachable at host.openshell.internal:17600: dial tcp: lookup host.openshell.internal on 127.0.0.53:53: server misbehaving - FAIL CLOSED, nothing executed
+-- stdout --
+CHECK PASS: O4: rule removed after restart -> exit 3 again (rc=3)
+
+================================================================
+== SCENARIO O5: broker SIGKILL -> agent path FAILS CLOSED; human sudo untouched
+================================================================
+-- O5: restore the single rule (O4 ended with the rule removed)
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"5195a66a9f9f74d1ceea1e4d6958bf6b"}
+  | TOK: 230fdd564f64112b (one-shot token, ttl=3s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: O5: pre-kill smoke - broker alive, exec exit 0 (rc=0)
+CHECK PASS: O5: pre-kill smoke - stdout exactly '0' (stdout='0')
+-- O5: SIGKILL the broker inside host-sim (pidfile first, pkill fallback)
+CHECK PASS: O5: broker process dead (SIGKILL via pidfile)
+-- rc=3
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"aeba4ce6d7c3f213482c627078651594"}
+  | tmb: TLS handshake with host.openshell.internal:17600 failed: EOF - FAIL CLOSED, nothing executed
+-- stdout --
+CHECK PASS: O5: broker dead -> client exits 3 (fail closed) (rc=3)
+CHECK PASS: O5: stderr carries FAIL CLOSED
+CHECK PASS: O5: stderr carries 'nothing executed'
+CHECK PASS: O5: /tmp/marker absent in host-sim (nothing was executed) (rc=1)
+-- O5: human password sudo INSIDE host-sim still works, uid=0
+-- rc=0
+-- stderr --
+  | [sudo] password for human: -- stdout --
+  | uid=0(root) gid=0(root) groups=0(root)
+CHECK PASS: O5: sudo -S id as human -> exit 0 (rc=0)
+CHECK PASS: O5: sudo -S id returns uid=0(root)
+CHECK PASS: O5: /etc/sudo.conf has ZERO Plugin lines (no TMB sudo plugin)
+
+================================================================
+== SCENARIO O6: live manual approval - pty drives y/n, no human involved
+================================================================
+-- O6: JSONL lines before the manual broker: 23
+-- O6 driver: manual broker up (approval manual, ttl=15s), console -> /tmp/tmb-osh.XivJf5/o6-console.log
+-- O6 driver: request 1 (id -u) answered y, client rc=0
+-- O6 driver: request 2 (id -G) answered n, client rc=125
+-- O6 driver: done (console captured, manual broker stopped)
+CHECK PASS: O6: pty driver completed unattended (broker manual, y then n fed through the pty)
+---- O6: manual approval console capture (exact bytes, CR stripped) ----
+  | tmb-broker: listening on /run/tmb/tmb.sock (mode=manual ttl=15s pid=246)
+  | tmb-broker: tls listening on :17600 (client certificates required, no plaintext)
+  | === TMB APPROVAL REQUIRED ===
+  |   requester : cert fp=ab19286ca0742f5e
+  |   executable: /usr/bin/id (realpath /usr/bin/id, dev=69 ino=3025125)
+  |   argv      : ["/usr/bin/id","-u"]
+  |   cwd       : /tmp
+  |   run as uid: 0
+  |   env       : ["LANG=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
+  |   nonce     : 59685370e0e551c7fbed7d9b1386e899
+  | Approve exactly this command? [y/N]: y
+  | HUMAN ANSWER: "y" -> APPROVED
+  | === TMB APPROVAL REQUIRED ===
+  |   requester : cert fp=ab19286ca0742f5e
+  |   executable: /usr/bin/id (realpath /usr/bin/id, dev=69 ino=3025125)
+  |   argv      : ["/usr/bin/id","-G"]
+  |   cwd       : /tmp
+  |   run as uid: 0
+  |   env       : ["LANG=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
+  |   nonce     : d4cc9a5aefc67394bf2ec3eb05d1de8a
+  | Approve exactly this command? [y/N]: n
+  | HUMAN ANSWER: "n" -> DENIED
+  | tmb-broker: serve: accept unix /run/tmb/tmb.sock: use of closed network connection
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"59685370e0e551c7fbed7d9b1386e899"}
+  | TOK: a736c7328983ef3b (one-shot token, ttl=15s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: O6: answered y -> command executed, exit 0 (rc=0)
+CHECK PASS: O6: answered y -> stdout is exactly '0' (streamed back to the sandbox) (stdout='0')
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-G"],"cwd":"/tmp","uid":0,"env":{},"nonce":"d4cc9a5aefc67394bf2ec3eb05d1de8a"}
+  | tmb: DENIED: approval_denied_by_human (nothing was executed)
+-- stdout --
+CHECK PASS: O6: answered n -> exit 125 (rc=125)
+CHECK PASS: O6: deny reason approval_denied_by_human
+CHECK PASS: O6: console shows the requester identity line cert fp=ab19286ca0742f5e
+CHECK PASS: O6: console shows EXACT argv of the y-request
+CHECK PASS: O6: console shows EXACT argv of the n-request
+CHECK PASS: O6: console shows the approval prompt
+-- O6: JSONL events in the O6 window (11 lines):
+  | {"event":"claim_gc","removed":0,"skipped":0,"ts":"2026-10-17T06:48:08.601120877Z"}
+  | {"allowed_requester_fps":["ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd"],"allowed_requester_uids":[4242],"event":"broker_start","mode":"manual","pid":246,"socket":"/run/tmb/tmb.sock","tls_addr":":17600","ts":"2026-10-17T06:48:08.603222919Z","ttl_seconds":15}
+  | {"addr":":17600","event":"tls_listen","ts":"2026-10-17T06:48:08.603257211Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"59685370e0e5...","requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","transport":"tls","ts":"2026-10-17T06:48:09.068001503Z","type":"exec","uid":0}
+  | {"approver":"mode:manual","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"manual","nonce":"59685370e0e5...","reason":"","requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","result":"granted","ts":"2026-10-17T06:48:09.110872086Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"a736c7328983ef3be5e49776c55e13b4a0781ad401d9e4e20d0dc5b6100599b1","nonce":"59685370e0e5...","requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","result":"ok","token":"a736c7328983ef3b","ts":"2026-10-17T06:48:09.115972961Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","token":"a736c7328983ef3b","ts":"2026-10-17T06:48:09.116126878Z","uid":0}
+  | {"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","token":"a736c7328983ef3b","ts":"2026-10-17T06:48:09.117173253Z"}
+  | {"argv":["/usr/bin/id","-G"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"d4cc9a5aefc6...","requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","transport":"tls","ts":"2026-10-17T06:48:09.236091419Z","type":"exec","uid":0}
+  | {"approver":"mode:manual","argv":["/usr/bin/id","-G"],"decision":"deny","event":"approval","executable":"/usr/bin/id","mode":"manual","nonce":"d4cc9a5aefc6...","reason":"approval_denied_by_human","requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","result":"denied","ts":"2026-10-17T06:48:09.237400794Z"}
+  | {"argv":["/usr/bin/id","-G"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/id","nonce":"d4cc9a5aefc6...","reason":"approval_denied_by_human","requester_fp":"ab19286ca0742f5e0a81553d1d93d95cb1c124cece527172cb6c9bb94aed45fd","ts":"2026-10-17T06:48:09.237419336Z"}
+CHECK PASS: O6: JSONL request events (2) all carry requester_fp=fp1
+CHECK PASS: O6: JSONL approval events (2) all carry requester_fp=fp1
+CHECK PASS: O6: JSONL claim events (1) all carry requester_fp=fp1
+CHECK PASS: O6: JSONL exec_start events (1) all carry requester_fp=fp1
+CHECK PASS: O6: JSONL exec_exit events (1) all carry requester_fp=fp1
+
+================================================================
+== SUMMARY
+================================================================
+------------------------------------------------------------------
+PASS | O0: openshell version == 0.1.3
+PASS | O0: Docker Desktop host networking ON, ECI OFF
+PASS | O0: local image matches ghcr.io/anomalyco/opencode@sha256:6911572e4a9b3ead5e4086b40e2c98bd82075dae617aff679767f358cf8f374e
+PASS | O0: go list -m all -> only tmb-poc (stdlib only)
+PASS | GW: gateway Connected via https://127.0.0.1:17671 (forwarder tmb-osh-gwreach up)
+PASS | O0: sandbox image has sh
+PASS | O0: sandbox image has id
+PASS | O0: sandbox image has test
+PASS | O0: sandbox image has openssl
+PASS | TOP: broker logged tls_listen on :17600
+PASS | TOP: sandbox tmb8-tn1hhwp9yl Ready (opencode image, uid 1000, NET=none)
+PASS | TOP: effective policy = single rule tcp+tls:skip -> host.openshell.internal:17600 (binary /usr/local/bin/tmb)
+PASS | O2a: exit code 0 (rc=0)
+PASS | O2a: stdout is exactly '0' (stdout='0')
+PASS | O3: sbx-exec id -u != 0 (uid 1000)
+PASS | O3: sudo path absent or no passwordless sudo (rc=127)
+PASS | O3: test -e /run/tmb/tmb.sock -> exit 1 (socket absent) (rc=1)
+PASS | O3: no /run/tmb mount inside the sandbox (mount|grep -c -> 0)
+PASS | O1a: tmb exec --addr :19999 (no rule) -> exit 3 (rc=3)
+PASS | O1a: stderr carries FAIL CLOSED
+PASS | O1a: nc received ZERO bytes (no connection reached host-sim)
+PASS | O1b: same call under the temporary rule -> still exit 3 (nc is not the broker: TLS handshake dies = transport error) (rc=3)
+PASS | O1b: stderr carries FAIL CLOSED
+PASS | O1b: nc received 273 bytes (TLS ClientHello passed the rule)
+PASS | O1c: same call after rule removal -> exit 3 again (rc=3)
+PASS | O1c: stderr carries FAIL CLOSED
+PASS | O1c: nc received ZERO bytes again
+PASS | O2b: tmb exec with the rule removed -> exit 3 (rc=3)
+PASS | O2b: stderr carries FAIL CLOSED
+PASS | O2b: /tmp/o2-marker absent in host-sim (nothing was executed) (rc=1)
+PASS | O2b: broker JSONL gained no request event (1 -> 1)
+PASS | O2c: tmb exec --root id -u -> exit 0 (rule restored without recreation) (rc=0)
+PASS | O2c: stdout is exactly '0' (stdout='0')
+PASS | O4: gateway re-Connected after brew services restart (forwarder tmb-osh-gwreach kept)
+PASS | O4: sandbox tmb8-tn1hhwp9yl still Ready after the gateway restart
+PASS | O4: O1a repeat after restart -> exit 3 (rc=3)
+PASS | O4: O1a repeat stderr carries FAIL CLOSED
+PASS | O4: O1a repeat - nc received ZERO bytes
+PASS | O4: O2a repeat after restart -> exit 0 (rc=0)
+PASS | O4: O2a repeat stdout is exactly '0' (stdout='0')
+PASS | O4: rule removed after restart -> exit 3 again (rc=3)
+PASS | O5: pre-kill smoke - broker alive, exec exit 0 (rc=0)
+PASS | O5: pre-kill smoke - stdout exactly '0' (stdout='0')
+PASS | O5: broker process dead (SIGKILL via pidfile)
+PASS | O5: broker dead -> client exits 3 (fail closed) (rc=3)
+PASS | O5: stderr carries FAIL CLOSED
+PASS | O5: stderr carries 'nothing executed'
+PASS | O5: /tmp/marker absent in host-sim (nothing was executed) (rc=1)
+PASS | O5: sudo -S id as human -> exit 0 (rc=0)
+PASS | O5: sudo -S id returns uid=0(root)
+PASS | O5: /etc/sudo.conf has ZERO Plugin lines (no TMB sudo plugin)
+PASS | O6: pty driver completed unattended (broker manual, y then n fed through the pty)
+PASS | O6: answered y -> command executed, exit 0 (rc=0)
+PASS | O6: answered y -> stdout is exactly '0' (streamed back to the sandbox) (stdout='0')
+PASS | O6: answered n -> exit 125 (rc=125)
+PASS | O6: deny reason approval_denied_by_human
+PASS | O6: console shows the requester identity line cert fp=ab19286ca0742f5e
+PASS | O6: console shows EXACT argv of the y-request
+PASS | O6: console shows EXACT argv of the n-request
+PASS | O6: console shows the approval prompt
+PASS | O6: JSONL request events (2) all carry requester_fp=fp1
+PASS | O6: JSONL approval events (2) all carry requester_fp=fp1
+PASS | O6: JSONL claim events (1) all carry requester_fp=fp1
+PASS | O6: JSONL exec_start events (1) all carry requester_fp=fp1
+PASS | O6: JSONL exec_exit events (1) all carry requester_fp=fp1
+------------------------------------------------------------------
+PASS: 65  FAIL: 0
+RESULT: GREEN - sandbox reaches the broker through exactly one rule; host stays isolated
+(certs were generated into /tmp/tmb-osh.XivJf5 and wiped by the cleanup trap; per-run image removed; CA key never entered any image)
+=== cleanup ===
+-- sandbox tmb8-tn1hhwp9yl deleted
+-- container tmb-osh-host removed
+-- image tmb-osh-sbx:1792219604-12909 removed (per-run certs gone)
+-- forwarder tmb-osh-gwreach removed

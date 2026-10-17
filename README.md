@@ -26,11 +26,12 @@ TMB посредничает между агентом в песочнице NVI
 | --- | --- | --- |
 | Брокер как отдельный привилегированный демон, sudo не затрагивается | [ADR 0002](docs/adr/0002-standalone-tmb-broker.md) | принято |
 | Песочница OpenShell, TCP endpoint с mTLS-идентичностью | [ADR 0003](docs/adr/0003-sandbox-transport-tcp-mtls.md) | принято |
-| Одобряющий как отдельная роль, очередь одобрений вместо консоли | [ADR 0004](docs/adr/0004-approver-role-and-approval-queue.md) | принято, реализация в этапе после #5 |
+| Одобряющий как отдельная роль, очередь одобрений вместо консоли | [ADR 0004](docs/adr/0004-approver-role-and-approval-queue.md) | принято, реализовано в майлстоуне A |
 | Идентичность песочницы по открытому ключу, короткоживущие сертификаты | [ADR 0005](docs/adr/0005-requester-identity-by-public-key.md) | принято, реализация в этапе после #5 |
 | OpenShell-майлстоун: реестр O0–O9 на живой связке | [#5](https://github.com/Vchekryzhov/tmb/issues/5), [вердикт](VERDICT-OPENSHELL.md) | доказан: N=77/77, pair=59/59, OpenShell=65/65 |
+| Майлстоун A «политика и харденинг»: очередь одобрений, корни cwd, политика окружения, fd каталога, сборщик claim-файлов | [#27](https://github.com/Vchekryzhov/tmb/issues/27), [вердикт](VERDICT-A.md) | доказан: N=159/159, pair=67/67, OpenShell=65/65 |
 | CI: переносимые проверки на каждый PR, единый статус `ci-gate` | [docs/ci.md](docs/ci.md) | фаза A действует, фазы B и C ждут |
-| Следующий этап: env/cwd, защита запуска, упаковка, аудит, production-CA | [#4](https://github.com/Vchekryzhov/tmb/issues/4) | открыт |
+| Майлстоун B «эксплуатация»: идентичность по ключу, reload, журнал, пакеты, пруф на VM | [#39](https://github.com/Vchekryzhov/tmb/issues/39), зонтик [#4](https://github.com/Vchekryzhov/tmb/issues/4) | в работе: CA в `tmb-broker` готов |
 
 ## Как это работает
 
@@ -102,7 +103,8 @@ OpenCode используется в базовом образе стенда, �
 - Одобренный запрос получает одноразовый токен с TTL. Токен привязан к идентичности запросчика и гасится атомарно до запуска; погашение переживает рестарт брокера.
 - Повтор токена, гонки, чужой claim и мутация запроса после одобрения отклоняются.
 - Запуск ровно один: прямой `execve` без shell и PATH-поиска, env только из allowlist брокера, `stdin` закрыт.
-- Политика env и cwd остаётся зоной доопределения следующего этапа ([#4](https://github.com/Vchekryzhov/tmb/issues/4)).
+- Политика запроса отсекает лишнее до человека: cwd только внутри `allowed_cwd_roots` по realpath, ключи `fixed_env` не переопределяются, `PATH` только фиксированный, значения окружения в одну строку и не длиннее 4 KiB.
+- Одобряет отдельная роль: запрос ждёт в очереди не дольше `approval_wait_seconds`, человек из `approver_uids` решает командой `tmb approve` через сокет хоста; по TLS одобрение невозможно.
 
 ```mermaid
 sequenceDiagram
@@ -173,6 +175,7 @@ ci/run.sh tools && ci/run.sh local
 - [ADR 0004](docs/adr/0004-approver-role-and-approval-queue.md): одобряющий как отдельная роль, очередь одобрений.
 - [ADR 0005](docs/adr/0005-requester-identity-by-public-key.md): идентичность песочницы по открытому ключу.
 - [VERDICT-OPENSHELL.md](VERDICT-OPENSHELL.md): вердикт OpenShell-майлстоуна, реестр O0–O9, отклонения от спеки, остаточные риски.
+- [VERDICT-A.md](VERDICT-A.md): вердикт майлстоуна A, реестр N13–N22 и PAIR-APPROVE, отклонения от спеки, остаточные риски.
 - [docs/ci.md](docs/ci.md): CI, фазы, `ci-gate`, пороги, исключения.
 - [harness/ref/README-PROTOTYPE.md](harness/ref/README-PROTOTYPE.md): стенды, топология, пререквизиты.
 - [harness/ref/VERDICT-BROKER.md](harness/ref/VERDICT-BROKER.md): исторический вердикт исходного Unix-PoC.
