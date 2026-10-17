@@ -275,8 +275,12 @@ check "V1: /etc/tmb/config.json is not shipped" vm test ! -e /etc/tmb/config.jso
 
 vm_run systemctl start tmb-broker
 if [ "$RUNC" != 0 ]; then ok "V1: systemctl start without config -> exit $RUNC"; else bad "V1: systemctl start without config succeeded"; fi
-sleep 1
-STATE=$(vm systemctl show -p ActiveState --value tmb-broker | tr -d '[:space:]')
+# Restart=on-failure retries until StartLimitBurst; the unit ends failed
+for _ in $(seq 1 30); do
+  STATE=$(vm systemctl show -p ActiveState --value tmb-broker | tr -d '[:space:]')
+  [ "$STATE" = failed ] && break
+  sleep 0.5
+done
 if [ "$STATE" = failed ]; then ok "V1: unit is failed without config"; else bad "V1: unit state '$STATE', want failed"; fi
 vm journalctl -u tmb-broker --no-pager -o cat >"$OUT_FILE" 2>&1; grep -m1 -F "not found" "$OUT_FILE" | sed 's/^/  | /'; tail -3 "$OUT_FILE" | sed 's/^/  | /'
 assert_out_has "V1: systemd journal names the missing file" "/etc/tmb/config.json not found"
