@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/x509"
@@ -111,5 +112,21 @@ func TestKeysUsageAndBadInput(t *testing.T) {
 		if code, _, _ := runKeys(fingerprint, p); code != 1 {
 			t.Errorf("%s: exit %d, want 1", name, code)
 		}
+	}
+	// a PKCS#8 key that cannot sign (X25519) is not a sandbox key
+	xk, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("x25519: %v", err)
+	}
+	xDER, err := x509.MarshalPKCS8PrivateKey(xk)
+	if err != nil {
+		t.Fatalf("marshal x25519: %v", err)
+	}
+	p := filepath.Join(dir, "x25519")
+	if err := os.WriteFile(p, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: xDER}), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if code, _, errs := runKeys(fingerprint, p); code != 1 || !strings.Contains(errs, "unsupported key type") {
+		t.Errorf("x25519: exit %d %q, want 1 and an unsupported key type", code, errs)
 	}
 }

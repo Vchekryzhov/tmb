@@ -33,34 +33,39 @@ func cmdKeygen(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "usage: tmb keygen --out FILE")
 		return 2
 	}
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	pubDER, err := writeNewKey(*out)
 	if err != nil {
 		fmt.Fprintf(stderr, "tmb keygen: %v\n", err)
 		return 1
 	}
-	der, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		fmt.Fprintf(stderr, "tmb keygen: %v\n", err)
-		return 1
-	}
-	f, err := os.OpenFile(*out, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		fmt.Fprintf(stderr, "tmb keygen: %v\n", err)
-		return 1
-	}
-	if err := pem.Encode(f, &pem.Block{Type: "PRIVATE KEY", Bytes: der}); err != nil {
-		f.Close()
-		fmt.Fprintf(stderr, "tmb keygen: %v\n", err)
-		return 1
-	}
-	if err := f.Close(); err != nil {
-		fmt.Fprintf(stderr, "tmb keygen: %v\n", err)
-		return 1
-	}
-	pubDER, _ := x509.MarshalPKIXPublicKey(&key.PublicKey)
 	_ = pem.Encode(stdout, &pem.Block{Type: "PUBLIC KEY", Bytes: pubDER})
 	fmt.Fprintf(stdout, "fingerprint: %s\n", spkiHex(pubDER))
 	return 0
+}
+
+// writeNewKey creates a P-256 key in a new 0600 file and returns its DER
+// SubjectPublicKeyInfo. An existing file is never overwritten.
+func writeNewKey(path string) ([]byte, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	werr := pem.Encode(f, &pem.Block{Type: "PRIVATE KEY", Bytes: der})
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return nil, werr
+	}
+	return x509.MarshalPKIXPublicKey(&key.PublicKey)
 }
 
 // cmdFingerprint prints the key fingerprint of a PEM private key, public

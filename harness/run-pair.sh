@@ -768,7 +768,8 @@ docker exec \
   "$SBX" tmb exec --root -- /usr/bin/id -u >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 assert_rc     "PAIR-KEY: request with the sandbox-born key -> exit 0" 0
 assert_out_eq "PAIR-KEY: stdout '0'" "0"
-docker exec "$HOST" sh -c 'grep -rl "PRIVATE KEY" / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null' >"$TD/pk-host.out"
+# text files only (-I): the Go binaries carry the PEM type string itself
+docker exec "$HOST" sh -c 'grep -rlI -e "-----BEGIN [A-Z ]*PRIVATE KEY-----" / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null' >"$TD/pk-host.out"
 sed 's/^/  | /' "$TD/pk-host.out"
 if [ "$(grep -cv '^/etc/tmb/certs/server.key$' "$TD/pk-host.out")" = 0 ]; then ok "PAIR-KEY: host-sim holds no private key but the broker's own"; else bad "PAIR-KEY: host-sim holds other private key files"; fi
 stop_broker
