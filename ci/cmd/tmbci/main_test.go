@@ -183,3 +183,34 @@ func TestBadges(t *testing.T) {
 		t.Fatalf("stale tool badge must fail -check: code %d\n%s", code, out)
 	}
 }
+
+func TestArchive(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "tmb")
+	if err := os.WriteFile(bin, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, b := filepath.Join(dir, "a.tar.gz"), filepath.Join(dir, "b.tar.gz")
+	for _, out := range []string{a, b} {
+		if code, msg, _ := tmbci(t, "", "archive", "-file-out", out, "-mtime", "1700000000", "-file", "tmb="+bin); code != 0 {
+			t.Fatalf("archive: code %d\n%s", code, msg)
+		}
+	}
+	x, _ := os.ReadFile(a)
+	y, _ := os.ReadFile(b)
+	if len(x) == 0 || string(x) != string(y) {
+		t.Fatal("two archives of one file differ or are empty")
+	}
+	for _, args := range [][]string{
+		{"archive", "-mtime", "1", "-file", "tmb=" + bin},
+		{"archive", "-file-out", a, "-file", "tmb=" + bin},
+		{"archive", "-file-out", a, "-mtime", "1", "-file", "/abs=" + bin},
+		{"archive", "-file-out", a, "-mtime", "1", "-file", "tmb=" + filepath.Join(dir, "missing")},
+		{"archive", "-file-out", filepath.Join(dir, "no", "dir.tar.gz"), "-mtime", "1", "-file", "tmb=" + bin},
+		{"archive", "-bogus"},
+	} {
+		if code, _, _ := tmbci(t, "", args...); code != 2 {
+			t.Fatalf("%v: code %d, want 2", args, code)
+		}
+	}
+}

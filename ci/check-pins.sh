@@ -8,7 +8,7 @@ rc=0
 want=$(tr -d '[:space:]' <"$ROOT/.go-version")
 want=${want#go}
 echo ".go-version: $want"
-for f in "$ROOT"/harness/images/Dockerfile.*; do
+for f in "$ROOT"/harness/images/Dockerfile.* "$ROOT"/packaging/test/Dockerfile.*; do
   while read -r img; do
     case "$img" in
       golang:*) v=${img#golang:}; v=${v%%-*}
@@ -42,6 +42,19 @@ for wf in "$ROOT"/.github/workflows/*.yml "$ROOT"/.github/actions/*/action.yml; 
     echo "$ref" | grep -qE '@[0-9a-f]{40}$' || { echo "$(basename "$wf"):$ln action $ref is not pinned by full commit SHA"; rc=1; }
   done < <(grep -n 'uses:' "$wf")
 done
+# ci/tools.lock: every binary tool is pinned for linux/amd64, linux/arm64 and
+# darwin/arm64 at one version, and each URL names that version.
+while read -r tool; do
+  for plat in "linux amd64" "linux arm64" "darwin arm64"; do
+    n=$(awk -v t="$tool" -v p="$plat" '$1 == t && ($3 " " $4) == p' "$ROOT/ci/tools.lock" | wc -l | tr -d ' ')
+    [ "$n" = 1 ] || { echo "ci/tools.lock: $tool has $n entries for $plat, want 1"; rc=1; }
+  done
+  vers=$(awk -v t="$tool" '$1 == t {print $2}' "$ROOT/ci/tools.lock" | sort -u)
+  [ "$(echo "$vers" | wc -l | tr -d ' ')" = 1 ] || { echo "ci/tools.lock: $tool pinned at several versions: $(echo "$vers" | tr '\n' ' ')"; rc=1; }
+  while read -r v url; do
+    case "$url" in *"$v"*) ;; *) echo "ci/tools.lock: $tool $v URL does not name the version: $url"; rc=1 ;; esac
+  done < <(awk -v t="$tool" '$1 == t {print $2, $5}' "$ROOT/ci/tools.lock")
+done < <(awk '$1 !~ /^#/ && NF {print $1}' "$ROOT/ci/tools.lock" | sort -u)
 for d in "$ROOT"/ci/tools/*/; do
   grep -q "^go $want\$" "$d/go.mod" || { echo "ci/tools/$(basename "$d")/go.mod: go line differs from $want"; rc=1; }
 done

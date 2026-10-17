@@ -23,7 +23,7 @@ ci/run.sh tools
 ci/run.sh local
 ```
 
-`tools` собирает `tmbci` и закреплённые инструменты в `out/ci/bin`. `local` прогоняет lint, тесты, самопроверку CI, покрытие, gosec/govulncheck, сборку и короткий fuzz. Отдельные проверки: `ci/run.sh lint`, `test <метка> [race]`, `coverage [base-ref]`, `security`, `build`, `fuzz short|long`, `secrets range|full`, `harness`, `images`, `manifest`, `stress`, `mutation`, `bench`. Полный список выводит `ci/run.sh` без аргументов.
+`tools` собирает `tmbci` и закреплённые инструменты в `out/ci/bin`. `local` прогоняет lint, тесты, самопроверку CI, покрытие, gosec/govulncheck, сборку и короткий fuzz. Отдельные проверки: `ci/run.sh lint`, `test <метка> [race]`, `coverage [base-ref]`, `security`, `build`, `dist`, `package`, `fuzz short|long`, `secrets range|full`, `harness`, `images`, `manifest`, `stress`, `mutation`, `bench`. Полный список выводит `ci/run.sh` без аргументов.
 
 Каждая проверка пишет `out/ci/results/<check>.json`. В файле есть статус (PASS, FAIL, ERROR, NOT_RUN, UNAVAILABLE или NOT_APPLICABLE), проверенный SHA, номер запуска, версии инструментов и сводка. Отчёты лежат в `out/ci/reports/`. Красная проверка воспроизводится той же командой, что указана в шаге workflow.
 
@@ -50,6 +50,7 @@ ci/run.sh local
 | coverage | профиль всего модуля, сравнение с merge-base, diff coverage, цели | 20 мин |
 | security | gosec (исходники и тесты, сборки linux и darwin, находки объединяются), govulncheck на уровне символов | 15 мин |
 | build | `tmb` и `tmb-broker` для Linux amd64/arm64, `tmb` для macOS arm64; две чистые сборки с одинаковым SHA-256, build manifest, govulncheck по бинарникам | 15 мин |
+| package | `ci/run.sh package` из [package.yml](../.github/workflows/package.yml): deb и rpm `tmb-broker` и `tmb` (amd64, arm64), архивы `tmb`, SHA256SUMS; вторая чистая сборка побайтно совпадает; установка deb в Ubuntu 24.04 и rpm в Fedora 44 в контейнере; файлы релиза уходят в артефакт `dist` | 20 мин |
 | fuzz | реестр fuzz targets; PR: до 30 с на target и 3 мин всего; nightly: до 5 мин и 15 мин | 25 мин |
 | secrets | Gitleaks: диапазон коммитов PR и дерево; nightly: вся история | 10 мин |
 | harness | `run-pair.sh`, который заново запускает `run.sh`, на одноразовом Linux runner; логи сверяются с [ci/scenarios](../ci/scenarios) | 25 мин |
@@ -57,7 +58,7 @@ ci/run.sh local
 | manifest | матрица SEC-01…SEC-26 против реально выполненных тестов и сценариев | 5 мин |
 | nightly | повторные перемешанные тесты под race, mutation checks, benchmarks, внешние ссылки | 55 мин |
 
-Mac-брокер собирается только как часть тестов: привилегированный брокер на Mac не заявлен и не публикуется. Диагностические артефакты хранятся 14 дней, отчёты плановых security-аудитов 30 дней. Репозиторий public, поэтому артефакты Actions может скачать любой авторизованный пользователь GitHub. В них нет секретов: Gitleaks редактирует значения, PEM-ключи блокируют загрузку. Но логи стендов, SBOM и fuzz-входы публичны. В registry и releases ничего не публикуется.
+Mac-брокер собирается только как часть тестов: привилегированный брокер на Mac не заявлен и не публикуется. Диагностические артефакты хранятся 14 дней, отчёты плановых security-аудитов 30 дней. Репозиторий public, поэтому артефакты Actions может скачать любой авторизованный пользователь GitHub. В них нет секретов: Gitleaks редактирует значения, PEM-ключи блокируют загрузку. Но логи стендов, SBOM и fuzz-входы публичны. В registry ничего не публикуется; в GitHub Releases публикует только release.yml по тегу `v*` (см. «Пакеты и релиз»).
 
 ## Пороги
 
@@ -88,6 +89,7 @@ Mac-брокер собирается только как часть тесто�
 [![tool-govulncheck](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-govulncheck.json)](../ci/tools/govulncheck/go.mod)
 [![tool-trivy](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-trivy.json)](../ci/tools.lock)
 [![tool-gitleaks](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-gitleaks.json)](../ci/tools.lock)
+[![tool-nfpm](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-nfpm.json)](../ci/tools.lock)
 [![tool-zizmor](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-zizmor.json)](../ci/tools.lock)
 [![tool-actionlint](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-actionlint.json)](../ci/tools/actionlint/go.mod)
 [![tool-shellcheck](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-shellcheck.json)](../ci/tools.lock)
@@ -110,18 +112,47 @@ Gate отвергает истёкшие и широкие записи (мас�
 
 ## Безопасность CI
 
-- `permissions: {}` на уровне workflow, `contents: read` у jobs; checkout без сохранённых credentials. Секретов и OIDC нет. Единственный write-токен у job `badges` (push в main после зелёного gate): она коммитит только `docs/badges`, в PR не запускается и артефактов не загружает. `pull_request_target` и `workflow_run` не используются.
+- `permissions: {}` на уровне workflow, `contents: read` у jobs; checkout без сохранённых credentials. Секретов и OIDC нет. В ci.yml единственный write-токен у job `badges` (push в main после зелёного gate): она коммитит только `docs/badges`, в PR не запускается и артефактов не загружает. Второй write-токен у job `publish` в release.yml: она запускается только на push тега `v*`, не делает checkout и не запускает код репозитория, а только проверяет SHA256SUMS и создаёт релиз через `gh release create --verify-tag`. `pull_request_target` и `workflow_run` не используются.
 - Actions закреплены полным SHA. Инструменты: Go-утилиты собираются из отдельных модулей `ci/tools/<name>` с проверкой go.sum, бинарные проверяются по SHA-256 из [ci/tools.lock](../ci/tools.lock). Базовые образы закреплены digest.
 - Кеши отключены (`cache: false`, свежий кеш Trivy). Данные PR попадают в shell только через переменные окружения.
 - Стенды работают на одноразовых GitHub-hosted VM. Ключи CA и per-run ключи остаются во временных каталогах стенда. Отчёт с PEM-ключом удаляется до загрузки, проверка становится ERROR.
 - Phase B запускается только на trusted main (ручной запуск или расписание). PR на выделенный runner не попадает.
+
+## Пакеты и релиз
+
+Файлы релиза собираются из чистого checkout одной командой (нужны Go из [.go-version](../.go-version), git и curl; `tmbci` и nfpm из [ci/tools.lock](../ci/tools.lock) ставятся сами, nfpm с проверкой SHA-256):
+
+```bash
+ci/run.sh dist
+```
+
+Результат в `out/dist` (каталог меняется через `TMB_DIST`):
+
+- `tmb-broker` deb и rpm для amd64 и arm64: `/usr/bin/tmb-broker`, unit `/usr/lib/systemd/system/tmb-broker.service`, `/etc/tmb/config.json.example` (`allowed_cwd_roots: ["/tmp"]`, `approval_default: queue`, пустые allowlist и `approver_uids`), `/etc/logrotate.d/tmb-broker` (`postrotate` делает `systemctl reload`), `/usr/lib/tmpfiles.d/tmb.conf` для `/run/tmb`, каталоги `/var/lib/tmb` 0700 и `/var/log/tmb` 0750. `/etc/tmb/config.json` пакет не создаёт: `ExecStartPre` без него завершает старт с сообщением в журнале systemd, `Restart=on-failure` повторяет старт до лимита systemd (`StartLimitBurst`, по умолчанию 5 за 10 секунд), после чего unit остаётся failed (под настоящим systemd это проверит [#45](https://github.com/Vchekryzhov/tmb/issues/45)). Пакет не включает и не запускает сервис; обновление делает `try-restart`, удаление останавливает сервис и оставляет конфиг, `/var/lib/tmb` и `/var/log/tmb`.
+- `tmb` deb и rpm для amd64 и arm64: `/usr/bin/tmb`.
+- `tmb_<версия>_<os>_<arch>.tar.gz` для linux/amd64, linux/arm64 и darwin/arm64 и `SHA256SUMS` по всем файлам.
+
+Описания пакетов: [packaging/tmb-broker.nfpm.yaml](../packaging/tmb-broker.nfpm.yaml) и [packaging/tmb.nfpm.yaml](../packaging/tmb.nfpm.yaml), по одному файлу на пакет для deb и rpm. Unit без sandboxing systemd (`ProtectSystem`, `PrivateTmp`, `ProtectHome` и подобных): брокер выполняет одобренные команды на настоящем хосте. `KillMode=process`: остановка и рестарт завершают только брокер, уже запущенные одобренные команды дорабатывают. Состав unit и пример конфига закреплены Go-тестом `packaging_test.go` пакета брокера.
+
+Версия: `TMB_VERSION`, иначе тег `v*` на HEAD, иначе `v0.0.0-dev+<sha12>`. Бинарники печатают её (`tmb-broker -version`, `tmb version`); в пакетах пре-релиз пишется через `~` (`0.0.0~dev+<sha>-1`), чтобы сортироваться раньше релиза. Сборка воспроизводима: `-trimpath`, `-buildvcs=false`, пустой `-buildid`, `CGO_ENABLED=0`, время файлов в пакетах и архивах это время коммита (`SOURCE_DATE_EPOCH`), build host в заголовке rpm фиксирован (`reproducible`, иначе nfpm пишет имя машины), архивы пишет `tmbci archive` без имён владельцев и времени в заголовке gzip.
+
+```bash
+ci/run.sh package
+```
+
+`package` делает `dist`, затем вторую сборку со свежим `GOCACHE` и сравнивает SHA256SUMS (`package/reproducible`: бинарники, пакеты и архивы побайтно одинаковы), затем собирает образы [packaging/test](../packaging/test) из Ubuntu 24.04 и Fedora 44 с закреплённым digest. Пакеты копируются в контекст сборки, без монтирования, без привилегий и без `docker.sock`; [check-install.sh](../packaging/test/check-install.sh) внутри сборки проверяет метаданные пакетов обеих архитектур, ставит пакеты своей архитектуры, сверяет `tmb-broker -version` и `tmb version` с версией, права файлов и каталогов, директивы unit, `systemd-analyze verify`, `systemd-tmpfiles --create`, `logrotate -d`, затем удаляет пакеты и проверяет, что конфиг, состояние и журнал остались (`package/deb-ubuntu`, `package/rpm-fedora`). systemd в контейнере не запускается: старт, reload и логротация под настоящим systemd проверяются в VM-пруфе [#45](https://github.com/Vchekryzhov/tmb/issues/45). Пакеты другой архитектуры только инспектируются.
+
+Job `package` в ci.yml вызывает [package.yml](../.github/workflows/package.yml) на каждом PR и push, поэтому релизная сборка проверена до тега. [release.yml](../.github/workflows/release.yml) запускается на push тега `v*`: тот же package.yml с `TMB_VERSION` из тега, затем job `publish` проверяет, что коммит тега есть в main (GitHub compare API, иначе ничего не публикуется), `sha256sum -c SHA256SUMS`, что SHA256SUMS перечисляет ровно загружаемые файлы, и создаёт релиз `gh release create --verify-tag` с пакетами, архивами и SHA256SUMS. Публикуются только теги вида `vMAJOR.MINOR.PATCH`: в именах пакетов пре-релиза есть `~` и `+`, GitHub переименовывает такие файлы, и они разошлись бы с SHA256SUMS. Ручной запуск release.yml (workflow_dispatch) это пробный прогон: сборка и проверки идут, `publish` пропускается.
+
+Выпуск релиза: зелёный `ci-gate` на коммите в main, затем `git tag v<версия> <коммит> && git push origin v<версия>`. Тег ставит владелец; агенты теги не пушат.
 
 ## Updating pins
 
 Обновления приходят через Dependabot ([.github/dependabot.yml](../.github/dependabot.yml)): actions, Go-модули инструментов и базовые образы, после выдержки 14 дней, без auto-merge. Вручную обновляются:
 
 1. Go: [.go-version](../.go-version), `GO_PRIMARY` и матрица в `ci.yml`, строка `go` в `ci/tools/*/go.mod`, `golang:<версия>-alpine@sha256:…` в `harness/images/Dockerfile.*` и в `harness/run-pair.sh`/`run-openshell.sh`. Рассогласование ловит `lint/pins`.
-2. Бинарные инструменты: версия, URL и SHA-256 в `ci/tools.lock`. SHA-256 сверяется с upstream checksum-файлом или digest ассета в GitHub. `latest` и `master` не допускаются.
+2. Бинарные инструменты: версия, URL и SHA-256 в `ci/tools.lock`. SHA-256 сверяется с upstream checksum-файлом или digest ассета в GitHub. `latest` и `master` не допускаются. Каждый инструмент закреплён ровно одной строкой на linux/amd64, linux/arm64 и darwin/arm64, все три одной версии, и URL называет эту версию: иначе `lint/pins` красный.
+   nfpm (сборка deb и rpm) обновляется так: выбрать релиз [goreleaser/nfpm](https://github.com/goreleaser/nfpm/releases) старше 14 дней; заменить версию в трёх строках `nfpm` в `ci/tools.lock` и в их URL (`nfpm_<версия>_Linux_x86_64.tar.gz`, `_Linux_arm64`, `_Darwin_arm64`); SHA-256 взять из `checksums.txt` релиза и сверить с digest ассета (`gh api repos/goreleaser/nfpm/releases/tags/v<версия> --jq '.assets[] | .name + " " + .digest'`); выполнить `ci/run.sh badges tools` и закоммитить `docs/badges/tool-nfpm.json`; прогнать `ci/run.sh package` (новый nfpm может поменять байты пакетов, но две сборки одного коммита обязаны совпасть). Рассогласование строк, версии в URL или бейджа ловит `lint/pins`.
 3. Выдержка 14 дней нарушается только ради совместимости, с причиной в коммите. Так сделано для Staticcheck 2026.2.2 (поддержка export data Go 1.27.2) и для `golang.org/x/tools` v0.51.0 в модуле gosec: gosec v2.29.0 со старым x/tools не загружал пакеты Go 1.27.2.
 
 ## Phase B

@@ -21,6 +21,7 @@ import (
 
 	"tmb-ci/internal/badges"
 	"tmb-ci/internal/coverage"
+	"tmb-ci/internal/dist"
 	"tmb-ci/internal/fuzz"
 	"tmb-ci/internal/gate"
 	"tmb-ci/internal/gotest"
@@ -44,6 +45,7 @@ var commands = map[string]func(*env, []string) int{
 	"fuzz":            cmdFuzz,
 	"gate":            cmdGate,
 	"badges":          cmdBadges,
+	"archive":         cmdArchive,
 }
 
 func run(args []string, w io.Writer) int {
@@ -738,5 +740,43 @@ func cmdBadges(e *env, args []string) int {
 	for _, p := range paths {
 		fmt.Fprintln(e.w, p)
 	}
+	return 0
+}
+
+// cmdArchive writes a deterministic tar.gz of the given files (release
+// archives of the tmb client, ci/run.sh dist). It is not a check and writes
+// no result.
+func cmdArchive(e *env, args []string) int {
+	fs := e.flags("archive") // -out is accepted for uniformity and unused
+	outFile := fs.String("file-out", "", "archive to write")
+	mtime := fs.Int64("mtime", -1, "entry mtime, Unix seconds (SOURCE_DATE_EPOCH)")
+	var specs multi
+	fs.Var(&specs, "file", "name=path of an entry (repeatable)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *outFile == "" || *mtime < 0 || len(specs) == 0 {
+		fmt.Fprintln(e.w, "archive: -file-out, -mtime and at least one -file are required")
+		return 2
+	}
+	var files []dist.File
+	for _, s := range specs {
+		f, err := dist.ParseFile(s)
+		if err != nil {
+			fmt.Fprintf(e.w, "archive: %v\n", err)
+			return 2
+		}
+		files = append(files, f)
+	}
+	var buf strings.Builder
+	if err := dist.WriteTarGz(&buf, files, time.Unix(*mtime, 0)); err != nil {
+		fmt.Fprintf(e.w, "archive: %v\n", err)
+		return 2
+	}
+	if err := os.WriteFile(*outFile, []byte(buf.String()), 0o644); err != nil {
+		fmt.Fprintf(e.w, "archive: %v\n", err)
+		return 2
+	}
+	fmt.Fprintln(e.w, *outFile)
 	return 0
 }

@@ -1,0 +1,31 @@
+{
+  "_comment": "Example for the tmb-broker package. Copy to /etc/tmb/config.json, list requester uids or key fingerprints and approver uids, then systemctl start tmb-broker. Paths match the systemd unit (RuntimeDirectory, StateDirectory, LogsDirectory) and the logrotate config.",
+  "socket_path": "/run/tmb/tmb.sock",
+  "approver_socket_path": "/run/tmb/approve.sock",
+  "pid_file": "/run/tmb/tmb-broker.pid",
+  "state_dir": "/var/lib/tmb",
+  "log_path": "/var/log/tmb/journal.jsonl",
+  "socket_gid": 0,
+  "allowed_requester_uids": [],
+  "allowed_requester_keys": [],
+  "approver_uids": [],
+  "approval_default": "queue",
+  "approval_wait_seconds": 300,
+  "token_ttl_seconds": 60,
+  "allowed_cwd_roots": ["/tmp"],
+  "allowed_env_keys": ["LANG"],
+  "fixed_env": {
+    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "LANG": "C.UTF-8"
+  },
+  "shell_deny_list": [
+    "/bin/sh", "/bin/bash", "/bin/dash", "/bin/zsh", "/bin/ksh",
+    "/usr/bin/sh", "/usr/bin/bash", "/usr/bin/dash", "/usr/bin/zsh",
+    "/usr/bin/ksh", "/usr/bin/env", "/usr/bin/fish", "/bin/tcsh",
+    "/usr/bin/tcsh", "/bin/csh", "/usr/bin/csh", "/usr/bin/busybox"
+  ],
+  "tls_addr": "",
+  "tls_ca_file": "/etc/tmb/ca/ca.crt",
+  "tls_cert_file": "/etc/tmb/ca/server.crt",
+  "tls_key_file": "/etc/tmb/ca/server.key"
+}
