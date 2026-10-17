@@ -262,6 +262,8 @@ func (c *cli) streamFrames(conn net.Conn, quiet bool) (int, error) {
 		switch f.Type {
 		case "approved":
 			fmt.Fprintf(c.stderr, "TOK: %s (%s)\n", f.Token, f.Detail)
+		case "waiting":
+			fmt.Fprintf(c.stderr, "tmb: waiting for approval (item %s, %s)\n", f.Token, f.Detail)
 		case "stdout", "stderr":
 			data, err := base64.StdEncoding.DecodeString(f.Data)
 			if err != nil {

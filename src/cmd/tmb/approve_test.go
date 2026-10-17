@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -240,5 +241,27 @@ func TestApproveBrokerMisbehaves(t *testing.T) {
 	}
 	if got := (&approverDenied{reason: "x"}).Error(); got != "DENIED: x" {
 		t.Errorf("Error() = %q", got)
+	}
+}
+
+// tmb exec reports the broker's waiting frame once on stderr and keeps
+// reading until the exit frame.
+func TestExecPrintsWaitingOnce(t *testing.T) {
+	server, client := net.Pipe()
+	go func() {
+		defer server.Close()
+		code := 0
+		proto.WriteFrame(server, &proto.Frame{Type: "waiting", Token: "aaaaaaaaaaaaaaaa", Detail: "at most 5m0s"})
+		proto.WriteFrame(server, &proto.Frame{Type: "approved", Token: "aaaaaaaaaaaaaaaa"})
+		proto.WriteFrame(server, &proto.Frame{Type: "exit", Code: &code})
+	}()
+	var buf bytes.Buffer
+	c := &cli{stdin: strings.NewReader(""), stdout: io.Discard, stderr: &buf}
+	got, serr := c.streamFrames(client, true)
+	if serr != nil || got != 0 {
+		t.Fatalf("streamFrames = %d %v", got, serr)
+	}
+	if n := strings.Count(buf.String(), "waiting for approval"); n != 1 {
+		t.Fatalf("stderr says waiting %d times:\n%s", n, buf.String())
 	}
 }

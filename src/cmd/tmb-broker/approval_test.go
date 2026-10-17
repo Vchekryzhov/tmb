@@ -153,7 +153,7 @@ func TestManualConsoleShowsFinalEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("realpath: %v", err)
 	}
-	if granted, _, _ := b.runApprovalInteraction(req, UIDRequester(4242, 1), exeReal, "/tmp", 0, 0); granted {
+	if granted, _, _ := b.runApprovalInteraction(req, UIDRequester(4242, 1), exeReal, "/tmp", 0, 0, nil); granted {
 		t.Fatalf("answer n must deny")
 	}
 	want := `  env       : ["LANG=ru_RU.UTF-8","PATH=/usr/bin:/bin"]`
