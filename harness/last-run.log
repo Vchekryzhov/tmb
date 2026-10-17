@@ -11,3 +11,1704 @@ workdir: /Users/chekryhov.viktor/projects/tmb/.claude/worktrees/bold-northcutt-4
 -- building tmb-poc/host-sim (context: repo root, so Dockerfiles can COPY src/)
 sha256:76042492022e71fd43f613eb27af1e15e4a918656316aeb795a33fded0a2200e
 -- building tmb-poc/sandbox-sim
+sha256:3ccd246ff90ddd5c9a13937f57552b7f347cddc22d28e3aa8d28a7d5f902f7cb
+-- starting host-sim (root, broker host, normal human sudo present)
+-- starting sandbox-sim (uid 4242, --network none, no docker.sock, no host mounts)
+CHECK PASS: containers up (sandbox uid=4242, host uid=0)
+CHECK PASS: sandbox-sim is on the 'none' network only
+
+================================================================
+== SCENARIO HAPPY: mock-approve, tmb exec --root -- /usr/bin/id -u
+================================================================
+-- starting tmb-broker (mode=mock-approve ttl=3s)
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"f2312c4af24ca6a727e01a68c95e4024"}
+  | TOK: 9066ebebff37e832 (one-shot token, ttl=3s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: HAPPY: exit code 0 (rc=0)
+CHECK PASS: HAPPY: stdout is exactly '0' (stdout='0')
+---- STATE: broker.log (last 14 lines) ----
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:58:37.721701215Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":13,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:37.72485584Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"f2312c4af24c...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:37.884488924Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"f2312c4af24c...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:37.888638216Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"9066ebebff37e83287a8804c28f14207281af20310857bebc768f84e414ace37","nonce":"f2312c4af24c...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"9066ebebff37e832","ts":"2026-10-17T21:58:37.900778424Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"9066ebebff37e832","ts":"2026-10-17T21:58:37.903229174Z","uid":0}
+  | {"duration_ms":13,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"9066ebebff37e832","ts":"2026-10-17T21:58:37.916904674Z"}
+---- STATE: claim store (count + newest files) ----
+  | 2
+  | total 8
+  | -rw------- 1 root root 124 Oct 17 21:58 2f53918d955f035c4aa89b7de9d4ec2520437d9bb14446016fcab7eceba69a39.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 9066ebebff37e83287a8804c28f14207281af20310857bebc768f84e414ace37.claim
+
+================================================================
+== SCENARIO FD-NOLEAK: child lists /proc/self/fd (socket must not leak, stdin=/dev/null)
+================================================================
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/bin/ls","argv":["/bin/ls","-l","/proc/self/fd"],"cwd":"/tmp","uid":0,"env":{},"nonce":"8d472e4fcf7961978f8cd16fd1990785"}
+  | TOK: d1ba911907d5815a (one-shot token, ttl=3s)
+  | EXIT: 0
+-- stdout --
+  | total 0
+  | lr-x------ 1 root root 64 Oct 17 21:58 0 -> /dev/null
+  | l-wx------ 1 root root 64 Oct 17 21:58 1 -> pipe:[3312163]
+  | l-wx------ 1 root root 64 Oct 17 21:58 2 -> pipe:[3312164]
+  | lr-x------ 1 root root 64 Oct 17 21:58 3 -> /proc/51/fd
+CHECK PASS: FD: ls -l /proc/self/fd ran (rc=0)
+CHECK PASS: FD: fd 0 points at /dev/null (child stdin)
+CHECK PASS: FD: no socket: fd leaked into child
+---- STATE: broker.log (last 14 lines) ----
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:58:37.721701215Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":13,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:37.72485584Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"f2312c4af24c...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:37.884488924Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"f2312c4af24c...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:37.888638216Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"9066ebebff37e83287a8804c28f14207281af20310857bebc768f84e414ace37","nonce":"f2312c4af24c...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"9066ebebff37e832","ts":"2026-10-17T21:58:37.900778424Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"9066ebebff37e832","ts":"2026-10-17T21:58:37.903229174Z","uid":0}
+  | {"duration_ms":13,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"9066ebebff37e832","ts":"2026-10-17T21:58:37.916904674Z"}
+  | {"argv":["/bin/ls","-l","/proc/self/fd"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/bin/ls","nonce":"8d472e4fcf79...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:38.133619216Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/bin/ls","-l","/proc/self/fd"],"decision":"approve","event":"approval","executable":"/bin/ls","mode":"mock-approve","nonce":"8d472e4fcf79...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:38.134814507Z"}
+  | {"event":"claim","executable":"/usr/bin/ls","hash":"d1ba911907d5815a3094c65671246b72fd3c19f0b7a459b753269c85586ea30d","nonce":"8d472e4fcf79...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"d1ba911907d5815a","ts":"2026-10-17T21:58:38.136954966Z"}
+  | {"argv":["/bin/ls","-l","/proc/self/fd"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025151,"exe_via_fd":true,"executable":"/usr/bin/ls","requester_pid":0,"requester_uid":4242,"schema":1,"token":"d1ba911907d5815a","ts":"2026-10-17T21:58:38.138158216Z","uid":0}
+  | {"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/ls","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"d1ba911907d5815a","ts":"2026-10-17T21:58:38.139913007Z"}
+---- STATE: claim store (count + newest files) ----
+  | 4
+  | total 16
+  | -rw------- 1 root root 124 Oct 17 21:58 3f6a7f4ae2634a337199effb5a14e6d986f95bba85e02137ad55e0980f835d23.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 d1ba911907d5815a3094c65671246b72fd3c19f0b7a459b753269c85586ea30d.claim
+  | -rw------- 1 root root 124 Oct 17 21:58 2f53918d955f035c4aa89b7de9d4ec2520437d9bb14446016fcab7eceba69a39.nonce
+
+================================================================
+== SCENARIO MANUAL: broker in manual mode, human answers on console (y then n)
+================================================================
+-- stopping tmb-broker
+-- manual broker up (console captured to /tmp/tmb-run.KAj2e8/manual-console.log)
+-- round 1: client asks for /usr/bin/id -u, human types y
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"d0683f8bbd77f60bc05013ed8df322a8"}
+  | TOK: ff65ac91cfcbbdf1 (one-shot token, ttl=3s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: MANUAL-y: human 'y' -> command runs, exit 0 (rc=0)
+CHECK PASS: MANUAL-y: stdout is exactly '0' (stdout='0')
+-- round 2: client asks for /usr/bin/id -G, human types n
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-G"],"cwd":"/tmp","uid":0,"env":{},"nonce":"3eee35b49a09f4dfc7be5c531fb421af"}
+  | tmb: DENIED: approval_denied_by_human (nothing was executed)
+-- stdout --
+CHECK PASS: MANUAL-n: human 'n' -> denied, exit 125 (rc=125)
+CHECK PASS: MANUAL-n: deny reason approval_denied_by_human
+---- manual approval console: EXACT request text shown to the human ----
+  | tmb-broker: listening on /run/tmb/tmb.sock (mode=manual ttl=3s pid=82)
+  | === TMB APPROVAL REQUIRED ===
+  |   requester : uid=4242 pid=0 (kernel SO_PEERCRED)
+  |   executable: /usr/bin/id (realpath /usr/bin/id, dev=69 ino=3025125)
+  |   argv      : ["/usr/bin/id","-u"]
+  |   cwd       : /tmp
+  |   run as uid: 0
+  |   env       : ["LANG=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
+  |   nonce     : d0683f8bbd77f60bc05013ed8df322a8
+  | Approve exactly this command? [y/N]: HUMAN ANSWER: "y" -> APPROVED
+  | === TMB APPROVAL REQUIRED ===
+  |   requester : uid=4242 pid=0 (kernel SO_PEERCRED)
+  |   executable: /usr/bin/id (realpath /usr/bin/id, dev=69 ino=3025125)
+  |   argv      : ["/usr/bin/id","-G"]
+  |   cwd       : /tmp
+  |   run as uid: 0
+  |   env       : ["LANG=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
+  |   nonce     : 3eee35b49a09f4dfc7be5c531fb421af
+  | Approve exactly this command? [y/N]: HUMAN ANSWER: "n" -> DENIED
+-- stopping tmb-broker
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/bin/ls","-l","/proc/self/fd"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025151,"exe_via_fd":true,"executable":"/usr/bin/ls","requester_pid":0,"requester_uid":4242,"schema":1,"token":"d1ba911907d5815a","ts":"2026-10-17T21:58:38.138158216Z","uid":0}
+  | {"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/ls","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"d1ba911907d5815a","ts":"2026-10-17T21:58:38.139913007Z"}
+  | {"event":"broker_stop","pid":13,"schema":1,"ts":"2026-10-17T21:58:38.395943924Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:58:38.553826383Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"manual","pid":82,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:38.555472799Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"d0683f8bbd77...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:38.931069716Z","type":"exec","uid":0}
+  | {"approver":"mode:manual","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"manual","nonce":"d0683f8bbd77...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:39.042241133Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"ff65ac91cfcbbdf12b387122de5532358482f9061ed8eb7aee0449cb08aebd03","nonce":"d0683f8bbd77...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"ff65ac91cfcbbdf1","ts":"2026-10-17T21:58:39.047345591Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"ff65ac91cfcbbdf1","ts":"2026-10-17T21:58:39.049175049Z","uid":0}
+  | {"duration_ms":5,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"ff65ac91cfcbbdf1","ts":"2026-10-17T21:58:39.054348299Z"}
+  | {"argv":["/usr/bin/id","-G"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"3eee35b49a09...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:39.119232466Z","type":"exec","uid":0}
+  | {"approver":"mode:manual","argv":["/usr/bin/id","-G"],"decision":"deny","event":"approval","executable":"/usr/bin/id","mode":"manual","nonce":"3eee35b49a09...","reason":"approval_denied_by_human","requester_pid":0,"requester_uid":4242,"result":"denied","schema":1,"ts":"2026-10-17T21:58:39.186525341Z"}
+  | {"argv":["/usr/bin/id","-G"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/id","nonce":"3eee35b49a09...","reason":"approval_denied_by_human","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:39.187987883Z"}
+  | {"event":"broker_stop","pid":82,"schema":1,"ts":"2026-10-17T21:58:39.365266591Z"}
+---- STATE: claim store (count + newest files) ----
+  | 6
+  | total 24
+  | -rw------- 1 root root 124 Oct 17 21:58 3fdbbbd6731d3bf43707d35d862ea1e7eb43c1f9d46ab93eface754b10120ebb.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 ff65ac91cfcbbdf12b387122de5532358482f9061ed8eb7aee0449cb08aebd03.claim
+  | -rw------- 1 root root 124 Oct 17 21:58 3f6a7f4ae2634a337199effb5a14e6d986f95bba85e02137ad55e0980f835d23.nonce
+
+================================================================
+== SCENARIO N1: spent token presented with DIFFERENT argv -> deny
+================================================================
+-- starting tmb-broker (mode=mock-approve ttl=3s)
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n1-nonce-fixed-000001"}
+  | FRAME: {"type":"approved","token":"295a338420f6aba6","detail":"one-shot token, ttl=3s"}
+-- stdout --
+CHECK PASS: N1: approve phase ok (rc=0)
+-- token from approve: 295a338420f6aba6
+CHECK PASS: N1: got one-shot token 295a338420f6aba6
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-G"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n1-nonce-fixed-000001"}
+  | FRAME: {"type":"denied","reason":"token_binding_mismatch","detail":"presented token \"295a338420f6aba6\" does not bind to hash of this request (7c15b54d92a5fc87)"}
+  | tmb: DENIED: token_binding_mismatch (presented token "295a338420f6aba6" does not bind to hash of this request (7c15b54d92a5fc87))
+-- stdout --
+CHECK PASS: N1: claim with same token but different argv -> exit 125 (rc=125)
+CHECK PASS: N1: deny reason token_binding_mismatch
+---- STATE: broker.log (last 14 lines) ----
+  | {"approver":"mode:manual","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"manual","nonce":"d0683f8bbd77...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:39.042241133Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"ff65ac91cfcbbdf12b387122de5532358482f9061ed8eb7aee0449cb08aebd03","nonce":"d0683f8bbd77...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"ff65ac91cfcbbdf1","ts":"2026-10-17T21:58:39.047345591Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"ff65ac91cfcbbdf1","ts":"2026-10-17T21:58:39.049175049Z","uid":0}
+  | {"duration_ms":5,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"ff65ac91cfcbbdf1","ts":"2026-10-17T21:58:39.054348299Z"}
+  | {"argv":["/usr/bin/id","-G"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"3eee35b49a09...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:39.119232466Z","type":"exec","uid":0}
+  | {"approver":"mode:manual","argv":["/usr/bin/id","-G"],"decision":"deny","event":"approval","executable":"/usr/bin/id","mode":"manual","nonce":"3eee35b49a09...","reason":"approval_denied_by_human","requester_pid":0,"requester_uid":4242,"result":"denied","schema":1,"ts":"2026-10-17T21:58:39.186525341Z"}
+  | {"argv":["/usr/bin/id","-G"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/id","nonce":"3eee35b49a09...","reason":"approval_denied_by_human","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:39.187987883Z"}
+  | {"event":"broker_stop","pid":82,"schema":1,"ts":"2026-10-17T21:58:39.365266591Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:58:39.73246205Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":137,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:39.735211883Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n1-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:40.0495638Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n1-nonce-fix...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:40.05121005Z"}
+  | {"argv":["/usr/bin/id","-G"],"claim_token":"295a338420f6aba6","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n1-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:40.240705925Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/id","-G"],"detail":"presented token \"295a338420f6aba6\" does not bind to hash of this request (7c15b54d92a5fc87)","event":"deny","executable":"/usr/bin/id","nonce":"n1-nonce-fix...","reason":"token_binding_mismatch","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:40.243317342Z"}
+---- STATE: claim store (count + newest files) ----
+  | 6
+  | total 24
+  | -rw------- 1 root root 124 Oct 17 21:58 3fdbbbd6731d3bf43707d35d862ea1e7eb43c1f9d46ab93eface754b10120ebb.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 ff65ac91cfcbbdf12b387122de5532358482f9061ed8eb7aee0449cb08aebd03.claim
+  | -rw------- 1 root root 124 Oct 17 21:58 3f6a7f4ae2634a337199effb5a14e6d986f95bba85e02137ad55e0980f835d23.nonce
+
+================================================================
+== SCENARIO N2: token/nonce REPLAY (same token, same request, twice) -> deny 2nd
+================================================================
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n2-nonce-fixed-000002"}
+  | FRAME: {"type":"approved","token":"bd267d46d15d93d9","detail":"one-shot token, ttl=3s"}
+-- stdout --
+CHECK PASS: N2: approve phase ok (rc=0)
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n2-nonce-fixed-000002"}
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N2: first claim executes, exit 0 (rc=0)
+CHECK PASS: N2: first claim stdout '0' (stdout='0')
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n2-nonce-fixed-000002"}
+  | FRAME: {"type":"denied","reason":"token_consumed_replay","detail":"token already redeemed exactly once before"}
+  | tmb: DENIED: token_consumed_replay (token already redeemed exactly once before)
+-- stdout --
+CHECK PASS: N2: replay claim -> exit 125 (rc=125)
+CHECK PASS: N2: deny reason token_consumed_replay
+---- STATE: broker.log (last 14 lines) ----
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:58:39.73246205Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":137,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:39.735211883Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n1-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:40.0495638Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n1-nonce-fix...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:40.05121005Z"}
+  | {"argv":["/usr/bin/id","-G"],"claim_token":"295a338420f6aba6","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n1-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:40.240705925Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/id","-G"],"detail":"presented token \"295a338420f6aba6\" does not bind to hash of this request (7c15b54d92a5fc87)","event":"deny","executable":"/usr/bin/id","nonce":"n1-nonce-fix...","reason":"token_binding_mismatch","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:40.243317342Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:40.738570925Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n2-nonce-fix...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:40.746322759Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"bd267d46d15d93d9","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:40.852755467Z","type":"claim","uid":0}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"bd267d46d15d93d9c5f27196e751bcf2034b9b4b4ae41ff969eec6e8dd8a0237","nonce":"n2-nonce-fix...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"bd267d46d15d93d9","ts":"2026-10-17T21:58:40.857008175Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"bd267d46d15d93d9","ts":"2026-10-17T21:58:40.858213134Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"bd267d46d15d93d9","ts":"2026-10-17T21:58:40.860423842Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"bd267d46d15d93d9","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:41.110024842Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"token already redeemed exactly once before","event":"deny","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","reason":"token_consumed_replay","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:41.12257105Z"}
+---- STATE: claim store (count + newest files) ----
+  | 8
+  | total 32
+  | -rw------- 1 root root 113 Oct 17 21:58 77885e28f4b109d92380c523249f174ec5250607ca11e531403095d8aeff3704.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 bd267d46d15d93d9c5f27196e751bcf2034b9b4b4ae41ff969eec6e8dd8a0237.claim
+  | -rw------- 1 root root 124 Oct 17 21:58 3fdbbbd6731d3bf43707d35d862ea1e7eb43c1f9d46ab93eface754b10120ebb.nonce
+
+================================================================
+== SCENARIO TTL: token claimed AFTER expiry -> deny, nothing runs (ttl=3s, no 60s sleeps)
+================================================================
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/ttl-marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"ttl-nonce-fixed-0003"}
+  | FRAME: {"type":"approved","token":"3c8962b23f2f6fad","detail":"one-shot token, ttl=3s"}
+-- stdout --
+CHECK PASS: TTL: approve phase ok (rc=0)
+-- sleeping 5s to let the token expire (ttl=3 s)
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/ttl-marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"ttl-nonce-fixed-0003"}
+  | FRAME: {"type":"denied","reason":"no_pending_approval","detail":"no live approval for this exact request (expired, consumed, or broker restarted)"}
+  | tmb: DENIED: no_pending_approval (no live approval for this exact request (expired, consumed, or broker restarted))
+-- stdout --
+CHECK PASS: TTL: expired claim -> exit 125 (rc=125)
+CHECK PASS: TTL: deny mentions no live approval
+CHECK PASS: TTL: marker file never created (/tmp/ttl-marker absent in host-sim)
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/usr/bin/id","-G"],"claim_token":"295a338420f6aba6","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n1-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:40.240705925Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/id","-G"],"detail":"presented token \"295a338420f6aba6\" does not bind to hash of this request (7c15b54d92a5fc87)","event":"deny","executable":"/usr/bin/id","nonce":"n1-nonce-fix...","reason":"token_binding_mismatch","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:40.243317342Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:40.738570925Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n2-nonce-fix...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:40.746322759Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"bd267d46d15d93d9","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:40.852755467Z","type":"claim","uid":0}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"bd267d46d15d93d9c5f27196e751bcf2034b9b4b4ae41ff969eec6e8dd8a0237","nonce":"n2-nonce-fix...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"bd267d46d15d93d9","ts":"2026-10-17T21:58:40.857008175Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"bd267d46d15d93d9","ts":"2026-10-17T21:58:40.858213134Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"bd267d46d15d93d9","ts":"2026-10-17T21:58:40.860423842Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"bd267d46d15d93d9","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:41.110024842Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"token already redeemed exactly once before","event":"deny","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","reason":"token_consumed_replay","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:41.12257105Z"}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:41.808885717Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/touch","/tmp/ttl-marker"],"decision":"approve","event":"approval","executable":"/usr/bin/touch","mode":"mock-approve","nonce":"ttl-nonce-fi...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:41.811866759Z"}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"claim_token":"3c8962b23f2f6fad","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.05224122Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"detail":"no live approval for this exact request (expired, consumed, or broker restarted)","event":"deny","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","reason":"no_pending_approval","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:47.069564137Z"}
+---- STATE: claim store (count + newest files) ----
+  | 10
+  | total 40
+  | -rw------- 1 root root 112 Oct 17 21:58 6dcf6fa6568c33b969bad935d2ab7aaf2455cb44259e7b55562f118807e14460.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 3c8962b23f2f6fad2aed09d1173fa1f1f2406ffaf8db2756cb93476ad5063a96.claim
+  | -rw------- 1 root root 113 Oct 17 21:58 77885e28f4b109d92380c523249f174ec5250607ca11e531403095d8aeff3704.nonce
+
+================================================================
+== SCENARIO N5a: LD_PRELOAD set in CLIENT environment -> child env must lack it
+================================================================
+-- proof the client-side env really carries LD_PRELOAD (same docker -e mechanism):
+  | ERROR: ld.so: object '/tmp/evil.so' from LD_PRELOAD cannot be preloaded (cannot open shared object file): ignored.
+  | /tmp/evil.so
+CHECK PASS: N5a: client-side env really had LD_PRELOAD=/tmp/evil.so
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/printenv","argv":["/usr/bin/printenv"],"cwd":"/tmp","uid":0,"env":{},"nonce":"b64f11153a853b266666061d5f1b3dc5"}
+  | TOK: 96c00b56cbf7fc60 (one-shot token, ttl=3s)
+  | EXIT: 0
+-- stdout --
+  | LANG=C.UTF-8
+  | PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+CHECK PASS: N5a: printenv child ran (rc=0)
+CHECK PASS: N5a: child env has fixed broker PATH
+CHECK PASS: N5a: child env has fixed LANG
+CHECK PASS: N5a: child env lacks smuggled LD_PRELOAD
+---- STATE: broker.log (last 14 lines) ----
+  | {"event":"claim","executable":"/usr/bin/id","hash":"bd267d46d15d93d9c5f27196e751bcf2034b9b4b4ae41ff969eec6e8dd8a0237","nonce":"n2-nonce-fix...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"bd267d46d15d93d9","ts":"2026-10-17T21:58:40.857008175Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"bd267d46d15d93d9","ts":"2026-10-17T21:58:40.858213134Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"bd267d46d15d93d9","ts":"2026-10-17T21:58:40.860423842Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"bd267d46d15d93d9","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:41.110024842Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"token already redeemed exactly once before","event":"deny","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","reason":"token_consumed_replay","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:41.12257105Z"}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:41.808885717Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/touch","/tmp/ttl-marker"],"decision":"approve","event":"approval","executable":"/usr/bin/touch","mode":"mock-approve","nonce":"ttl-nonce-fi...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:41.811866759Z"}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"claim_token":"3c8962b23f2f6fad","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.05224122Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"detail":"no live approval for this exact request (expired, consumed, or broker restarted)","event":"deny","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","reason":"no_pending_approval","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:47.069564137Z"}
+  | {"argv":["/usr/bin/printenv"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/printenv","nonce":"b64f11153a85...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.596714262Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/printenv"],"decision":"approve","event":"approval","executable":"/usr/bin/printenv","mode":"mock-approve","nonce":"b64f11153a85...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:47.601580095Z"}
+  | {"event":"claim","executable":"/usr/bin/printenv","hash":"96c00b56cbf7fc6043d2790af64e6937f4aed195c3e93bd0e582ca2505dac9bf","nonce":"b64f11153a85...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.606739095Z"}
+  | {"argv":["/usr/bin/printenv"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025199,"exe_via_fd":true,"executable":"/usr/bin/printenv","requester_pid":0,"requester_uid":4242,"schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.609014554Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/printenv","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.611537845Z"}
+---- STATE: claim store (count + newest files) ----
+  | 12
+  | total 48
+  | -rw------- 1 root root 124 Oct 17 21:58 c84c69dc14d15e4276ab9b5a3c383691ab2e87ceae395093202aeafac84b00ea.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 96c00b56cbf7fc6043d2790af64e6937f4aed195c3e93bd0e582ca2505dac9bf.claim
+  | -rw------- 1 root root 112 Oct 17 21:58 6dcf6fa6568c33b969bad935d2ab7aaf2455cb44259e7b55562f118807e14460.nonce
+
+================================================================
+== SCENARIO N5b: explicit --env LD_PRELOAD smuggle -> rejected at the gate
+================================================================
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"LD_PRELOAD":"/tmp/evil.so"},"nonce":"c6bea9faf44f18474f712f007405d62e"}
+  | tmb: DENIED: env_key_not_allowed (LD_PRELOAD)
+-- stdout --
+CHECK PASS: N5b: smuggled env key -> exit 125 (rc=125)
+CHECK PASS: N5b: deny reason env_key_not_allowed
+---- STATE: broker.log (last 14 lines) ----
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"bd267d46d15d93d9","ts":"2026-10-17T21:58:40.860423842Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"bd267d46d15d93d9","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:41.110024842Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"token already redeemed exactly once before","event":"deny","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","reason":"token_consumed_replay","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:41.12257105Z"}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:41.808885717Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/touch","/tmp/ttl-marker"],"decision":"approve","event":"approval","executable":"/usr/bin/touch","mode":"mock-approve","nonce":"ttl-nonce-fi...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:41.811866759Z"}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"claim_token":"3c8962b23f2f6fad","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.05224122Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"detail":"no live approval for this exact request (expired, consumed, or broker restarted)","event":"deny","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","reason":"no_pending_approval","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:47.069564137Z"}
+  | {"argv":["/usr/bin/printenv"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/printenv","nonce":"b64f11153a85...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.596714262Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/printenv"],"decision":"approve","event":"approval","executable":"/usr/bin/printenv","mode":"mock-approve","nonce":"b64f11153a85...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:47.601580095Z"}
+  | {"event":"claim","executable":"/usr/bin/printenv","hash":"96c00b56cbf7fc6043d2790af64e6937f4aed195c3e93bd0e582ca2505dac9bf","nonce":"b64f11153a85...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.606739095Z"}
+  | {"argv":["/usr/bin/printenv"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025199,"exe_via_fd":true,"executable":"/usr/bin/printenv","requester_pid":0,"requester_uid":4242,"schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.609014554Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/printenv","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.611537845Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":{"LD_PRELOAD":"/tmp/evil.so"},"event":"request","executable":"/usr/bin/id","nonce":"c6bea9faf44f...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.869071679Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"LD_PRELOAD","event":"deny","executable":"/usr/bin/id","nonce":"c6bea9faf44f...","reason":"env_key_not_allowed","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:47.873444304Z"}
+---- STATE: claim store (count + newest files) ----
+  | 12
+  | total 48
+  | -rw------- 1 root root 124 Oct 17 21:58 c84c69dc14d15e4276ab9b5a3c383691ab2e87ceae395093202aeafac84b00ea.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 96c00b56cbf7fc6043d2790af64e6937f4aed195c3e93bd0e582ca2505dac9bf.claim
+  | -rw------- 1 root root 112 Oct 17 21:58 6dcf6fa6568c33b969bad935d2ab7aaf2455cb44259e7b55562f118807e14460.nonce
+
+================================================================
+== SCENARIO N4: /bin/sh -c 'touch /tmp/pwned' -> shell-denylist, /tmp/pwned absent
+================================================================
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/bin/sh","argv":["/bin/sh","-c","touch /tmp/pwned"],"cwd":"/tmp","uid":0,"env":{},"nonce":"ce9eefb9f6b00f3748c290eba2d90d78"}
+  | tmb: DENIED: shell_policy (/usr/bin/dash)
+-- stdout --
+CHECK PASS: N4: /bin/sh request -> exit 125 (rc=125)
+CHECK PASS: N4: deny reason shell_policy
+CHECK PASS: N4: /tmp/pwned NOT created in host-sim (/tmp/pwned absent in host-sim)
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/usr/bin/id","-u"],"detail":"token already redeemed exactly once before","event":"deny","executable":"/usr/bin/id","nonce":"n2-nonce-fix...","reason":"token_consumed_replay","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:41.12257105Z"}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:41.808885717Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/touch","/tmp/ttl-marker"],"decision":"approve","event":"approval","executable":"/usr/bin/touch","mode":"mock-approve","nonce":"ttl-nonce-fi...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:41.811866759Z"}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"claim_token":"3c8962b23f2f6fad","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.05224122Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"detail":"no live approval for this exact request (expired, consumed, or broker restarted)","event":"deny","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","reason":"no_pending_approval","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:47.069564137Z"}
+  | {"argv":["/usr/bin/printenv"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/printenv","nonce":"b64f11153a85...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.596714262Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/printenv"],"decision":"approve","event":"approval","executable":"/usr/bin/printenv","mode":"mock-approve","nonce":"b64f11153a85...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:47.601580095Z"}
+  | {"event":"claim","executable":"/usr/bin/printenv","hash":"96c00b56cbf7fc6043d2790af64e6937f4aed195c3e93bd0e582ca2505dac9bf","nonce":"b64f11153a85...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.606739095Z"}
+  | {"argv":["/usr/bin/printenv"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025199,"exe_via_fd":true,"executable":"/usr/bin/printenv","requester_pid":0,"requester_uid":4242,"schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.609014554Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/printenv","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.611537845Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":{"LD_PRELOAD":"/tmp/evil.so"},"event":"request","executable":"/usr/bin/id","nonce":"c6bea9faf44f...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.869071679Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"LD_PRELOAD","event":"deny","executable":"/usr/bin/id","nonce":"c6bea9faf44f...","reason":"env_key_not_allowed","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:47.873444304Z"}
+  | {"argv":["/bin/sh","-c","touch /tmp/pwned"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/bin/sh","nonce":"ce9eefb9f6b0...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:48.155295887Z","type":"exec","uid":0}
+  | {"argv":["/bin/sh","-c","touch /tmp/pwned"],"detail":"/usr/bin/dash","event":"deny","executable":"/bin/sh","nonce":"ce9eefb9f6b0...","reason":"shell_policy","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:48.159816595Z"}
+---- STATE: claim store (count + newest files) ----
+  | 12
+  | total 48
+  | -rw------- 1 root root 124 Oct 17 21:58 c84c69dc14d15e4276ab9b5a3c383691ab2e87ceae395093202aeafac84b00ea.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 96c00b56cbf7fc6043d2790af64e6937f4aed195c3e93bd0e582ca2505dac9bf.claim
+  | -rw------- 1 root root 112 Oct 17 21:58 6dcf6fa6568c33b969bad935d2ab7aaf2455cb44259e7b55562f118807e14460.nonce
+
+================================================================
+== SCENARIO N6: non-absolute executable rejected (broker via raw, client-side)
+================================================================
+-- rc=125
+-- stderr --
+  | REQ-RAW: {"type":"exec","executable":"id","argv":["id","-u"],"cwd":"/tmp","uid":0,"nonce":"n6-nonce-fixed-000006"}
+  | 
+  | FRAME: {"type":"denied","reason":"executable_not_absolute","detail":"id"}
+  | tmb: DENIED: executable_not_absolute (id)
+-- stdout --
+CHECK PASS: N6: broker rejects non-absolute executable (raw 'id') (rc=125)
+CHECK PASS: N6: deny reason executable_not_absolute
+-- rc=2
+-- stderr --
+  | tmb: executable "./id" contains '/' but is not absolute
+-- stdout --
+CHECK PASS: N6: client rejects relative path ./id locally (rc=2)
+---- STATE: broker.log (last 14 lines) ----
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/touch","/tmp/ttl-marker"],"decision":"approve","event":"approval","executable":"/usr/bin/touch","mode":"mock-approve","nonce":"ttl-nonce-fi...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:41.811866759Z"}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"claim_token":"3c8962b23f2f6fad","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.05224122Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"detail":"no live approval for this exact request (expired, consumed, or broker restarted)","event":"deny","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","reason":"no_pending_approval","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:47.069564137Z"}
+  | {"argv":["/usr/bin/printenv"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/printenv","nonce":"b64f11153a85...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.596714262Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/printenv"],"decision":"approve","event":"approval","executable":"/usr/bin/printenv","mode":"mock-approve","nonce":"b64f11153a85...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:47.601580095Z"}
+  | {"event":"claim","executable":"/usr/bin/printenv","hash":"96c00b56cbf7fc6043d2790af64e6937f4aed195c3e93bd0e582ca2505dac9bf","nonce":"b64f11153a85...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.606739095Z"}
+  | {"argv":["/usr/bin/printenv"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025199,"exe_via_fd":true,"executable":"/usr/bin/printenv","requester_pid":0,"requester_uid":4242,"schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.609014554Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/printenv","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.611537845Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":{"LD_PRELOAD":"/tmp/evil.so"},"event":"request","executable":"/usr/bin/id","nonce":"c6bea9faf44f...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.869071679Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"LD_PRELOAD","event":"deny","executable":"/usr/bin/id","nonce":"c6bea9faf44f...","reason":"env_key_not_allowed","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:47.873444304Z"}
+  | {"argv":["/bin/sh","-c","touch /tmp/pwned"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/bin/sh","nonce":"ce9eefb9f6b0...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:48.155295887Z","type":"exec","uid":0}
+  | {"argv":["/bin/sh","-c","touch /tmp/pwned"],"detail":"/usr/bin/dash","event":"deny","executable":"/bin/sh","nonce":"ce9eefb9f6b0...","reason":"shell_policy","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:48.159816595Z"}
+  | {"argv":["id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"id","nonce":"n6-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:48.635569887Z","type":"exec","uid":0}
+  | {"argv":["id","-u"],"detail":"id","event":"deny","executable":"id","nonce":"n6-nonce-fix...","reason":"executable_not_absolute","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:48.640012929Z"}
+---- STATE: claim store (count + newest files) ----
+  | 12
+  | total 48
+  | -rw------- 1 root root 124 Oct 17 21:58 c84c69dc14d15e4276ab9b5a3c383691ab2e87ceae395093202aeafac84b00ea.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 96c00b56cbf7fc6043d2790af64e6937f4aed195c3e93bd0e582ca2505dac9bf.claim
+  | -rw------- 1 root root 112 Oct 17 21:58 6dcf6fa6568c33b969bad935d2ab7aaf2455cb44259e7b55562f118807e14460.nonce
+
+================================================================
+== SCENARIO N7: wrong-uid client -> SO_PEERCRED deny (can reach socket, uid not allowlisted)
+================================================================
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"0a5b2a48a189c822026cd7a2c7963cc1"}
+  | tmb: DENIED: requester_not_allowed (uid 1000 is not in the broker allowlist)
+-- stdout --
+CHECK PASS: N7: uid 1000 (gid 4242, can open socket) -> exit 125 (rc=125)
+CHECK PASS: N7: deny reason requester_not_allowed
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"6e8a6cece30649c9c870dbbac1a88061"}
+  | tmb: DENIED: requester_not_allowed (uid 0 is not in the broker allowlist)
+-- stdout --
+CHECK PASS: N7: even root uid 0 from sandbox -> exit 125 (rc=125)
+CHECK PASS: N7: root also requester_not_allowed
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/usr/bin/touch","/tmp/ttl-marker"],"detail":"no live approval for this exact request (expired, consumed, or broker restarted)","event":"deny","executable":"/usr/bin/touch","nonce":"ttl-nonce-fi...","reason":"no_pending_approval","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:47.069564137Z"}
+  | {"argv":["/usr/bin/printenv"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/printenv","nonce":"b64f11153a85...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.596714262Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/printenv"],"decision":"approve","event":"approval","executable":"/usr/bin/printenv","mode":"mock-approve","nonce":"b64f11153a85...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:47.601580095Z"}
+  | {"event":"claim","executable":"/usr/bin/printenv","hash":"96c00b56cbf7fc6043d2790af64e6937f4aed195c3e93bd0e582ca2505dac9bf","nonce":"b64f11153a85...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.606739095Z"}
+  | {"argv":["/usr/bin/printenv"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025199,"exe_via_fd":true,"executable":"/usr/bin/printenv","requester_pid":0,"requester_uid":4242,"schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.609014554Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/printenv","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"96c00b56cbf7fc60","ts":"2026-10-17T21:58:47.611537845Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":{"LD_PRELOAD":"/tmp/evil.so"},"event":"request","executable":"/usr/bin/id","nonce":"c6bea9faf44f...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:47.869071679Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"LD_PRELOAD","event":"deny","executable":"/usr/bin/id","nonce":"c6bea9faf44f...","reason":"env_key_not_allowed","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:47.873444304Z"}
+  | {"argv":["/bin/sh","-c","touch /tmp/pwned"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/bin/sh","nonce":"ce9eefb9f6b0...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:48.155295887Z","type":"exec","uid":0}
+  | {"argv":["/bin/sh","-c","touch /tmp/pwned"],"detail":"/usr/bin/dash","event":"deny","executable":"/bin/sh","nonce":"ce9eefb9f6b0...","reason":"shell_policy","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:48.159816595Z"}
+  | {"argv":["id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"id","nonce":"n6-nonce-fix...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:48.635569887Z","type":"exec","uid":0}
+  | {"argv":["id","-u"],"detail":"id","event":"deny","executable":"id","nonce":"n6-nonce-fix...","reason":"executable_not_absolute","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:48.640012929Z"}
+  | {"event":"requester_denied","reason":"requester_not_allowed","requester_pid":0,"requester_uid":1000,"schema":1,"ts":"2026-10-17T21:58:49.058531429Z"}
+  | {"event":"requester_denied","reason":"requester_not_allowed","requester_pid":0,"requester_uid":0,"schema":1,"ts":"2026-10-17T21:58:49.155732013Z"}
+---- STATE: claim store (count + newest files) ----
+  | 12
+  | total 48
+  | -rw------- 1 root root 124 Oct 17 21:58 c84c69dc14d15e4276ab9b5a3c383691ab2e87ceae395093202aeafac84b00ea.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 96c00b56cbf7fc6043d2790af64e6937f4aed195c3e93bd0e582ca2505dac9bf.claim
+  | -rw------- 1 root root 112 Oct 17 21:58 6dcf6fa6568c33b969bad935d2ab7aaf2455cb44259e7b55562f118807e14460.nonce
+
+================================================================
+== SCENARIO N10: approval bound to requester identity (two allowlisted uids)
+================================================================
+-- stopping tmb-broker
+-- starting tmb-broker (mode=mock-approve ttl=10s)
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n10-nonce-fixed-000010"}
+  | FRAME: {"type":"approved","token":"1c89f1b2363fa126","detail":"one-shot token, ttl=10s"}
+-- stdout --
+CHECK PASS: N10: approve phase ok (requester uid 4242) (rc=0)
+-- token from approve: 1c89f1b2363fa126
+CHECK PASS: N10: got one-shot token 1c89f1b2363fa126
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n10-nonce-fixed-000010"}
+  | FRAME: {"type":"denied","reason":"requester_mismatch","detail":"approval was granted to requester uid:4242, token not consumed"}
+  | tmb: DENIED: requester_mismatch (approval was granted to requester uid:4242, token not consumed)
+-- stdout --
+CHECK PASS: N10: claim under OTHER allowlisted uid 4343 -> exit 125 (rc=125)
+CHECK PASS: N10: deny reason requester_mismatch
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n10-nonce-fixed-000010"}
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N10: token NOT consumed; claim under original uid 4242 -> exit 0 (rc=0)
+CHECK PASS: N10: stdout is exactly '0' (stdout='0')
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["id","-u"],"detail":"id","event":"deny","executable":"id","nonce":"n6-nonce-fix...","reason":"executable_not_absolute","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:48.640012929Z"}
+  | {"event":"requester_denied","reason":"requester_not_allowed","requester_pid":0,"requester_uid":1000,"schema":1,"ts":"2026-10-17T21:58:49.058531429Z"}
+  | {"event":"requester_denied","reason":"requester_not_allowed","requester_pid":0,"requester_uid":0,"schema":1,"ts":"2026-10-17T21:58:49.155732013Z"}
+  | {"event":"broker_stop","pid":137,"schema":1,"ts":"2026-10-17T21:58:49.377858346Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:58:49.517042096Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":328,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:49.520142388Z","ttl_seconds":10}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n10-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:49.66466243Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n10-nonce-fi...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:49.66793293Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"1c89f1b2363fa126","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n10-nonce-fi...","requester_pid":0,"requester_uid":4343,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:49.766549513Z","type":"claim","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"approval was granted to requester uid:4242, token not consumed","event":"deny","executable":"/usr/bin/id","nonce":"n10-nonce-fi...","reason":"requester_mismatch","requester_pid":0,"requester_uid":4343,"schema":1,"ts":"2026-10-17T21:58:49.775185513Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"1c89f1b2363fa126","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n10-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:49.865600013Z","type":"claim","uid":0}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"1c89f1b2363fa12630c3af61ecc3691cdc8862b3964d56176537f0c14967b491","nonce":"n10-nonce-fi...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"1c89f1b2363fa126","ts":"2026-10-17T21:58:49.87871043Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"1c89f1b2363fa126","ts":"2026-10-17T21:58:49.881020513Z","uid":0}
+  | {"duration_ms":6,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"1c89f1b2363fa126","ts":"2026-10-17T21:58:49.886935013Z"}
+---- STATE: claim store (count + newest files) ----
+  | 14
+  | total 56
+  | -rw------- 1 root root 114 Oct 17 21:58 9d8730bba700a7d472ba7bbe220cf7430006a4a1171d71e6861fea08c851aea8.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 1c89f1b2363fa12630c3af61ecc3691cdc8862b3964d56176537f0c14967b491.claim
+  | -rw------- 1 root root 124 Oct 17 21:58 c84c69dc14d15e4276ab9b5a3c383691ab2e87ceae395093202aeafac84b00ea.nonce
+
+================================================================
+== SCENARIO N11: exe replaced between claim validation and exec -> the APPROVED inode runs
+================================================================
+-- stopping tmb-broker
+-- starting tmb-broker (mode=mock-approve ttl=10s)
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/tmp/n11/prog","argv":["/tmp/n11/prog","A"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n11-nonce-fixed-000011"}
+  | FRAME: {"type":"approved","token":"655f21b7d3fb06c6","detail":"one-shot token, ttl=10s"}
+-- stdout --
+CHECK PASS: N11: approve phase ok (rc=0)
+CHECK PASS: N11: got one-shot token 655f21b7d3fb06c6
+-- arming in-window swapper (SIGSTOP broker at claim-file creation)
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/tmp/n11/prog","argv":["/tmp/n11/prog","A"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n11-nonce-fixed-000011"}
+  | EXIT: 0
+-- stdout --
+  | A
+CHECK PASS: N11: claim exit 0 (a program ran) (rc=0)
+CHECK PASS: N11: swap landed inside the claim window (broker frozen, exe path replaced)
+CHECK PASS: N11: stdout 'A' - the APPROVED inode ran, not the replacement (stdout='A')
+CHECK PASS: N11: JSONL exec_start has exe_via_fd=true (exec via pinned fd)
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/bin/ls","argv":["/bin/ls","/proc/self/fd"],"cwd":"/tmp","uid":0,"env":{},"nonce":"d78a426f92c62b6b10d046829efe04e2"}
+  | TOK: d8bdaaeac591f254 (one-shot token, ttl=10s)
+  | EXIT: 0
+-- stdout --
+  | 0
+  | 1
+  | 2
+  | 3
+CHECK PASS: N11: fd listing via pinned exec ran (rc=0)
+CHECK PASS: N11: child sees only fds 0,1,2 (+ls own dirfd) - pin fd closed at exec (stdout='0
+1
+2
+3')
+---- STATE: broker.log (last 14 lines) ----
+  | {"event":"broker_stop","pid":328,"schema":1,"ts":"2026-10-17T21:58:50.133329055Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:58:50.285665346Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":378,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:50.30217268Z","ttl_seconds":10}
+  | {"argv":["/tmp/n11/prog","A"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/tmp/n11/prog","nonce":"n11-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:50.576348805Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/tmp/n11/prog","A"],"decision":"approve","event":"approval","executable":"/tmp/n11/prog","mode":"mock-approve","nonce":"n11-nonce-fi...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:50.582105388Z"}
+  | {"argv":["/tmp/n11/prog","A"],"claim_token":"655f21b7d3fb06c6","cwd":"/tmp","env":null,"event":"request","executable":"/tmp/n11/prog","nonce":"n11-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:51.004008138Z","type":"claim","uid":0}
+  | {"event":"claim","executable":"/tmp/n11/prog","hash":"655f21b7d3fb06c6f23edd3d5034b2134bf2a5b81e051e795ba05e15f244eb62","nonce":"n11-nonce-fi...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"655f21b7d3fb06c6","ts":"2026-10-17T21:58:51.04039268Z"}
+  | {"argv":["/tmp/n11/prog","A"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":2240608,"exe_via_fd":true,"executable":"/tmp/n11/prog","requester_pid":0,"requester_uid":4242,"schema":1,"token":"655f21b7d3fb06c6","ts":"2026-10-17T21:58:51.040837097Z","uid":0}
+  | {"duration_ms":9,"event":"exec_exit","executable":"/tmp/n11/prog","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"655f21b7d3fb06c6","ts":"2026-10-17T21:58:51.04991493Z"}
+  | {"argv":["/bin/ls","/proc/self/fd"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/bin/ls","nonce":"d78a426f92c6...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:51.323264722Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/bin/ls","/proc/self/fd"],"decision":"approve","event":"approval","executable":"/bin/ls","mode":"mock-approve","nonce":"d78a426f92c6...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:51.329113222Z"}
+  | {"event":"claim","executable":"/usr/bin/ls","hash":"d8bdaaeac591f2544541fbf6a2a9bee2eebc8e870d3eea783c738d7a15c368a2","nonce":"d78a426f92c6...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"d8bdaaeac591f254","ts":"2026-10-17T21:58:51.347021555Z"}
+  | {"argv":["/bin/ls","/proc/self/fd"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025151,"exe_via_fd":true,"executable":"/usr/bin/ls","requester_pid":0,"requester_uid":4242,"schema":1,"token":"d8bdaaeac591f254","ts":"2026-10-17T21:58:51.351730597Z","uid":0}
+  | {"duration_ms":11,"event":"exec_exit","executable":"/usr/bin/ls","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"d8bdaaeac591f254","ts":"2026-10-17T21:58:51.363350139Z"}
+---- STATE: claim store (count + newest files) ----
+  | 18
+  | total 72
+  | -rw------- 1 root root 124 Oct 17 21:58 226770301395a90aea1f98103d4d8f32a3bc27b051b9b93ace5b37bee53efd1a.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 d8bdaaeac591f2544541fbf6a2a9bee2eebc8e870d3eea783c738d7a15c368a2.claim
+  | -rw------- 1 root root 114 Oct 17 21:58 7de188e71d2f5503fc5ac89f930547f4c6fc20a1ca7bebd00899c04b83bd4224.nonce
+
+================================================================
+== SCENARIO N12: cwd directory replaced between approve and claim -> deny cwd_changed
+================================================================
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/bin/ls","argv":["/bin/ls"],"cwd":"/tmp/n12-dir","uid":0,"env":{},"nonce":"n12-nonce-fixed-000012"}
+  | FRAME: {"type":"approved","token":"065b7e5d1f47180d","detail":"one-shot token, ttl=10s"}
+-- stdout --
+CHECK PASS: N12: approve phase ok (rc=0)
+CHECK PASS: N12: got one-shot token 065b7e5d1f47180d
+CHECK PASS: N12: cwd really replaced (old dir moved aside, new inode at the same path)
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/bin/ls","argv":["/bin/ls"],"cwd":"/tmp/n12-dir","uid":0,"env":{},"nonce":"n12-nonce-fixed-000012"}
+  | FRAME: {"type":"denied","reason":"cwd_changed","detail":"approved cwd /tmp/n12-dir (dev=69 ino=2240670) was replaced before exec"}
+  | tmb: DENIED: cwd_changed (approved cwd /tmp/n12-dir (dev=69 ino=2240670) was replaced before exec)
+-- stdout --
+CHECK PASS: N12: claim after cwd swap -> exit 125 (rc=125)
+CHECK PASS: N12: deny reason cwd_changed
+CHECK PASS: N12: no command output (nothing executed) (stdout='')
+CHECK PASS: N12: JSONL deny event with reason cwd_changed
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/tmp/n11/prog","A"],"claim_token":"655f21b7d3fb06c6","cwd":"/tmp","env":null,"event":"request","executable":"/tmp/n11/prog","nonce":"n11-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:51.004008138Z","type":"claim","uid":0}
+  | {"event":"claim","executable":"/tmp/n11/prog","hash":"655f21b7d3fb06c6f23edd3d5034b2134bf2a5b81e051e795ba05e15f244eb62","nonce":"n11-nonce-fi...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"655f21b7d3fb06c6","ts":"2026-10-17T21:58:51.04039268Z"}
+  | {"argv":["/tmp/n11/prog","A"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":2240608,"exe_via_fd":true,"executable":"/tmp/n11/prog","requester_pid":0,"requester_uid":4242,"schema":1,"token":"655f21b7d3fb06c6","ts":"2026-10-17T21:58:51.040837097Z","uid":0}
+  | {"duration_ms":9,"event":"exec_exit","executable":"/tmp/n11/prog","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"655f21b7d3fb06c6","ts":"2026-10-17T21:58:51.04991493Z"}
+  | {"argv":["/bin/ls","/proc/self/fd"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/bin/ls","nonce":"d78a426f92c6...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:51.323264722Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/bin/ls","/proc/self/fd"],"decision":"approve","event":"approval","executable":"/bin/ls","mode":"mock-approve","nonce":"d78a426f92c6...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:51.329113222Z"}
+  | {"event":"claim","executable":"/usr/bin/ls","hash":"d8bdaaeac591f2544541fbf6a2a9bee2eebc8e870d3eea783c738d7a15c368a2","nonce":"d78a426f92c6...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"d8bdaaeac591f254","ts":"2026-10-17T21:58:51.347021555Z"}
+  | {"argv":["/bin/ls","/proc/self/fd"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025151,"exe_via_fd":true,"executable":"/usr/bin/ls","requester_pid":0,"requester_uid":4242,"schema":1,"token":"d8bdaaeac591f254","ts":"2026-10-17T21:58:51.351730597Z","uid":0}
+  | {"duration_ms":11,"event":"exec_exit","executable":"/usr/bin/ls","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"d8bdaaeac591f254","ts":"2026-10-17T21:58:51.363350139Z"}
+  | {"argv":["/bin/ls"],"claim_token":"","cwd":"/tmp/n12-dir","env":null,"event":"request","executable":"/bin/ls","nonce":"n12-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:51.671458555Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/bin/ls"],"decision":"approve","event":"approval","executable":"/bin/ls","mode":"mock-approve","nonce":"n12-nonce-fi...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:51.685216166Z"}
+  | {"argv":["/bin/ls"],"claim_token":"065b7e5d1f47180d","cwd":"/tmp/n12-dir","env":null,"event":"request","executable":"/bin/ls","nonce":"n12-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:52.10552775Z","type":"claim","uid":0}
+  | {"event":"claim","executable":"/usr/bin/ls","hash":"065b7e5d1f47180ddac41cddded9dda8fe948fd026ba2953ace1bc1407e0231b","nonce":"n12-nonce-fi...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"065b7e5d1f47180d","ts":"2026-10-17T21:58:52.133282083Z"}
+  | {"argv":["/bin/ls"],"detail":"approved cwd /tmp/n12-dir (dev=69 ino=2240670) was replaced before exec","event":"deny","executable":"/bin/ls","nonce":"n12-nonce-fi...","reason":"cwd_changed","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:52.136241541Z"}
+---- STATE: claim store (count + newest files) ----
+  | 20
+  | total 80
+  | -rw------- 1 root root 114 Oct 17 21:58 8fa5df11e245223c7d4e2c71820defbcbcb02cbf8c7ba4c37d76e2e8a498339e.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 065b7e5d1f47180ddac41cddded9dda8fe948fd026ba2953ace1bc1407e0231b.claim
+  | -rw------- 1 root root 124 Oct 17 21:58 226770301395a90aea1f98103d4d8f32a3bc27b051b9b93ace5b37bee53efd1a.nonce
+
+================================================================
+== SCENARIO N13: approval queue: the request waits, the approver decides with tmb approve
+================================================================
+-- stopping tmb-broker
+-- starting tmb-broker (mode=queue ttl=10s)
+CHECK PASS: N13: request waits in the approval queue
+  | === 55ab15c8a391153a ===
+  |   requester : uid=4242 pid=0 (kernel SO_PEERCRED)
+  |   executable: /usr/bin/id
+  |   argv      : ["/usr/bin/id","-u"]
+  |   cwd       : /tmp
+  |   run as uid: 0
+  |   env       : ["LANG=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
+  |   nonce     : ecf4885d679aabb85c090a7d4ba75d82
+  |   queued at : 2026-10-17T21:58:52.77141875Z
+  |   hash      : 55ab15c8a391153a620bf67672e08b94c0666c1c51475569d3370c282643a8c2
+CHECK PASS: N13: listing shows the requester uid
+CHECK PASS: N13: listing shows the realpath of the executable
+CHECK PASS: N13: listing shows argv
+CHECK PASS: N13: listing shows the cwd realpath
+CHECK PASS: N13: listing shows the final env with PATH from fixed_env
+-- rc=0
+-- stderr --
+-- stdout --
+  | 55ab15c8a391153a: approve
+CHECK PASS: N13: tmb approve --yes <id> -> exit 0 (rc=0)
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"ecf4885d679aabb85c090a7d4ba75d82"}
+  | tmb: waiting for approval (item 55ab15c8a391153a, at most 5m0s)
+  | TOK: 55ab15c8a391153a (one-shot token, ttl=10s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N13: approved client -> exit 0 (rc=0)
+CHECK PASS: N13: approved client stdout '0' (stdout='0')
+CHECK PASS: N13: JSONL queued for the item
+CHECK PASS: N13: JSONL approval with approver=uid:1500, decision approve
+CHECK PASS: N13: JSONL claim/exec_start/exec_exit follow for the token
+-- round 2: the approver says no
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-G"],"cwd":"/tmp","uid":0,"env":{},"nonce":"b4e859280d7604b37bbb97c620946180"}
+  | tmb: waiting for approval (item 92a1f37f5d61ac04, at most 5m0s)
+  | tmb: DENIED: approval_denied_by_human (nothing was executed)
+-- stdout --
+CHECK PASS: N13: denied client -> exit 125 (rc=125)
+CHECK PASS: N13: deny reason approval_denied_by_human
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/bin/ls"],"detail":"approved cwd /tmp/n12-dir (dev=69 ino=2240670) was replaced before exec","event":"deny","executable":"/bin/ls","nonce":"n12-nonce-fi...","reason":"cwd_changed","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:52.136241541Z"}
+  | {"event":"broker_stop","pid":378,"schema":1,"ts":"2026-10-17T21:58:52.467667167Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:58:52.631758667Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"queue","pid":527,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:52.646921Z","ttl_seconds":10}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"ecf4885d679a...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:52.769868208Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","event":"queued","executable":"/usr/bin/id","hash":"55ab15c8a391153a620bf67672e08b94c0666c1c51475569d3370c282643a8c2","item":"55ab15c8a391153a","nonce":"ecf4885d679a...","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:52.771421917Z"}
+  | {"approver":"uid:1500","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"ecf4885d679a...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:52.8669905Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"55ab15c8a391153a620bf67672e08b94c0666c1c51475569d3370c282643a8c2","nonce":"ecf4885d679a...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"55ab15c8a391153a","ts":"2026-10-17T21:58:52.887298167Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"55ab15c8a391153a","ts":"2026-10-17T21:58:52.890732417Z","uid":0}
+  | {"duration_ms":12,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"55ab15c8a391153a","ts":"2026-10-17T21:58:52.903426167Z"}
+  | {"argv":["/usr/bin/id","-G"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"b4e859280d76...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:53.112381667Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-G"],"cwd":"/tmp","event":"queued","executable":"/usr/bin/id","hash":"92a1f37f5d61ac0488c8269b89f96703cd373c035136e284bfd40bd080128bca","item":"92a1f37f5d61ac04","nonce":"b4e859280d76...","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:53.125973625Z"}
+  | {"approver":"uid:1500","argv":["/usr/bin/id","-G"],"decision":"deny","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"b4e859280d76...","reason":"approval_denied_by_human","requester_pid":0,"requester_uid":4242,"result":"denied","schema":1,"ts":"2026-10-17T21:58:53.39044175Z"}
+  | {"argv":["/usr/bin/id","-G"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/id","nonce":"b4e859280d76...","reason":"approval_denied_by_human","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:53.40211925Z"}
+---- STATE: claim store (count + newest files) ----
+  | 22
+  | total 88
+  | -rw------- 1 root root 124 Oct 17 21:58 bd78cf666d2a8c85dd424660ee113cae9d623dc22cad5195e024511e7f350c0b.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 55ab15c8a391153a620bf67672e08b94c0666c1c51475569d3370c282643a8c2.claim
+  | -rw------- 1 root root 114 Oct 17 21:58 8fa5df11e245223c7d4e2c71820defbcbcb02cbf8c7ba4c37d76e2e8a498339e.nonce
+
+================================================================
+== SCENARIO N14: the approver is not a requester; no approval path from the sandbox
+================================================================
+-- rc=125
+-- stderr --
+  | tmb approve: DENIED: approver_not_allowed (uid:4242 is not in approver_uids)
+-- stdout --
+CHECK PASS: N14: requester uid 4242 on the approver socket -> exit 125 (rc=125)
+CHECK PASS: N14: deny reason approver_not_allowed
+CHECK PASS: N14: JSONL approver_denied with uid 4242
+CHECK PASS: N14: approver socket not visible in the sandbox
+-- rc=125
+-- stderr --
+  | REQ-RAW: {"type":"list"}
+  | 
+  | FRAME: {"type":"denied","reason":"unknown_request_type","detail":"list"}
+  | tmb: DENIED: unknown_request_type (list)
+-- stdout --
+CHECK PASS: N14: list on the requester socket -> exit 125 (rc=125)
+CHECK PASS: N14: deny reason unknown_request_type
+CHECK PASS: N14: queue unchanged (empty) (stdout='queue is empty')
+---- STATE: broker.log (last 14 lines) ----
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"queue","pid":527,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:52.646921Z","ttl_seconds":10}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"ecf4885d679a...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:52.769868208Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","event":"queued","executable":"/usr/bin/id","hash":"55ab15c8a391153a620bf67672e08b94c0666c1c51475569d3370c282643a8c2","item":"55ab15c8a391153a","nonce":"ecf4885d679a...","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:52.771421917Z"}
+  | {"approver":"uid:1500","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"ecf4885d679a...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:52.8669905Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"55ab15c8a391153a620bf67672e08b94c0666c1c51475569d3370c282643a8c2","nonce":"ecf4885d679a...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"55ab15c8a391153a","ts":"2026-10-17T21:58:52.887298167Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"55ab15c8a391153a","ts":"2026-10-17T21:58:52.890732417Z","uid":0}
+  | {"duration_ms":12,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"55ab15c8a391153a","ts":"2026-10-17T21:58:52.903426167Z"}
+  | {"argv":["/usr/bin/id","-G"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"b4e859280d76...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:53.112381667Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-G"],"cwd":"/tmp","event":"queued","executable":"/usr/bin/id","hash":"92a1f37f5d61ac0488c8269b89f96703cd373c035136e284bfd40bd080128bca","item":"92a1f37f5d61ac04","nonce":"b4e859280d76...","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:53.125973625Z"}
+  | {"approver":"uid:1500","argv":["/usr/bin/id","-G"],"decision":"deny","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"b4e859280d76...","reason":"approval_denied_by_human","requester_pid":0,"requester_uid":4242,"result":"denied","schema":1,"ts":"2026-10-17T21:58:53.39044175Z"}
+  | {"argv":["/usr/bin/id","-G"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/id","nonce":"b4e859280d76...","reason":"approval_denied_by_human","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:53.40211925Z"}
+  | {"event":"approver_denied","reason":"approver_not_allowed","requester_pid":618,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:53.579943792Z"}
+  | {"argv":null,"claim_token":"","cwd":"","env":null,"event":"request","executable":"","nonce":"","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:53.764737042Z","type":"list","uid":0}
+  | {"argv":null,"detail":"list","event":"deny","executable":"","nonce":"","reason":"unknown_request_type","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:53.773140417Z"}
+---- STATE: claim store (count + newest files) ----
+  | 22
+  | total 88
+  | -rw------- 1 root root 124 Oct 17 21:58 bd78cf666d2a8c85dd424660ee113cae9d623dc22cad5195e024511e7f350c0b.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 55ab15c8a391153a620bf67672e08b94c0666c1c51475569d3370c282643a8c2.claim
+  | -rw------- 1 root root 114 Oct 17 21:58 8fa5df11e245223c7d4e2c71820defbcbcb02cbf8c7ba4c37d76e2e8a498339e.nonce
+
+================================================================
+== SCENARIO N16: two approvers: the first decision wins, the second sees already decided
+================================================================
+-- rc=0
+-- stderr --
+-- stdout --
+  | a7ce6ba75e0daaad: approve
+CHECK PASS: N16: first approver --yes -> exit 0 (rc=0)
+-- rc=1
+-- stderr --
+  | tmb approve: item a7ce6ba75e0daaad already decided: DENIED: already_decided (a7ce6ba75e0daaad)
+-- stdout --
+CHECK PASS: N16: second approver --no on the same id -> exit 1 (rc=1)
+CHECK PASS: N16: stderr says already decided
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"3d39c33a580518406d6e230a5168a5fc"}
+  | tmb: waiting for approval (item a7ce6ba75e0daaad, at most 5m0s)
+  | TOK: a7ce6ba75e0daaad (one-shot token, ttl=10s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N16: client of the approved request -> exit 0 (rc=0)
+CHECK PASS: N16: command ran exactly once (one exec_start)
+-- stopping tmb-broker
+-- starting tmb-broker (mode=mock-approve ttl=10s)
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/usr/bin/id","-G"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/id","nonce":"b4e859280d76...","reason":"approval_denied_by_human","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:53.40211925Z"}
+  | {"event":"approver_denied","reason":"approver_not_allowed","requester_pid":618,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:53.579943792Z"}
+  | {"argv":null,"claim_token":"","cwd":"","env":null,"event":"request","executable":"","nonce":"","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:53.764737042Z","type":"list","uid":0}
+  | {"argv":null,"detail":"list","event":"deny","executable":"","nonce":"","reason":"unknown_request_type","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:53.773140417Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"3d39c33a5805...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:54.093954709Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","event":"queued","executable":"/usr/bin/id","hash":"a7ce6ba75e0daaada11eb7a7dc378ce16e16c2207b1442e2bc448191f5f45858","item":"a7ce6ba75e0daaad","nonce":"3d39c33a5805...","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:54.115020876Z"}
+  | {"approver":"uid:1500","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"3d39c33a5805...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:58:54.473458626Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"a7ce6ba75e0daaada11eb7a7dc378ce16e16c2207b1442e2bc448191f5f45858","nonce":"3d39c33a5805...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"a7ce6ba75e0daaad","ts":"2026-10-17T21:58:54.481803043Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"a7ce6ba75e0daaad","ts":"2026-10-17T21:58:54.483345084Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"a7ce6ba75e0daaad","ts":"2026-10-17T21:58:54.485951834Z"}
+  | {"event":"decision_rejected","item":"a7ce6ba75e0daaad","reason":"already_decided","requester_pid":692,"requester_uid":1500,"schema":1,"ts":"2026-10-17T21:58:54.560744168Z"}
+  | {"event":"broker_stop","pid":527,"schema":1,"ts":"2026-10-17T21:58:54.908430001Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:58:55.069574918Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":721,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:55.070952334Z","ttl_seconds":10}
+---- STATE: claim store (count + newest files) ----
+  | 24
+  | total 96
+  | -rw------- 1 root root 124 Oct 17 21:58 ced8b304d3cdbb6d60bbb61a39cc0d1de71546faa7256afcb999acbb839f4f26.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 a7ce6ba75e0daaada11eb7a7dc378ce16e16c2207b1442e2bc448191f5f45858.claim
+  | -rw------- 1 root root 124 Oct 17 21:58 bd78cf666d2a8c85dd424660ee113cae9d623dc22cad5195e024511e7f350c0b.nonce
+
+================================================================
+== SCENARIO N15: a request nobody decides times out after approval_wait_seconds
+================================================================
+-- stopping tmb-broker
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/n15-marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"ecbefe80f739f5b71a0a280952ffc1f1"}
+  | tmb: waiting for approval (item 2d8cd39ace426d9e, at most 2s)
+  | tmb: DENIED: approval_timeout (nothing was executed)
+-- stdout --
+CHECK PASS: N15: undecided request -> exit 125 (rc=125)
+CHECK PASS: N15: deny reason approval_timeout
+CHECK PASS: N15: timed out after 3s (2..10s)
+CHECK PASS: N15: client said 'waiting for approval' exactly once
+CHECK PASS: N15: marker never created (/tmp/n15-marker absent in host-sim)
+CHECK PASS: N15: queue is empty after the timeout
+CHECK PASS: N15: JSONL approval_timeout
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"a7ce6ba75e0daaad","ts":"2026-10-17T21:58:54.483345084Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"a7ce6ba75e0daaad","ts":"2026-10-17T21:58:54.485951834Z"}
+  | {"event":"decision_rejected","item":"a7ce6ba75e0daaad","reason":"already_decided","requester_pid":692,"requester_uid":1500,"schema":1,"ts":"2026-10-17T21:58:54.560744168Z"}
+  | {"event":"broker_stop","pid":527,"schema":1,"ts":"2026-10-17T21:58:54.908430001Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:58:55.069574918Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":721,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:55.070952334Z","ttl_seconds":10}
+  | {"event":"broker_stop","pid":721,"schema":1,"ts":"2026-10-17T21:58:55.545408835Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:58:55.79425171Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"queue","pid":777,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:58:55.796345751Z","ttl_seconds":10}
+  | {"argv":["/usr/bin/touch","/tmp/n15-marker"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"ecbefe80f739...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:58:56.067127793Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/touch","/tmp/n15-marker"],"cwd":"/tmp","event":"queued","executable":"/usr/bin/touch","hash":"2d8cd39ace426d9ec043476129ddc249c01c1fe8e0a828d751ed864c274c1bb6","item":"2d8cd39ace426d9e","nonce":"ecbefe80f739...","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:56.068449668Z"}
+  | {"event":"approval_timeout","item":"2d8cd39ace426d9e","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:58.076467961Z","wait_seconds":2}
+  | {"approver":"mode:queue","argv":["/usr/bin/touch","/tmp/n15-marker"],"decision":"deny","event":"approval","executable":"/usr/bin/touch","mode":"queue","nonce":"ecbefe80f739...","reason":"approval_timeout","requester_pid":0,"requester_uid":4242,"result":"denied","schema":1,"ts":"2026-10-17T21:58:58.087924003Z"}
+  | {"argv":["/usr/bin/touch","/tmp/n15-marker"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/touch","nonce":"ecbefe80f739...","reason":"approval_timeout","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:58:58.092681378Z"}
+---- STATE: claim store (count + newest files) ----
+  | 24
+  | total 96
+  | -rw------- 1 root root 124 Oct 17 21:58 ced8b304d3cdbb6d60bbb61a39cc0d1de71546faa7256afcb999acbb839f4f26.nonce
+  | -rw------- 1 root root 189 Oct 17 21:58 a7ce6ba75e0daaada11eb7a7dc378ce16e16c2207b1442e2bc448191f5f45858.claim
+  | -rw------- 1 root root 124 Oct 17 21:58 bd78cf666d2a8c85dd424660ee113cae9d623dc22cad5195e024511e7f350c0b.nonce
+
+================================================================
+== SCENARIO N17: the queue is not a mutex; a client that hangs up leaves the queue
+================================================================
+-- stopping tmb-broker
+-- starting tmb-broker (mode=queue ttl=10s)
+CHECK PASS: N17: both requests wait in the queue
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-G"],"cwd":"/tmp","uid":0,"env":{},"nonce":"c74983134ebcec9752e75c1aff8b5527"}
+  | tmb: waiting for approval (item 08b9d06512554970, at most 5m0s)
+  | TOK: 08b9d06512554970 (one-shot token, ttl=10s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N17: second request approved and finished while the first waits (rc=0)
+CHECK PASS: N17: only the first request is still waiting
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"6566fe3be348a53880ee76379ce9bb12"}
+  | tmb: waiting for approval (item b80c707f0c84a948, at most 5m0s)
+  | TOK: b80c707f0c84a948 (one-shot token, ttl=10s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N17: first request approved afterwards -> exit 0 (rc=0)
+CHECK PASS: N17: first request stdout '0' (stdout='0')
+-- round 2: the waiting client is killed with SIGKILL
+CHECK PASS: N17: killed client's request left the queue
+CHECK PASS: N17: JSONL request_abandoned
+-- stopping tmb-broker
+-- starting tmb-broker (mode=mock-approve ttl=10s)
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/usr/bin/id","-G"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"08b9d06512554970","ts":"2026-10-17T21:59:00.13153892Z","uid":0}
+  | {"duration_ms":7,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"08b9d06512554970","ts":"2026-10-17T21:59:00.138586712Z"}
+  | {"approver":"uid:1500","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"6566fe3be348...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:00.398227629Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"b80c707f0c84a94868adb8a691459083ada40da68cd01ea204a0523f6e603f9f","nonce":"6566fe3be348...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"b80c707f0c84a948","ts":"2026-10-17T21:59:00.405417504Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"b80c707f0c84a948","ts":"2026-10-17T21:59:00.407297837Z","uid":0}
+  | {"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"b80c707f0c84a948","ts":"2026-10-17T21:59:00.408780629Z"}
+  | {"argv":["/usr/bin/id","-n"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"25307144b922...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:00.594716754Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-n"],"cwd":"/tmp","event":"queued","executable":"/usr/bin/id","hash":"7a0d0cdc0719db57d1ee858721904643397f3600b68a5e51dee57feaa6447e36","item":"7a0d0cdc0719db57","nonce":"25307144b922...","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:00.597446879Z"}
+  | {"event":"request_abandoned","item":"7a0d0cdc0719db57","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:00.853661671Z","wait_seconds":300}
+  | {"approver":"mode:queue","argv":["/usr/bin/id","-n"],"decision":"deny","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"25307144b922...","reason":"request_abandoned","requester_pid":0,"requester_uid":4242,"result":"denied","schema":1,"ts":"2026-10-17T21:59:00.855822837Z"}
+  | {"argv":["/usr/bin/id","-n"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/id","nonce":"25307144b922...","reason":"request_abandoned","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:00.857783379Z"}
+  | {"event":"broker_stop","pid":854,"schema":1,"ts":"2026-10-17T21:59:01.055411921Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:01.218993004Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":996,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:01.222819921Z","ttl_seconds":10}
+---- STATE: claim store (count + newest files) ----
+  | 28
+  | total 112
+  | -rw------- 1 root root 124 Oct 17 21:59 35906c054de4bc6ca73ef968f8b6ab049ec95d35e83b7dae38333f46d3d5afb5.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 b80c707f0c84a94868adb8a691459083ada40da68cd01ea204a0523f6e603f9f.claim
+  | -rw------- 1 root root 124 Oct 17 21:59 21685618fd03610b9d2e9f67054554702cf70bddfe1bfc7d602f0a107ca5bddc.nonce
+
+================================================================
+== SCENARIO N18: cwd outside allowed_cwd_roots -> deny cwd_not_allowed before approval
+================================================================
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/etc","uid":0,"env":{},"nonce":"7889bc66b3313aecd2671d52b13a551c"}
+  | tmb: DENIED: cwd_not_allowed (/etc)
+-- stdout --
+CHECK PASS: N18: --cwd /etc -> exit 125 (rc=125)
+CHECK PASS: N18: deny reason cwd_not_allowed
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp/n18-link","uid":0,"env":{},"nonce":"ea7ab43c6d8d5d49df3b76ebda1a6219"}
+  | tmb: DENIED: cwd_not_allowed (/etc)
+-- stdout --
+CHECK PASS: N18: --cwd /tmp/n18-link (symlink to /etc) -> exit 125 (rc=125)
+CHECK PASS: N18: symlink denied with realpath /etc in detail
+CHECK PASS: N18: no approval event for cwd outside the roots
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/bin/pwd","argv":["/bin/pwd"],"cwd":"/tmp/n18-dir","uid":0,"env":{},"nonce":"94803424dcb6fe98e2641c009ae10f85"}
+  | TOK: 6bbaca0ba78ae699 (one-shot token, ttl=10s)
+  | EXIT: 0
+-- stdout --
+  | /tmp/n18-dir
+CHECK PASS: N18: --cwd /tmp/n18-dir inside the root -> approved, exit 0 (rc=0)
+CHECK PASS: N18: command ran in /tmp/n18-dir (stdout='/tmp/n18-dir')
+-- round 2: broker with an empty allowed_cwd_roots denies every cwd
+-- stopping tmb-broker
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"74a80a155b4d15f2679aa138a16b31e1"}
+  | tmb: DENIED: cwd_not_allowed (/tmp)
+-- stdout --
+CHECK PASS: N18: empty allowed_cwd_roots, --cwd /tmp -> exit 125 (rc=125)
+CHECK PASS: N18: empty roots deny reason cwd_not_allowed
+-- stopping tmb-broker
+-- round 3: a relative root is a config error, the broker does not start
+-- rc=1
+-- stderr --
+  | tmb-broker: config: config: allowed_cwd_roots entry "work/dir" is not an absolute path
+-- stdout --
+CHECK PASS: N18: relative root -> broker exits 1 (rc=1)
+CHECK PASS: N18: stderr names the relative root
+CHECK PASS: N18: no socket after a failed start
+-- starting tmb-broker (mode=mock-approve ttl=10s)
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/usr/bin/id","-u"],"detail":"/etc","event":"deny","executable":"/usr/bin/id","nonce":"ea7ab43c6d8d...","reason":"cwd_not_allowed","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:01.689949838Z"}
+  | {"argv":["/bin/pwd"],"claim_token":"","cwd":"/tmp/n18-dir","env":null,"event":"request","executable":"/bin/pwd","nonce":"94803424dcb6...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:01.813614088Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/bin/pwd"],"decision":"approve","event":"approval","executable":"/bin/pwd","mode":"mock-approve","nonce":"94803424dcb6...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:01.814964921Z"}
+  | {"event":"claim","executable":"/usr/bin/pwd","hash":"6bbaca0ba78ae699fbab82970933fdcd332121151d5b8af5a32777cfcf1d3310","nonce":"94803424dcb6...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"6bbaca0ba78ae699","ts":"2026-10-17T21:59:01.817060713Z"}
+  | {"argv":["/bin/pwd"],"cwd":"/tmp/n18-dir","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025204,"exe_via_fd":true,"executable":"/usr/bin/pwd","requester_pid":0,"requester_uid":4242,"schema":1,"token":"6bbaca0ba78ae699","ts":"2026-10-17T21:59:01.818092588Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/pwd","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"6bbaca0ba78ae699","ts":"2026-10-17T21:59:01.820787171Z"}
+  | {"event":"broker_stop","pid":996,"schema":1,"ts":"2026-10-17T21:59:01.886372338Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:02.045384004Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1074,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:02.048189004Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"74a80a155b4d...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:02.160663796Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"/tmp","event":"deny","executable":"/usr/bin/id","nonce":"74a80a155b4d...","reason":"cwd_not_allowed","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:02.16250738Z"}
+  | {"event":"broker_stop","pid":1074,"schema":1,"ts":"2026-10-17T21:59:02.22439813Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:02.87255613Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1132,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:02.879721297Z","ttl_seconds":10}
+---- STATE: claim store (count + newest files) ----
+  | 30
+  | total 120
+  | -rw------- 1 root root 124 Oct 17 21:59 cbac9e1d4ee7f9f47f860a33bd342174d05fd2df2fd658e16a6b3161228121e3.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 6bbaca0ba78ae699fbab82970933fdcd332121151d5b8af5a32777cfcf1d3310.claim
+  | -rw------- 1 root root 124 Oct 17 21:59 35906c054de4bc6ca73ef968f8b6ab049ec95d35e83b7dae38333f46d3d5afb5.nonce
+
+================================================================
+== SCENARIO N19: fixed env keys cannot be requested; PATH only from fixed_env
+================================================================
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"LANG":"ru_RU"},"nonce":"9e0e6249797a75d58106ab0d7a77af15"}
+  | tmb: DENIED: env_fixed_key (LANG)
+-- stdout --
+CHECK PASS: N19: --env LANG=ru_RU (fixed and allowlisted) -> exit 125 (rc=125)
+CHECK PASS: N19: deny reason env_fixed_key
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"PATH":"/evil"},"nonce":"6b213dc32416e8a5f4a76e0f8a06f696"}
+  | tmb: DENIED: env_key_not_allowed (PATH)
+-- stdout --
+CHECK PASS: N19: --env PATH=/evil -> exit 125 (rc=125)
+CHECK PASS: N19: deny reason env_key_not_allowed
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/printenv","argv":["/usr/bin/printenv","LANG"],"cwd":"/tmp","uid":0,"env":{},"nonce":"2b323a02b79eb87d0e8d87f2f2a85b9a"}
+  | TOK: da1fb692634873e4 (one-shot token, ttl=10s)
+  | EXIT: 0
+-- stdout --
+  | C.UTF-8
+CHECK PASS: N19: child LANG is the fixed value (stdout='C.UTF-8')
+-- a config with PATH in allowed_env_keys does not start
+-- stopping tmb-broker
+-- rc=1
+-- stderr --
+  | tmb-broker: config: config: allowed_env_keys must not contain PATH: the search path comes only from fixed_env
+-- stdout --
+CHECK PASS: N19: PATH in allowed_env_keys -> broker exits 1 (rc=1)
+CHECK PASS: N19: stderr names the key
+CHECK PASS: N19: no socket after a failed start
+-- starting tmb-broker (mode=mock-approve ttl=10s)
+---- STATE: broker.log (last 14 lines) ----
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:02.87255613Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1132,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:02.879721297Z","ttl_seconds":10}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":{"LANG":"ru_RU"},"event":"request","executable":"/usr/bin/id","nonce":"9e0e6249797a...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:03.327056463Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"LANG","event":"deny","executable":"/usr/bin/id","nonce":"9e0e6249797a...","reason":"env_fixed_key","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:03.33090388Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":{"PATH":"/evil"},"event":"request","executable":"/usr/bin/id","nonce":"6b213dc32416...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:03.558058339Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"PATH","event":"deny","executable":"/usr/bin/id","nonce":"6b213dc32416...","reason":"env_key_not_allowed","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:03.56305263Z"}
+  | {"argv":["/usr/bin/printenv","LANG"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/printenv","nonce":"2b323a02b79e...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:03.672852797Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/printenv","LANG"],"decision":"approve","event":"approval","executable":"/usr/bin/printenv","mode":"mock-approve","nonce":"2b323a02b79e...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:03.676193839Z"}
+  | {"event":"claim","executable":"/usr/bin/printenv","hash":"da1fb692634873e4230f0e5f7ba352830eabe2ba23dcb3cc03a41dd5d346dad9","nonce":"2b323a02b79e...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"da1fb692634873e4","ts":"2026-10-17T21:59:03.685218422Z"}
+  | {"argv":["/usr/bin/printenv","LANG"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025199,"exe_via_fd":true,"executable":"/usr/bin/printenv","requester_pid":0,"requester_uid":4242,"schema":1,"token":"da1fb692634873e4","ts":"2026-10-17T21:59:03.686507714Z","uid":0}
+  | {"duration_ms":3,"event":"exec_exit","executable":"/usr/bin/printenv","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"da1fb692634873e4","ts":"2026-10-17T21:59:03.689610464Z"}
+  | {"event":"broker_stop","pid":1132,"schema":1,"ts":"2026-10-17T21:59:03.770636047Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:04.346569506Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1208,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:04.360087797Z","ttl_seconds":10}
+---- STATE: claim store (count + newest files) ----
+  | 32
+  | total 128
+  | -rw------- 1 root root 124 Oct 17 21:59 fb2cfa22a17f84f1a6051495ced0175e4d3ed3e5018023b6d6afa92d88667074.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 da1fb692634873e4230f0e5f7ba352830eabe2ba23dcb3cc03a41dd5d346dad9.claim
+  | -rw------- 1 root root 124 Oct 17 21:59 cbac9e1d4ee7f9f47f860a33bd342174d05fd2df2fd658e16a6b3161228121e3.nonce
+
+================================================================
+== SCENARIO N20: env values are single-line and at most 4096 bytes
+================================================================
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"TZ":"UTC\nX=1"},"nonce":"2779b835d22e3206a467e5b5df6013b5"}
+  | tmb: DENIED: env_value_invalid (TZ: value contains NUL or a newline)
+-- stdout --
+CHECK PASS: N20: value with a newline -> exit 125 (rc=125)
+CHECK PASS: N20: deny reason env_value_invalid
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{"TZ":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"nonce":"8e5ad106dd31ee46fa9cdb843ba69305"}
+  | tmb: DENIED: env_value_too_long (TZ: 4097 bytes, limit 4096)
+-- stdout --
+CHECK PASS: N20: 4097-byte value -> exit 125 (rc=125)
+CHECK PASS: N20: deny reason env_value_too_long
+-- 4096 bytes pass; the manual console shows the value on the env line
+-- stopping tmb-broker
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/printenv","argv":["/usr/bin/printenv","TZ"],"cwd":"/tmp","uid":0,"env":{"TZ":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"nonce":"6bdc38163983056918432ca126e7846d"}
+  | TOK: 558ea334b10cf798 (one-shot token, ttl=3s)
+  | EXIT: 0
+-- stdout --
+  | aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+CHECK PASS: N20: 4096-byte value -> approved, exit 0 (rc=0)
+CHECK PASS: N20: child got the 4096-byte value
+CHECK PASS: N20: console env line carries the whole value
+-- stopping tmb-broker
+-- starting tmb-broker (mode=mock-approve ttl=10s)
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/usr/bin/id","-u"],"detail":"TZ: value contains NUL or a newline","event":"deny","executable":"/usr/bin/id","nonce":"2779b835d22e...","reason":"env_value_invalid","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:04.607384297Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":{"TZ":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"event":"request","executable":"/usr/bin/id","nonce":"8e5ad106dd31...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:04.666658214Z","type":"exec","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"detail":"TZ: 4097 bytes, limit 4096","event":"deny","executable":"/usr/bin/id","nonce":"8e5ad106dd31...","reason":"env_value_too_long","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:04.667829131Z"}
+  | {"event":"broker_stop","pid":1208,"schema":1,"ts":"2026-10-17T21:59:04.737030631Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:04.866814714Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"manual","pid":1257,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:04.868410131Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/printenv","TZ"],"claim_token":"","cwd":"/tmp","env":{"TZ":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"event":"request","executable":"/usr/bin/printenv","nonce":"6bdc38163983...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:05.104890381Z","type":"exec","uid":0}
+  | {"approver":"mode:manual","argv":["/usr/bin/printenv","TZ"],"decision":"approve","event":"approval","executable":"/usr/bin/printenv","mode":"manual","nonce":"6bdc38163983...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:05.149279464Z"}
+  | {"event":"claim","executable":"/usr/bin/printenv","hash":"558ea334b10cf798fcb54f4bffacd0f6efab45a48034fc515ab2e3f092e9938d","nonce":"6bdc38163983...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"558ea334b10cf798","ts":"2026-10-17T21:59:05.153274048Z"}
+  | {"argv":["/usr/bin/printenv","TZ"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":3,"event":"exec_start","exe_dev":69,"exe_ino":3025199,"exe_via_fd":true,"executable":"/usr/bin/printenv","requester_pid":0,"requester_uid":4242,"schema":1,"token":"558ea334b10cf798","ts":"2026-10-17T21:59:05.154704881Z","uid":0}
+  | {"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/printenv","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"558ea334b10cf798","ts":"2026-10-17T21:59:05.156423173Z"}
+  | {"event":"broker_stop","pid":1257,"schema":1,"ts":"2026-10-17T21:59:05.234243089Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:05.392896798Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1297,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:05.394874673Z","ttl_seconds":10}
+---- STATE: claim store (count + newest files) ----
+  | 34
+  | total 136
+  | -rw------- 1 root root 124 Oct 17 21:59 75cb4293e97467f8c8d05f8add6f1f5ab64c8aa4dbbbc49966b6ceb0a14deff9.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 558ea334b10cf798fcb54f4bffacd0f6efab45a48034fc515ab2e3f092e9938d.claim
+  | -rw------- 1 root root 124 Oct 17 21:59 fb2cfa22a17f84f1a6051495ced0175e4d3ed3e5018023b6d6afa92d88667074.nonce
+
+================================================================
+== SCENARIO N22: held cwd fd from approval to exec; rename before claim -> cwd_changed
+================================================================
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","marker"],"cwd":"/tmp/n22","uid":0,"env":{},"nonce":"n22-nonce-fixed-000022"}
+  | FRAME: {"type":"approved","token":"c7504c032809b899","detail":"one-shot token, ttl=10s"}
+-- stdout --
+CHECK PASS: N22: approve phase ok (rc=0)
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","marker"],"cwd":"/tmp/n22","uid":0,"env":{},"nonce":"n22-nonce-fixed-000022"}
+  | FRAME: {"type":"denied","reason":"cwd_changed","detail":"approved cwd /tmp/n22 (dev=69 ino=2232778) was replaced before exec"}
+  | tmb: DENIED: cwd_changed (approved cwd /tmp/n22 (dev=69 ino=2232778) was replaced before exec)
+-- stdout --
+CHECK PASS: N22: claim after cwd rename -> exit 125 (rc=125)
+CHECK PASS: N22: deny reason cwd_changed
+CHECK PASS: N22: no marker in the renamed directory (/tmp/n22-old/marker absent in host-sim)
+CHECK PASS: N22: no marker in the new directory (/tmp/n22/marker absent in host-sim)
+-- positive control: same request, cwd untouched
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","marker"],"cwd":"/tmp/n22","uid":0,"env":{},"nonce":"n22-nonce-fixed-000023"}
+  | FRAME: {"type":"approved","token":"c4fdac87312cd13f","detail":"one-shot token, ttl=10s"}
+-- stdout --
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","marker"],"cwd":"/tmp/n22","uid":0,"env":{},"nonce":"n22-nonce-fixed-000023"}
+  | EXIT: 0
+-- stdout --
+CHECK PASS: N22: claim with intact cwd -> exit 0 (rc=0)
+CHECK PASS: N22: marker created in /tmp/n22
+CHECK PASS: N22: exec_start records cwd_via_fd=true
+---- STATE: broker.log (last 14 lines) ----
+  | {"event":"broker_stop","pid":1257,"schema":1,"ts":"2026-10-17T21:59:05.234243089Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:05.392896798Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1297,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:05.394874673Z","ttl_seconds":10}
+  | {"argv":["/usr/bin/touch","marker"],"claim_token":"","cwd":"/tmp/n22","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"n22-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:05.726047798Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/touch","marker"],"decision":"approve","event":"approval","executable":"/usr/bin/touch","mode":"mock-approve","nonce":"n22-nonce-fi...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:05.732415465Z"}
+  | {"argv":["/usr/bin/touch","marker"],"claim_token":"c7504c032809b899","cwd":"/tmp/n22","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"n22-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:05.869837881Z","type":"claim","uid":0}
+  | {"event":"claim","executable":"/usr/bin/touch","hash":"c7504c032809b8991536e60f33f03cad2829ff9d3b5f198206e98292a7912b6c","nonce":"n22-nonce-fi...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"c7504c032809b899","ts":"2026-10-17T21:59:05.889517965Z"}
+  | {"argv":["/usr/bin/touch","marker"],"detail":"approved cwd /tmp/n22 (dev=69 ino=2232778) was replaced before exec","event":"deny","executable":"/usr/bin/touch","nonce":"n22-nonce-fi...","reason":"cwd_changed","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:05.895000673Z"}
+  | {"argv":["/usr/bin/touch","marker"],"claim_token":"","cwd":"/tmp/n22","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"n22-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:06.10409784Z","type":"approve","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/touch","marker"],"decision":"approve","event":"approval","executable":"/usr/bin/touch","mode":"mock-approve","nonce":"n22-nonce-fi...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:06.107238881Z"}
+  | {"argv":["/usr/bin/touch","marker"],"claim_token":"c4fdac87312cd13f","cwd":"/tmp/n22","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"n22-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:06.186157673Z","type":"claim","uid":0}
+  | {"event":"claim","executable":"/usr/bin/touch","hash":"c4fdac87312cd13f3b0b5469b9c35a16d80369bbdfd3bc84f4ba010648942f53","nonce":"n22-nonce-fi...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"c4fdac87312cd13f","ts":"2026-10-17T21:59:06.201553215Z"}
+  | {"argv":["/usr/bin/touch","marker"],"cwd":"/tmp/n22","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025269,"exe_via_fd":true,"executable":"/usr/bin/touch","requester_pid":0,"requester_uid":4242,"schema":1,"token":"c4fdac87312cd13f","ts":"2026-10-17T21:59:06.206109715Z","uid":0}
+  | {"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/touch","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"c4fdac87312cd13f","ts":"2026-10-17T21:59:06.207661298Z"}
+---- STATE: claim store (count + newest files) ----
+  | 38
+  | total 152
+  | -rw------- 1 root root 114 Oct 17 21:59 ae7fc2f68b1a6668143c4e549a8712d9338f83d6889167d3b21330f88ea21702.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 c4fdac87312cd13f3b0b5469b9c35a16d80369bbdfd3bc84f4ba010648942f53.claim
+  | -rw------- 1 root root 114 Oct 17 21:59 c549be3143a992223f1ea04c941b56669a5fd180097ee91711d9df285fe5778c.nonce
+
+================================================================
+== SCENARIO N21: claim-file GC at start removes expired files, keeps replay protection
+================================================================
+-- rc=0
+-- stderr --
+  | REQ-RAW: {"type":"exec","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"n21-replay-nonce-0021"}
+  | 
+  | FRAME: {"type":"approved","token":"506b5977a524d69f","detail":"one-shot token, ttl=10s"}
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N21: fresh request runs, exit 0 (rc=0)
+CHECK PASS: N21: claim files carry expires_at
+-- stopping tmb-broker
+-- starting tmb-broker (mode=mock-approve ttl=10s)
+CHECK PASS: N21: expired claim file removed at start (/var/lib/tmb-proto/claims/n21-expired.claim absent in host-sim)
+CHECK PASS: N21: unexpired claim file kept
+CHECK PASS: N21: JSONL claim_gc removed=1
+-- rc=125
+-- stderr --
+  | REQ-RAW: {"type":"exec","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"n21-replay-nonce-0021"}
+  | 
+  | FRAME: {"type":"approved","token":"506b5977a524d69f","detail":"one-shot token, ttl=10s"}
+  | FRAME: {"type":"denied","reason":"token_consumed_replay","detail":"token already redeemed exactly once before"}
+  | tmb: DENIED: token_consumed_replay (token already redeemed exactly once before)
+-- stdout --
+CHECK PASS: N21: replay of the redeemed token after restart -> exit 125 (rc=125)
+CHECK PASS: N21: deny reason token_consumed_replay
+---- STATE: broker.log (last 14 lines) ----
+  | {"event":"claim","executable":"/usr/bin/touch","hash":"c4fdac87312cd13f3b0b5469b9c35a16d80369bbdfd3bc84f4ba010648942f53","nonce":"n22-nonce-fi...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"c4fdac87312cd13f","ts":"2026-10-17T21:59:06.201553215Z"}
+  | {"argv":["/usr/bin/touch","marker"],"cwd":"/tmp/n22","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025269,"exe_via_fd":true,"executable":"/usr/bin/touch","requester_pid":0,"requester_uid":4242,"schema":1,"token":"c4fdac87312cd13f","ts":"2026-10-17T21:59:06.206109715Z","uid":0}
+  | {"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/touch","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"c4fdac87312cd13f","ts":"2026-10-17T21:59:06.207661298Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n21-replay-n...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:06.59494809Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n21-replay-n...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:06.602645132Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"506b5977a524d69f97dd9e95b85496e433f7fccd9e903a274ec24f38223219ad","nonce":"n21-replay-n...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"506b5977a524d69f","ts":"2026-10-17T21:59:06.613868007Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"506b5977a524d69f","ts":"2026-10-17T21:59:06.616419923Z","uid":0}
+  | {"duration_ms":4,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"506b5977a524d69f","ts":"2026-10-17T21:59:06.62116359Z"}
+  | {"event":"broker_stop","pid":1297,"schema":1,"ts":"2026-10-17T21:59:06.816492007Z"}
+  | {"event":"claim_gc","removed":1,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:06.95291409Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1419,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:06.958406423Z","ttl_seconds":10}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n21-replay-n...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:07.319587757Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n21-replay-n...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:07.323331215Z"}
+  | {"argv":["/usr/bin/id","-u"],"detail":"token already redeemed exactly once before","event":"deny","executable":"/usr/bin/id","nonce":"n21-replay-n...","reason":"token_consumed_replay","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:07.329518965Z"}
+---- STATE: claim store (count + newest files) ----
+  | 41
+  | total 164
+  | -rw-r--r-- 1 root root  41 Oct 17 21:59 n21-future.claim
+  | -rw------- 1 root root 113 Oct 17 21:59 190e3f140221bcc9baf9d0a070948b0c826187e0c2aa4de221926ca4a8f3bd45.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 506b5977a524d69f97dd9e95b85496e433f7fccd9e903a274ec24f38223219ad.claim
+
+================================================================
+== SCENARIO N24: the old certificate allowlist and the -tls-* flags are gone
+================================================================
+-- rc=1
+-- stderr --
+  | tmb-broker: config: config: allowed_requester_fps was replaced by allowed_requester_keys: list key fingerprints (SHA-256 of the public key; tmb fingerprint FILE or tmb-broker ca issue-sandbox prints them)
+-- stdout --
+CHECK PASS: N24: allowed_requester_fps in the config -> broker exits 1 (rc=1)
+CHECK PASS: N24: stderr names the old field
+CHECK PASS: N24: stderr names the replacement
+-- rc=2
+-- stderr --
+  | flag provided but not defined: -tls-ca
+  | Usage of tmb-broker:
+  |   -approval string
+  |     	approval mode override: manual|mock-approve|mock-deny|mock-timeout
+  |   -config string
+  |     	config file path (default "/etc/tmb/config.json")
+  |   -ttl int
+  |     	token TTL seconds override (PoC: sign short TTLs, e.g. 2-3; production default 60)
+-- stdout --
+CHECK PASS: N24: -tls-ca -> usage error, exit 2 (rc=2)
+CHECK PASS: N24: -tls-ca is an unknown flag
+---- STATE: broker.log (last 14 lines) ----
+  | {"event":"claim","executable":"/usr/bin/touch","hash":"c4fdac87312cd13f3b0b5469b9c35a16d80369bbdfd3bc84f4ba010648942f53","nonce":"n22-nonce-fi...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"c4fdac87312cd13f","ts":"2026-10-17T21:59:06.201553215Z"}
+  | {"argv":["/usr/bin/touch","marker"],"cwd":"/tmp/n22","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025269,"exe_via_fd":true,"executable":"/usr/bin/touch","requester_pid":0,"requester_uid":4242,"schema":1,"token":"c4fdac87312cd13f","ts":"2026-10-17T21:59:06.206109715Z","uid":0}
+  | {"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/touch","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"c4fdac87312cd13f","ts":"2026-10-17T21:59:06.207661298Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n21-replay-n...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:06.59494809Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n21-replay-n...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:06.602645132Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"506b5977a524d69f97dd9e95b85496e433f7fccd9e903a274ec24f38223219ad","nonce":"n21-replay-n...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"506b5977a524d69f","ts":"2026-10-17T21:59:06.613868007Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"506b5977a524d69f","ts":"2026-10-17T21:59:06.616419923Z","uid":0}
+  | {"duration_ms":4,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"506b5977a524d69f","ts":"2026-10-17T21:59:06.62116359Z"}
+  | {"event":"broker_stop","pid":1297,"schema":1,"ts":"2026-10-17T21:59:06.816492007Z"}
+  | {"event":"claim_gc","removed":1,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:06.95291409Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1419,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:06.958406423Z","ttl_seconds":10}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n21-replay-n...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:07.319587757Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n21-replay-n...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:07.323331215Z"}
+  | {"argv":["/usr/bin/id","-u"],"detail":"token already redeemed exactly once before","event":"deny","executable":"/usr/bin/id","nonce":"n21-replay-n...","reason":"token_consumed_replay","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:07.329518965Z"}
+---- STATE: claim store (count + newest files) ----
+  | 41
+  | total 164
+  | -rw-r--r-- 1 root root  41 Oct 17 21:59 n21-future.claim
+  | -rw------- 1 root root 113 Oct 17 21:59 190e3f140221bcc9baf9d0a070948b0c826187e0c2aa4de221926ca4a8f3bd45.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 506b5977a524d69f97dd9e95b85496e433f7fccd9e903a274ec24f38223219ad.claim
+
+================================================================
+== SCENARIO N28: a queued request and a pending approval survive SIGHUP
+================================================================
+-- stopping tmb-broker
+-- starting tmb-broker (mode=queue ttl=30s)
+CHECK PASS: N28: request waits in the queue
+-- SIGHUP to tmb-broker
+CHECK PASS: N28: SIGHUP -> reload event
+  | {"changed":[],"event":"reload","ignored":[],"pid":1536,"schema":1,"ts":"2026-10-17T21:59:08.557020258Z"}
+CHECK PASS: N28: the same item 32b56bab307f8505 still waits after the reload
+-- rc=0
+-- stderr --
+-- stdout --
+  | 32b56bab307f8505: approve
+CHECK PASS: N28: tmb approve --yes after the reload -> exit 0 (rc=0)
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"880130b852d1cbd46f32383c1110bd77"}
+  | tmb: waiting for approval (item 32b56bab307f8505, at most 5m0s)
+  | TOK: 32b56bab307f8505 (one-shot token, ttl=30s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N28: the queued request ran -> exit 0 (rc=0)
+CHECK PASS: N28: stdout '0' (stdout='0')
+-- pending approval: approve before SIGHUP, claim after
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n28-nonce-fixed-000028"}
+  | FRAME: {"type":"waiting","token":"1f5590127cecf71b","detail":"at most 5m0s"}
+  | FRAME: {"type":"approved","token":"1f5590127cecf71b","detail":"one-shot token, ttl=30s"}
+-- stdout --
+CHECK PASS: N28: approve phase ok before the reload (rc=0)
+CHECK PASS: N28: got one-shot token 1f5590127cecf71b
+-- SIGHUP to tmb-broker
+CHECK PASS: N28: second SIGHUP -> reload event
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"n28-nonce-fixed-000028"}
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N28: claim after the reload redeems the pending approval -> exit 0 (rc=0)
+CHECK PASS: N28: stdout '0' (stdout='0')
+CHECK PASS: N28: broker pid unchanged (1536)
+-- stopping tmb-broker
+-- starting tmb-broker (mode=mock-approve ttl=10s)
+---- STATE: broker.log (last 14 lines) ----
+  | {"event":"claim","executable":"/usr/bin/id","hash":"32b56bab307f8505bbecd373ccb53e85ddf4e884d9884676b5f071b5c083f9bf","nonce":"880130b852d1...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"32b56bab307f8505","ts":"2026-10-17T21:59:08.991672591Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"32b56bab307f8505","ts":"2026-10-17T21:59:08.994728091Z","uid":0}
+  | {"duration_ms":4,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"32b56bab307f8505","ts":"2026-10-17T21:59:08.999190174Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n28-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:09.130247924Z","type":"approve","uid":0}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","event":"queued","executable":"/usr/bin/id","hash":"1f5590127cecf71bfb9716b34bf5a13cb04e6bdf987aa4324e0cb18d67126d41","item":"1f5590127cecf71b","nonce":"n28-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:09.131543424Z"}
+  | {"approver":"uid:1500","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"queue","nonce":"n28-nonce-fi...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:09.393667341Z"}
+  | {"changed":[],"event":"reload","ignored":[],"pid":1536,"schema":1,"ts":"2026-10-17T21:59:09.530955216Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"1f5590127cecf71b","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n28-nonce-fi...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:09.671724383Z","type":"claim","uid":0}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"1f5590127cecf71bfb9716b34bf5a13cb04e6bdf987aa4324e0cb18d67126d41","nonce":"n28-nonce-fi...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"1f5590127cecf71b","ts":"2026-10-17T21:59:09.67408205Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"1f5590127cecf71b","ts":"2026-10-17T21:59:09.675064966Z","uid":0}
+  | {"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"1f5590127cecf71b","ts":"2026-10-17T21:59:09.676379841Z"}
+  | {"event":"broker_stop","pid":1536,"schema":1,"ts":"2026-10-17T21:59:09.8181218Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:09.978195175Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1694,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:09.980950383Z","ttl_seconds":10}
+---- STATE: claim store (count + newest files) ----
+  | 45
+  | total 180
+  | -rw------- 1 root root 114 Oct 17 21:59 c2417522aa1df4bf347cb2fcf9cacd1aa8b7851473c31c5e11c589b26d1e30de.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 1f5590127cecf71bfb9716b34bf5a13cb04e6bdf987aa4324e0cb18d67126d41.claim
+  | -rw------- 1 root root 124 Oct 17 21:59 8da4f4007d8ded4d83c7cd92efcc0a7e8743a845eba9f0f95a183e2f240f963b.nonce
+
+================================================================
+== SCENARIO N29: the journal reopens on SIGHUP, an unwritable journal closes the agent path, schema 1 on every line
+================================================================
+-- stopping tmb-broker
+-- broker CapEff=00000000a80425f9
+CHECK PASS: N29: broker runs without CAP_DAC_OVERRIDE and CAP_DAC_READ_SEARCH
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"26b652e3c561dfcf6efaa6c76e7a2339"}
+  | TOK: 34002448649ed229 (one-shot token, ttl=10s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N29: request before the rotation -> exit 0 (rc=0)
+CHECK PASS: N29: every journal line carries "schema":1
+-- rotation: rename the journal, SIGHUP
+CHECK PASS: N29: SIGHUP after the rename -> new /var/log/tmb/broker.log with the reload event
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"1a8c3853a3c1096cd08f2dac4b5d3402"}
+  | TOK: 45933c39b565db74 (one-shot token, ttl=10s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N29: request after the rotation -> exit 0 (rc=0)
+CHECK PASS: N29: stdout '0' (stdout='0')
+CHECK PASS: N29: the request's events are in the new file
+CHECK PASS: N29: the renamed file did not grow (64199 bytes)
+-- the log directory becomes unwritable and the journal is gone, SIGHUP
+CHECK PASS: N29: failed reopen -> audit_unavailable on the broker's stderr
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/n29-marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"1675ff2350538ad170dd51a64d00331f"}
+  | tmb: DENIED: audit_unavailable (the broker journal is unavailable, nothing was executed)
+-- stdout --
+CHECK PASS: N29: request while the journal is unavailable -> exit 125 (rc=125)
+CHECK PASS: N29: deny reason audit_unavailable
+CHECK PASS: N29: the command did not run (/tmp/n29-marker absent in host-sim)
+CHECK PASS: N29: no journal file appeared (/var/log/tmb/broker.log absent in host-sim)
+-- broker stderr --
+  | tmb-broker: journal unavailable, refusing new requests until a reopen succeeds (SIGHUP): journal reopen: open /var/log/tmb/broker.log: permission denied
+  | {"error":"journal reopen: open /var/log/tmb/broker.log: permission denied","event":"audit_unavailable","path":"/var/log/tmb/broker.log","pid":1748,"schema":1,"ts":"2026-10-17T21:59:14.300783427Z"}
+  | {"changed":[],"event":"reload","ignored":[],"pid":1748,"schema":1,"ts":"2026-10-17T21:59:14.301045677Z"}
+CHECK PASS: N29: broker stderr names the reason (permission denied)
+-- write access back, SIGHUP
+CHECK PASS: N29: SIGHUP with write access -> journal reopened
+CHECK PASS: N29: broker stderr says it accepts requests again
+-- rc=0
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"fa6a3c6fddfedff304e2456e08dfca28"}
+  | TOK: 0418592bd120a31c (one-shot token, ttl=10s)
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N29: request after the recovery -> exit 0 (rc=0)
+CHECK PASS: N29: stdout '0' (stdout='0')
+CHECK PASS: N29: every line in both journal files and the stderr reserve carries "schema":1
+-- stopping tmb-broker
+-- starting tmb-broker (mode=mock-approve ttl=10s)
+---- STATE: broker.log (last 14 lines) ----
+  | {"changed":[],"event":"reload","ignored":[],"pid":1748,"schema":1,"ts":"2026-10-17T21:59:15.243537636Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"fa6a3c6fddfe...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:15.652868594Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"fa6a3c6fddfe...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:15.655796428Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"0418592bd120a31c050f72124be30735a2b32c4515aba6e365b09d11c75c2c56","nonce":"fa6a3c6fddfe...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"0418592bd120a31c","ts":"2026-10-17T21:59:15.661595053Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"0418592bd120a31c","ts":"2026-10-17T21:59:15.663770636Z","uid":0}
+  | {"duration_ms":5,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"0418592bd120a31c","ts":"2026-10-17T21:59:15.668338303Z"}
+  | {"event":"broker_stop","pid":1748,"schema":1,"ts":"2026-10-17T21:59:16.349557678Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:16.602108678Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1934,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:16.604051345Z","ttl_seconds":10}
+---- STATE: claim store (count + newest files) ----
+  | 51
+  | total 204
+  | -rw------- 1 root root 124 Oct 17 21:59 18b2282758cea5bcfa6eb90badcee53f4be8da336b8b724cd66f1784bf8841f6.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 0418592bd120a31c050f72124be30735a2b32c4515aba6e365b09d11c75c2c56.claim
+  | -rw------- 1 root root 124 Oct 17 21:59 783476ed100e922ab939e8efd1058a59d8ecb45f78961d7e3477983cfc734886.nonce
+
+================================================================
+== SCENARIO N3a: mock-deny -> deny, nothing runs
+================================================================
+-- stopping tmb-broker
+-- starting tmb-broker (mode=mock-deny ttl=3s)
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/n3a-marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"74b67c17d0287b68fdf43ceee30240f1"}
+  | tmb: DENIED: approval_denied_by_mode (nothing was executed)
+-- stdout --
+CHECK PASS: N3a: mock-deny -> exit 125 (rc=125)
+CHECK PASS: N3a: deny reason approval_denied_by_mode
+CHECK PASS: N3a: marker file never created (/tmp/n3a-marker absent in host-sim)
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"fa6a3c6fddfe...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:15.652868594Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"fa6a3c6fddfe...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:15.655796428Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"0418592bd120a31c050f72124be30735a2b32c4515aba6e365b09d11c75c2c56","nonce":"fa6a3c6fddfe...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"0418592bd120a31c","ts":"2026-10-17T21:59:15.661595053Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"0418592bd120a31c","ts":"2026-10-17T21:59:15.663770636Z","uid":0}
+  | {"duration_ms":5,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"0418592bd120a31c","ts":"2026-10-17T21:59:15.668338303Z"}
+  | {"event":"broker_stop","pid":1748,"schema":1,"ts":"2026-10-17T21:59:16.349557678Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:16.602108678Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1934,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:16.604051345Z","ttl_seconds":10}
+  | {"event":"broker_stop","pid":1934,"schema":1,"ts":"2026-10-17T21:59:17.361885095Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:18.354462179Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-deny","pid":1984,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:18.360340596Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/touch","/tmp/n3a-marker"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"74b67c17d028...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:18.824006346Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-deny","argv":["/usr/bin/touch","/tmp/n3a-marker"],"decision":"deny","event":"approval","executable":"/usr/bin/touch","mode":"mock-deny","nonce":"74b67c17d028...","reason":"approval_denied_by_mode","requester_pid":0,"requester_uid":4242,"result":"denied","schema":1,"ts":"2026-10-17T21:59:18.826955637Z"}
+  | {"argv":["/usr/bin/touch","/tmp/n3a-marker"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/touch","nonce":"74b67c17d028...","reason":"approval_denied_by_mode","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:18.831536346Z"}
+---- STATE: claim store (count + newest files) ----
+  | 51
+  | total 204
+  | -rw------- 1 root root 124 Oct 17 21:59 18b2282758cea5bcfa6eb90badcee53f4be8da336b8b724cd66f1784bf8841f6.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 0418592bd120a31c050f72124be30735a2b32c4515aba6e365b09d11c75c2c56.claim
+  | -rw------- 1 root root 124 Oct 17 21:59 783476ed100e922ab939e8efd1058a59d8ecb45f78961d7e3477983cfc734886.nonce
+
+================================================================
+== SCENARIO N3b: mock-timeout (ttl=1s) -> deny after timeout, nothing runs
+================================================================
+-- stopping tmb-broker
+-- starting tmb-broker (mode=mock-timeout ttl=1s)
+-- rc=125
+-- stderr --
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/n3b-marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"ee4ddd654bc13ebbe3474cf0ab25cba9"}
+  | tmb: DENIED: approval_timeout (nothing was executed)
+-- stdout --
+CHECK PASS: N3b: mock-timeout -> exit 125 (rc=125)
+CHECK PASS: N3b: deny reason approval_timeout
+CHECK PASS: N3b: marker file never created (/tmp/n3b-marker absent in host-sim)
+---- STATE: broker.log (last 14 lines) ----
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:16.602108678Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":1934,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:16.604051345Z","ttl_seconds":10}
+  | {"event":"broker_stop","pid":1934,"schema":1,"ts":"2026-10-17T21:59:17.361885095Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:18.354462179Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-deny","pid":1984,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:18.360340596Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/touch","/tmp/n3a-marker"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"74b67c17d028...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:18.824006346Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-deny","argv":["/usr/bin/touch","/tmp/n3a-marker"],"decision":"deny","event":"approval","executable":"/usr/bin/touch","mode":"mock-deny","nonce":"74b67c17d028...","reason":"approval_denied_by_mode","requester_pid":0,"requester_uid":4242,"result":"denied","schema":1,"ts":"2026-10-17T21:59:18.826955637Z"}
+  | {"argv":["/usr/bin/touch","/tmp/n3a-marker"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/touch","nonce":"74b67c17d028...","reason":"approval_denied_by_mode","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:18.831536346Z"}
+  | {"event":"broker_stop","pid":1984,"schema":1,"ts":"2026-10-17T21:59:19.203957888Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:19.379018721Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-timeout","pid":2045,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:19.382610929Z","ttl_seconds":1}
+  | {"argv":["/usr/bin/touch","/tmp/n3b-marker"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/touch","nonce":"ee4ddd654bc1...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:19.557728679Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-timeout","argv":["/usr/bin/touch","/tmp/n3b-marker"],"decision":"deny","event":"approval","executable":"/usr/bin/touch","mode":"mock-timeout","nonce":"ee4ddd654bc1...","reason":"approval_timeout","requester_pid":0,"requester_uid":4242,"result":"denied","schema":1,"ts":"2026-10-17T21:59:21.065049764Z"}
+  | {"argv":["/usr/bin/touch","/tmp/n3b-marker"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/touch","nonce":"ee4ddd654bc1...","reason":"approval_timeout","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:21.071189055Z"}
+---- STATE: claim store (count + newest files) ----
+  | 51
+  | total 204
+  | -rw------- 1 root root 124 Oct 17 21:59 18b2282758cea5bcfa6eb90badcee53f4be8da336b8b724cd66f1784bf8841f6.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 0418592bd120a31c050f72124be30735a2b32c4515aba6e365b09d11c75c2c56.claim
+  | -rw------- 1 root root 124 Oct 17 21:59 783476ed100e922ab939e8efd1058a59d8ecb45f78961d7e3477983cfc734886.nonce
+
+================================================================
+== SCENARIO N8: identical replay request AFTER host-sim container restart -> deny
+================================================================
+-- stopping tmb-broker
+-- starting tmb-broker (mode=mock-approve ttl=3s)
+-- rc=0
+-- stderr --
+  | REQ-RAW: {"type":"exec","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"n8-replay-nonce-0008"}
+  | 
+  | FRAME: {"type":"approved","token":"c36f7695f5e17a27","detail":"one-shot token, ttl=3s"}
+  | EXIT: 0
+-- stdout --
+  | 0
+CHECK PASS: N8: first run of request (fixed nonce) -> exit 0 (rc=0)
+CHECK PASS: N8: first run stdout '0' (stdout='0')
+-- docker restart tmb-host-sim (true container restart; claim store lives in named volume)
+-- starting tmb-broker (mode=mock-approve ttl=3s)
+-- rc=125
+-- stderr --
+  | REQ-RAW: {"type":"exec","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"n8-replay-nonce-0008"}
+  | 
+  | FRAME: {"type":"approved","token":"c36f7695f5e17a27","detail":"one-shot token, ttl=3s"}
+  | FRAME: {"type":"denied","reason":"token_consumed_replay","detail":"token already redeemed exactly once before"}
+  | tmb: DENIED: token_consumed_replay (token already redeemed exactly once before)
+-- stdout --
+CHECK PASS: N8: byte-identical replay after restart -> exit 125 (rc=125)
+CHECK PASS: N8: deny reason token_consumed_replay (persistent claim store)
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/usr/bin/touch","/tmp/n3b-marker"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/touch","nonce":"ee4ddd654bc1...","reason":"approval_timeout","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:21.071189055Z"}
+  | {"event":"broker_stop","pid":2045,"schema":1,"ts":"2026-10-17T21:59:21.415693889Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:21.599907889Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":2106,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:21.620827014Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n8-replay-no...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:21.821821958Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n8-replay-no...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:21.865206833Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"c36f7695f5e17a27c61bcf98a253e3b3bdd8895b0cf6e7406840b06720caf401","nonce":"n8-replay-no...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"c36f7695f5e17a27","ts":"2026-10-17T21:59:21.949410875Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"c36f7695f5e17a27","ts":"2026-10-17T21:59:21.960378416Z","uid":0}
+  | {"duration_ms":11,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"c36f7695f5e17a27","ts":"2026-10-17T21:59:21.9718045Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:23.503929584Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":7,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:23.505258584Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n8-replay-no...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:23.635639042Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n8-replay-no...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:23.637109125Z"}
+  | {"argv":["/usr/bin/id","-u"],"detail":"token already redeemed exactly once before","event":"deny","executable":"/usr/bin/id","nonce":"n8-replay-no...","reason":"token_consumed_replay","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:23.638218125Z"}
+---- STATE: claim store (count + newest files) ----
+  | 53
+  | total 212
+  | -rw------- 1 root root 112 Oct 17 21:59 89ea90f4e11895e322415e8fb6118bb8288a36d1c49a3d192ca41591f16b7462.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 c36f7695f5e17a27c61bcf98a253e3b3bdd8895b0cf6e7406840b06720caf401.claim
+  | -rw------- 1 root root 124 Oct 17 21:59 18b2282758cea5bcfa6eb90badcee53f4be8da336b8b724cd66f1784bf8841f6.nonce
+
+================================================================
+== SCENARIO N9: broker killed -> agent path FAILS CLOSED; human sudo untouched
+================================================================
+-- killing broker with SIGKILL (stale socket left behind on purpose)
+-- rc=3
+-- stderr --
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"fc271db697acbca6026444ecd12eed71"}
+  | tmb: broker unreachable at /run/tmb/tmb.sock (is tmb-broker running?): dial unix /run/tmb/tmb.sock: connect: connection refused - FAIL CLOSED, nothing executed
+-- stdout --
+CHECK PASS: N9: broker dead -> client exits 3 (fail closed) (rc=3)
+CHECK PASS: N9: client says FAIL CLOSED, nothing executed
+-- human password sudo in host-sim still works, uid=0
+-- rc=0
+-- stderr --
+  | [sudo] password for human: -- stdout --
+  | uid=0(root) gid=0(root) groups=0(root)
+CHECK PASS: N9: sudo -S id exit 0 (rc=0)
+CHECK PASS: N9: sudo -S id returns uid=0(root)
+-- /etc/sudo.conf Plugin lines (must be 0) and sudoers.d (stock)
+  | Plugin lines in /etc/sudo.conf: 0
+  | total 4
+  | -r--r----- 1 root root 1068 Jan 29  2024 README
+CHECK PASS: N9: /etc/sudo.conf has ZERO Plugin lines (no TMB sudo plugin)
+---- STATE: broker.log (last 14 lines) ----
+  | {"argv":["/usr/bin/touch","/tmp/n3b-marker"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/touch","nonce":"ee4ddd654bc1...","reason":"approval_timeout","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:21.071189055Z"}
+  | {"event":"broker_stop","pid":2045,"schema":1,"ts":"2026-10-17T21:59:21.415693889Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:21.599907889Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":2106,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:21.620827014Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n8-replay-no...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:21.821821958Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n8-replay-no...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:21.865206833Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"c36f7695f5e17a27c61bcf98a253e3b3bdd8895b0cf6e7406840b06720caf401","nonce":"n8-replay-no...","requester_pid":0,"requester_uid":4242,"result":"ok","schema":1,"token":"c36f7695f5e17a27","ts":"2026-10-17T21:59:21.949410875Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_pid":0,"requester_uid":4242,"schema":1,"token":"c36f7695f5e17a27","ts":"2026-10-17T21:59:21.960378416Z","uid":0}
+  | {"duration_ms":11,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_pid":0,"requester_uid":4242,"schema":1,"token":"c36f7695f5e17a27","ts":"2026-10-17T21:59:21.9718045Z"}
+  | {"event":"claim_gc","removed":0,"schema":1,"skipped":0,"ts":"2026-10-17T21:59:23.503929584Z"}
+  | {"allowed_requester_keys":null,"allowed_requester_uids":[4242,4343],"event":"broker_start","mode":"mock-approve","pid":7,"schema":1,"socket":"/run/tmb/tmb.sock","ts":"2026-10-17T21:59:23.505258584Z","ttl_seconds":3}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","nonce":"n8-replay-no...","requester_pid":0,"requester_uid":4242,"schema":1,"transport":"unix","ts":"2026-10-17T21:59:23.635639042Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","mode":"mock-approve","nonce":"n8-replay-no...","reason":"","requester_pid":0,"requester_uid":4242,"result":"granted","schema":1,"ts":"2026-10-17T21:59:23.637109125Z"}
+  | {"argv":["/usr/bin/id","-u"],"detail":"token already redeemed exactly once before","event":"deny","executable":"/usr/bin/id","nonce":"n8-replay-no...","reason":"token_consumed_replay","requester_pid":0,"requester_uid":4242,"schema":1,"ts":"2026-10-17T21:59:23.638218125Z"}
+---- STATE: claim store (count + newest files) ----
+  | 53
+  | total 212
+  | -rw------- 1 root root 112 Oct 17 21:59 89ea90f4e11895e322415e8fb6118bb8288a36d1c49a3d192ca41591f16b7462.nonce
+  | -rw------- 1 root root 189 Oct 17 21:59 c36f7695f5e17a27c61bcf98a253e3b3bdd8895b0cf6e7406840b06720caf401.claim
+  | -rw------- 1 root root 124 Oct 17 21:59 18b2282758cea5bcfa6eb90badcee53f4be8da336b8b724cd66f1784bf8841f6.nonce
+
+================================================================
+== SUMMARY
+================================================================
+------------------------------------------------------------------
+PASS | containers up (sandbox uid=4242, host uid=0)
+PASS | sandbox-sim is on the 'none' network only
+PASS | HAPPY: exit code 0 (rc=0)
+PASS | HAPPY: stdout is exactly '0' (stdout='0')
+PASS | FD: ls -l /proc/self/fd ran (rc=0)
+PASS | FD: fd 0 points at /dev/null (child stdin)
+PASS | FD: no socket: fd leaked into child
+PASS | MANUAL-y: human 'y' -> command runs, exit 0 (rc=0)
+PASS | MANUAL-y: stdout is exactly '0' (stdout='0')
+PASS | MANUAL-n: human 'n' -> denied, exit 125 (rc=125)
+PASS | MANUAL-n: deny reason approval_denied_by_human
+PASS | N1: approve phase ok (rc=0)
+PASS | N1: got one-shot token 295a338420f6aba6
+PASS | N1: claim with same token but different argv -> exit 125 (rc=125)
+PASS | N1: deny reason token_binding_mismatch
+PASS | N2: approve phase ok (rc=0)
+PASS | N2: first claim executes, exit 0 (rc=0)
+PASS | N2: first claim stdout '0' (stdout='0')
+PASS | N2: replay claim -> exit 125 (rc=125)
+PASS | N2: deny reason token_consumed_replay
+PASS | TTL: approve phase ok (rc=0)
+PASS | TTL: expired claim -> exit 125 (rc=125)
+PASS | TTL: deny mentions no live approval
+PASS | TTL: marker file never created (/tmp/ttl-marker absent in host-sim)
+PASS | N5a: client-side env really had LD_PRELOAD=/tmp/evil.so
+PASS | N5a: printenv child ran (rc=0)
+PASS | N5a: child env has fixed broker PATH
+PASS | N5a: child env has fixed LANG
+PASS | N5a: child env lacks smuggled LD_PRELOAD
+PASS | N5b: smuggled env key -> exit 125 (rc=125)
+PASS | N5b: deny reason env_key_not_allowed
+PASS | N4: /bin/sh request -> exit 125 (rc=125)
+PASS | N4: deny reason shell_policy
+PASS | N4: /tmp/pwned NOT created in host-sim (/tmp/pwned absent in host-sim)
+PASS | N6: broker rejects non-absolute executable (raw 'id') (rc=125)
+PASS | N6: deny reason executable_not_absolute
+PASS | N6: client rejects relative path ./id locally (rc=2)
+PASS | N7: uid 1000 (gid 4242, can open socket) -> exit 125 (rc=125)
+PASS | N7: deny reason requester_not_allowed
+PASS | N7: even root uid 0 from sandbox -> exit 125 (rc=125)
+PASS | N7: root also requester_not_allowed
+PASS | N10: approve phase ok (requester uid 4242) (rc=0)
+PASS | N10: got one-shot token 1c89f1b2363fa126
+PASS | N10: claim under OTHER allowlisted uid 4343 -> exit 125 (rc=125)
+PASS | N10: deny reason requester_mismatch
+PASS | N10: token NOT consumed; claim under original uid 4242 -> exit 0 (rc=0)
+PASS | N10: stdout is exactly '0' (stdout='0')
+PASS | N11: approve phase ok (rc=0)
+PASS | N11: got one-shot token 655f21b7d3fb06c6
+PASS | N11: claim exit 0 (a program ran) (rc=0)
+PASS | N11: swap landed inside the claim window (broker frozen, exe path replaced)
+PASS | N11: stdout 'A' - the APPROVED inode ran, not the replacement (stdout='A')
+PASS | N11: JSONL exec_start has exe_via_fd=true (exec via pinned fd)
+PASS | N11: fd listing via pinned exec ran (rc=0)
+PASS | N11: child sees only fds 0,1,2 (+ls own dirfd) - pin fd closed at exec (stdout='0
+1
+2
+3')
+PASS | N12: approve phase ok (rc=0)
+PASS | N12: got one-shot token 065b7e5d1f47180d
+PASS | N12: cwd really replaced (old dir moved aside, new inode at the same path)
+PASS | N12: claim after cwd swap -> exit 125 (rc=125)
+PASS | N12: deny reason cwd_changed
+PASS | N12: no command output (nothing executed) (stdout='')
+PASS | N12: JSONL deny event with reason cwd_changed
+PASS | N13: request waits in the approval queue
+PASS | N13: listing shows the requester uid
+PASS | N13: listing shows the realpath of the executable
+PASS | N13: listing shows argv
+PASS | N13: listing shows the cwd realpath
+PASS | N13: listing shows the final env with PATH from fixed_env
+PASS | N13: tmb approve --yes <id> -> exit 0 (rc=0)
+PASS | N13: approved client -> exit 0 (rc=0)
+PASS | N13: approved client stdout '0' (stdout='0')
+PASS | N13: JSONL queued for the item
+PASS | N13: JSONL approval with approver=uid:1500, decision approve
+PASS | N13: JSONL claim/exec_start/exec_exit follow for the token
+PASS | N13: denied client -> exit 125 (rc=125)
+PASS | N13: deny reason approval_denied_by_human
+PASS | N14: requester uid 4242 on the approver socket -> exit 125 (rc=125)
+PASS | N14: deny reason approver_not_allowed
+PASS | N14: JSONL approver_denied with uid 4242
+PASS | N14: approver socket not visible in the sandbox
+PASS | N14: list on the requester socket -> exit 125 (rc=125)
+PASS | N14: deny reason unknown_request_type
+PASS | N14: queue unchanged (empty) (stdout='queue is empty')
+PASS | N16: first approver --yes -> exit 0 (rc=0)
+PASS | N16: second approver --no on the same id -> exit 1 (rc=1)
+PASS | N16: stderr says already decided
+PASS | N16: client of the approved request -> exit 0 (rc=0)
+PASS | N16: command ran exactly once (one exec_start)
+PASS | N15: undecided request -> exit 125 (rc=125)
+PASS | N15: deny reason approval_timeout
+PASS | N15: timed out after 3s (2..10s)
+PASS | N15: client said 'waiting for approval' exactly once
+PASS | N15: marker never created (/tmp/n15-marker absent in host-sim)
+PASS | N15: queue is empty after the timeout
+PASS | N15: JSONL approval_timeout
+PASS | N17: both requests wait in the queue
+PASS | N17: second request approved and finished while the first waits (rc=0)
+PASS | N17: only the first request is still waiting
+PASS | N17: first request approved afterwards -> exit 0 (rc=0)
+PASS | N17: first request stdout '0' (stdout='0')
+PASS | N17: killed client's request left the queue
+PASS | N17: JSONL request_abandoned
+PASS | N18: --cwd /etc -> exit 125 (rc=125)
+PASS | N18: deny reason cwd_not_allowed
+PASS | N18: --cwd /tmp/n18-link (symlink to /etc) -> exit 125 (rc=125)
+PASS | N18: symlink denied with realpath /etc in detail
+PASS | N18: no approval event for cwd outside the roots
+PASS | N18: --cwd /tmp/n18-dir inside the root -> approved, exit 0 (rc=0)
+PASS | N18: command ran in /tmp/n18-dir (stdout='/tmp/n18-dir')
+PASS | N18: empty allowed_cwd_roots, --cwd /tmp -> exit 125 (rc=125)
+PASS | N18: empty roots deny reason cwd_not_allowed
+PASS | N18: relative root -> broker exits 1 (rc=1)
+PASS | N18: stderr names the relative root
+PASS | N18: no socket after a failed start
+PASS | N19: --env LANG=ru_RU (fixed and allowlisted) -> exit 125 (rc=125)
+PASS | N19: deny reason env_fixed_key
+PASS | N19: --env PATH=/evil -> exit 125 (rc=125)
+PASS | N19: deny reason env_key_not_allowed
+PASS | N19: child LANG is the fixed value (stdout='C.UTF-8')
+PASS | N19: PATH in allowed_env_keys -> broker exits 1 (rc=1)
+PASS | N19: stderr names the key
+PASS | N19: no socket after a failed start
+PASS | N20: value with a newline -> exit 125 (rc=125)
+PASS | N20: deny reason env_value_invalid
+PASS | N20: 4097-byte value -> exit 125 (rc=125)
+PASS | N20: deny reason env_value_too_long
+PASS | N20: 4096-byte value -> approved, exit 0 (rc=0)
+PASS | N20: child got the 4096-byte value
+PASS | N20: console env line carries the whole value
+PASS | N22: approve phase ok (rc=0)
+PASS | N22: claim after cwd rename -> exit 125 (rc=125)
+PASS | N22: deny reason cwd_changed
+PASS | N22: no marker in the renamed directory (/tmp/n22-old/marker absent in host-sim)
+PASS | N22: no marker in the new directory (/tmp/n22/marker absent in host-sim)
+PASS | N22: claim with intact cwd -> exit 0 (rc=0)
+PASS | N22: marker created in /tmp/n22
+PASS | N22: exec_start records cwd_via_fd=true
+PASS | N21: fresh request runs, exit 0 (rc=0)
+PASS | N21: claim files carry expires_at
+PASS | N21: expired claim file removed at start (/var/lib/tmb-proto/claims/n21-expired.claim absent in host-sim)
+PASS | N21: unexpired claim file kept
+PASS | N21: JSONL claim_gc removed=1
+PASS | N21: replay of the redeemed token after restart -> exit 125 (rc=125)
+PASS | N21: deny reason token_consumed_replay
+PASS | N24: allowed_requester_fps in the config -> broker exits 1 (rc=1)
+PASS | N24: stderr names the old field
+PASS | N24: stderr names the replacement
+PASS | N24: -tls-ca -> usage error, exit 2 (rc=2)
+PASS | N24: -tls-ca is an unknown flag
+PASS | N28: request waits in the queue
+PASS | N28: SIGHUP -> reload event
+PASS | N28: the same item 32b56bab307f8505 still waits after the reload
+PASS | N28: tmb approve --yes after the reload -> exit 0 (rc=0)
+PASS | N28: the queued request ran -> exit 0 (rc=0)
+PASS | N28: stdout '0' (stdout='0')
+PASS | N28: approve phase ok before the reload (rc=0)
+PASS | N28: got one-shot token 1f5590127cecf71b
+PASS | N28: second SIGHUP -> reload event
+PASS | N28: claim after the reload redeems the pending approval -> exit 0 (rc=0)
+PASS | N28: stdout '0' (stdout='0')
+PASS | N28: broker pid unchanged (1536)
+PASS | N29: broker runs without CAP_DAC_OVERRIDE and CAP_DAC_READ_SEARCH
+PASS | N29: request before the rotation -> exit 0 (rc=0)
+PASS | N29: every journal line carries "schema":1
+PASS | N29: SIGHUP after the rename -> new /var/log/tmb/broker.log with the reload event
+PASS | N29: request after the rotation -> exit 0 (rc=0)
+PASS | N29: stdout '0' (stdout='0')
+PASS | N29: the request's events are in the new file
+PASS | N29: the renamed file did not grow (64199 bytes)
+PASS | N29: failed reopen -> audit_unavailable on the broker's stderr
+PASS | N29: request while the journal is unavailable -> exit 125 (rc=125)
+PASS | N29: deny reason audit_unavailable
+PASS | N29: the command did not run (/tmp/n29-marker absent in host-sim)
+PASS | N29: no journal file appeared (/var/log/tmb/broker.log absent in host-sim)
+PASS | N29: broker stderr names the reason (permission denied)
+PASS | N29: SIGHUP with write access -> journal reopened
+PASS | N29: broker stderr says it accepts requests again
+PASS | N29: request after the recovery -> exit 0 (rc=0)
+PASS | N29: stdout '0' (stdout='0')
+PASS | N29: every line in both journal files and the stderr reserve carries "schema":1
+PASS | N3a: mock-deny -> exit 125 (rc=125)
+PASS | N3a: deny reason approval_denied_by_mode
+PASS | N3a: marker file never created (/tmp/n3a-marker absent in host-sim)
+PASS | N3b: mock-timeout -> exit 125 (rc=125)
+PASS | N3b: deny reason approval_timeout
+PASS | N3b: marker file never created (/tmp/n3b-marker absent in host-sim)
+PASS | N8: first run of request (fixed nonce) -> exit 0 (rc=0)
+PASS | N8: first run stdout '0' (stdout='0')
+PASS | N8: byte-identical replay after restart -> exit 125 (rc=125)
+PASS | N8: deny reason token_consumed_replay (persistent claim store)
+PASS | N9: broker dead -> client exits 3 (fail closed) (rc=3)
+PASS | N9: client says FAIL CLOSED, nothing executed
+PASS | N9: sudo -S id exit 0 (rc=0)
+PASS | N9: sudo -S id returns uid=0(root)
+PASS | N9: /etc/sudo.conf has ZERO Plugin lines (no TMB sudo plugin)
+------------------------------------------------------------------
+PASS: 195  FAIL: 0
+RESULT: GREEN - all scenarios behaved exactly as designed
+(full broker JSONL evidence was captured per-scenario above; containers+volumes are wiped by the cleanup trap)
+=== cleanup ===
