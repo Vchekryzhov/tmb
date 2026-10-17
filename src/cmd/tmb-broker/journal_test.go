@@ -237,17 +237,27 @@ func TestJournalFailureFailsClosed(t *testing.T) {
 			b.log.stderr = stderr
 			var broken atomic.Bool
 			injected := errors.New("injected EIO")
+			// started closes once exec_start is written AND fsynced: the
+			// journal breaks only after the command's record is on disk
+			var lastWasStart atomic.Bool
+			started := make(chan struct{})
+			var startedOnce sync.Once
 			b.log.write = func(f *os.File, p []byte) (int, error) {
 				if kind == "write" && broken.Load() {
 					return 0, injected
 				}
+				lastWasStart.Store(strings.Contains(string(p), `"event":"exec_start"`))
 				return f.Write(p)
 			}
 			b.log.sync = func(f *os.File) error {
 				if kind == "fsync" && broken.Load() {
 					return injected
 				}
-				return f.Sync()
+				err := f.Sync()
+				if lastWasStart.Load() {
+					startedOnce.Do(func() { close(started) })
+				}
+				return err
 			}
 
 			// a command that is running when the journal breaks
@@ -274,12 +284,10 @@ func TestJournalFailureFailsClosed(t *testing.T) {
 					}
 				}
 			}()
-			deadline := time.Now().Add(5 * time.Second)
-			for !strings.Contains(readFile(t, b.log.Path()), `"event":"exec_start"`) {
-				if time.Now().After(deadline) {
-					t.Fatal("exec_start never written")
-				}
-				time.Sleep(5 * time.Millisecond)
+			select {
+			case <-started:
+			case <-time.After(5 * time.Second):
+				t.Fatal("exec_start never reached the disk")
 			}
 			broken.Store(true)
 
