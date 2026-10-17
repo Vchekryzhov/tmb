@@ -23,7 +23,8 @@ var RequiredIDs = []string{
 	"SEC-17", "SEC-18", "SEC-19", "SEC-20", "SEC-21", "SEC-22",
 	"SEC-23", // spec #39: identity by public key
 	"SEC-24", // spec #39: reload by SIGHUP
-	"SEC-25", // spec #39: fsynced journal, audit_unavailable, reopen, schema
+	"SEC-25", // spec #27: approver output escaped
+	"SEC-26", // spec #39: fsynced journal, audit_unavailable, reopen, schema
 }
 
 // Level says where a case's evidence can be produced.
