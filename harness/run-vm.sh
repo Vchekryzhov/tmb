@@ -159,7 +159,7 @@ request_approved() {
 log "TMB VM RUNNER: milestone B on a systemd host in Lima ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
 echo "VM: $VM (template harness/$TEMPLATE), sandbox: $SBX, temp dir: $TD"
 GIT_SHA=$(git rev-parse HEAD)
-echo "commit: $GIT_SHA$( [ -n "$(git status --porcelain)" ] && echo ' (working tree has uncommitted changes; the packages carry them)')"
+echo "commit: $GIT_SHA$( [ -n "$(git status --porcelain --untracked-files=no)" ] && echo ' (working tree has uncommitted changes; the packages carry them)')"
 
 # -----------------------------------------------------------------------------
 log "STAGE 1: packages of the current commit, VM from scratch"
