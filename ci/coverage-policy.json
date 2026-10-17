@@ -34,6 +34,7 @@
         "tmb-poc/cmd/tmb-broker/pin_linux.go",
         "tmb-poc/cmd/tmb-broker/queue.go",
         "tmb-poc/cmd/tmb-broker/reload.go",
+        "tmb-poc/cmd/tmb-broker/log.go",
         "tmb-poc/cmd/tmb/approve.go",
         "tmb-poc/cmd/tmb/keys.go"
       ],
