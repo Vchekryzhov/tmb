@@ -107,6 +107,25 @@ func TestCAIssueServer(t *testing.T) {
 	if m := mode(t, key); m != 0o600 {
 		t.Errorf("server.key mode %o, want 600", m)
 	}
+	first := readCert(t, crt)
+	if _, _, err := issueServer(dir, out, []string{"host.openshell.internal"}, []net.IP{net.ParseIP("192.0.2.7")}, caNow); err != nil {
+		t.Fatalf("reissue: %v", err)
+	}
+	if _, err := tls.LoadX509KeyPair(crt, key); err != nil {
+		t.Errorf("reissued pair does not load: %v", err)
+	}
+	if readCert(t, crt).SerialNumber.Cmp(first.SerialNumber) == 0 {
+		t.Error("reissue kept the old certificate")
+	}
+	if m := mode(t, key); m != 0o600 {
+		t.Errorf("reissued server.key mode %o, want 600", m)
+	}
+	if m := mode(t, crt); m != 0o644 {
+		t.Errorf("reissued server.crt mode %o, want 644", m)
+	}
+	if left, _ := filepath.Glob(filepath.Join(out, ".*.tmp")); len(left) != 0 {
+		t.Errorf("temporary files left behind: %v", left)
+	}
 	c := readCert(t, crt)
 	if got := c.NotAfter.Sub(c.NotBefore); got != serverValidity {
 		t.Errorf("validity %v, want 1 year", got)
@@ -323,6 +342,34 @@ func TestCAWriteFailures(t *testing.T) {
 	_, pubPEM := newSandboxKey(t)
 	if _, err := issueSandbox(dir, filepath.Join(file, "x.crt"), pubPEM, "sbx", caNow); err == nil {
 		t.Errorf("issue-sandbox into a path under a regular file succeeded")
+	}
+	// ca.crt that cannot be written: init fails and takes the new key
+	// back, so the CA is not left as a key without a certificate.
+	half := filepath.Join(base, "half")
+	if err := os.MkdirAll(filepath.Join(half, "ca.crt"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := caInit(half, caNow); err == nil {
+		t.Errorf("init with an unwritable ca.crt succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(half, "ca.key")); !os.IsNotExist(err) {
+		t.Errorf("ca.key left behind after a failed init: %v", err)
+	}
+	if err := os.Remove(filepath.Join(half, "ca.crt")); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if err := caInit(half, caNow); err != nil {
+		t.Errorf("init after a failed init: %v", err)
+	}
+	blocked := filepath.Join(base, "blocked")
+	if err := os.MkdirAll(filepath.Join(blocked, "server.crt", "x"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if _, _, err := issueServer(dir, blocked, []string{"x"}, nil, caNow); err == nil {
+		t.Errorf("issue-server over a directory named server.crt succeeded")
+	}
+	if left, _ := filepath.Glob(filepath.Join(blocked, ".*.tmp")); len(left) != 0 {
+		t.Errorf("a failed rename left temporary files: %v", left)
 	}
 	if os.Geteuid() == 0 {
 		return // root writes into read-only directories

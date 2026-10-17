@@ -10,10 +10,10 @@ import (
 )
 
 func envBroker() *Broker {
-	return &Broker{cfg: &Config{
+	return policyBroker(&Config{
 		AllowedEnvKeys: []string{"LANG", "TZ"},
 		FixedEnv:       map[string]string{"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
-	}}
+	})
 }
 
 func TestCheckEnvPolicy(t *testing.T) {
@@ -48,7 +48,7 @@ func TestCheckEnvPolicy(t *testing.T) {
 
 // PATH can never be requested, with or without a fixed value.
 func TestCheckEnvPathNotRequestable(t *testing.T) {
-	b := &Broker{cfg: &Config{AllowedEnvKeys: []string{"LANG"}}}
+	b := policyBroker(&Config{AllowedEnvKeys: []string{"LANG"}})
 	if deny, detail := b.checkEnv(map[string]string{"PATH": "/evil"}); deny != "env_key_not_allowed" || detail != "PATH" {
 		t.Fatalf("PATH request: deny=%q detail=%q, want env_key_not_allowed PATH", deny, detail)
 	}
@@ -82,7 +82,7 @@ func TestLoadConfigRejectsPathInAllowedEnvKeys(t *testing.T) {
 // The env policy runs in validation, before any approval.
 func TestValidateRequestAppliesEnvPolicy(t *testing.T) {
 	b := newTestBroker(t)
-	b.cfg.FixedEnv = map[string]string{"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
+	b.conf().FixedEnv = map[string]string{"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
 	req := testReq(t, "env-policy-1")
 	if _, _, _, _, deny, detail := b.validateRequest(req); deny != "env_fixed_key" || detail != "LANG" {
 		t.Fatalf("validateRequest: deny=%q detail=%q, want env_fixed_key LANG", deny, detail)

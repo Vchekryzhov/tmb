@@ -26,6 +26,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"math/big"
 	"net"
 	"os"
@@ -161,15 +162,13 @@ func caCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, now tim
 }
 
 // caInit creates the CA key and self-signed certificate in dir. An existing
-// key is never overwritten.
-func caInit(dir string, now time.Time) error {
+// key is never overwritten (the key file is created exclusively), and a
+// failed certificate write removes the new key, so a later init can retry.
+func caInit(dir string, now time.Time) (err error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	keyPath := filepath.Join(dir, "ca.key")
-	if _, err := os.Stat(keyPath); err == nil {
-		return fmt.Errorf("%s already exists; refusing to replace the CA key", keyPath)
-	}
 	key := newP256Key()
 	serial := randomSerial()
 	tmpl := &x509.Certificate{
@@ -187,9 +186,21 @@ func caInit(dir string, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	if err := writeKey(keyPath, key); err != nil {
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
 		return err
 	}
+	if err := writePEMFileFlags(keyPath, "PRIVATE KEY", keyDER, 0o600, os.O_EXCL); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return fmt.Errorf("%s already exists; refusing to replace the CA key", keyPath)
+		}
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = os.Remove(keyPath)
+		}
+	}()
 	return writePEMFile(filepath.Join(dir, "ca.crt"), "CERTIFICATE", der, 0o644)
 }
 
@@ -252,11 +263,15 @@ func issueServer(caDir, out string, dns []string, ips []net.IP, now time.Time) (
 	if err := os.MkdirAll(out, 0o700); err != nil {
 		return "", "", err
 	}
+	// Each file is written in full under a temporary name and renamed over
+	// the old one, so a broker reload (SIGHUP) never reads a truncated file.
+	// Between the two renames the key and the certificate do not match; a
+	// reload then fails (reload_failed) and keeps the running pair.
 	crtPath, keyPath := filepath.Join(out, "server.crt"), filepath.Join(out, "server.key")
 	if err := writeKey(keyPath, key); err != nil {
 		return "", "", err
 	}
-	return crtPath, keyPath, writePEMFile(crtPath, "CERTIFICATE", der, 0o644)
+	return crtPath, keyPath, replacePEMFile(crtPath, "CERTIFICATE", der, 0o644)
 }
 
 // issueSandbox signs the sandbox public key (from a PEM public key or a CSR,
@@ -354,13 +369,47 @@ func writeKey(path string, key *ecdsa.PrivateKey) error {
 	if err != nil {
 		return err
 	}
-	return writePEMFile(path, "PRIVATE KEY", der, 0o600)
+	return replacePEMFile(path, "PRIVATE KEY", der, 0o600)
+}
+
+// replacePEMFile writes one PEM block with mode into a temporary file next
+// to path, syncs it and renames it over path: a reader sees the old file or
+// the new one, never a partial one. A failure removes the temporary file.
+func replacePEMFile(path, blockType string, der []byte, mode os.FileMode) error {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	err = f.Chmod(mode)
+	if err == nil {
+		err = pem.Encode(f, &pem.Block{Type: blockType, Bytes: der})
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
 }
 
 // writePEMFile writes one PEM block, creating the file with mode or replacing
 // an existing file's content (its mode is then set to mode too).
 func writePEMFile(path, blockType string, der []byte, mode os.FileMode) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	return writePEMFileFlags(path, blockType, der, mode, os.O_TRUNC)
+}
+
+// writePEMFileFlags is writePEMFile with extra open flags (os.O_TRUNC to
+// replace, os.O_EXCL to refuse an existing file).
+func writePEMFileFlags(path, blockType string, der []byte, mode os.FileMode, flags int) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|flags, mode)
 	if err != nil {
 		return err
 	}

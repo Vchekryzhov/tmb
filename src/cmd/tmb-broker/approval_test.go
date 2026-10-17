@@ -73,7 +73,8 @@ func TestMockApprovalModes(t *testing.T) {
 	for mode, reason := range cases {
 		t.Run(mode, func(t *testing.T) {
 			b := newTestBroker(t)
-			b.mode, b.ttl = mode, 10*time.Millisecond
+			b.mode = mode
+			setTokenTTL(b, 10*time.Millisecond)
 			req := testReq(t, "mode-"+mode)
 			if f := approveDo(t, b, req, UIDRequester(4242, 1)); f.Type != "denied" || f.Reason != reason {
 				t.Fatalf("frame = %+v, want denied %s", f, reason)
@@ -89,7 +90,7 @@ func TestMockApprovalModes(t *testing.T) {
 // An approval expires after its TTL: a later claim runs nothing.
 func TestClaimAfterTTLIsDenied(t *testing.T) {
 	b := newTestBroker(t)
-	b.ttl = 20 * time.Millisecond
+	setTokenTTL(b, 20*time.Millisecond)
 	id := UIDRequester(4242, 1)
 	req := approved(t, b, testReq(t, "ttl"), id)
 	time.Sleep(60 * time.Millisecond)
@@ -176,7 +177,7 @@ func pendingCount(b *Broker) int {
 func TestUnclaimedApprovalDroppedAtExpiry(t *testing.T) {
 	b := newTestBroker(t)
 	b.mode = ModeMockApprove
-	b.ttl = 50 * time.Millisecond
+	b.setTokenTTL(50 * time.Millisecond)
 	req := testReq(t, "pending-expiry")
 	id := UIDRequester(4242, 1)
 	approveDo(t, b, req, id)
@@ -191,7 +192,7 @@ func TestUnclaimedApprovalDroppedAtExpiry(t *testing.T) {
 		t.Fatalf("after expiry: pending = %d, want 0", got)
 	}
 
-	b.ttl = time.Minute
+	b.setTokenTTL(time.Minute)
 	approveDo(t, b, req, id)
 	old := b.pending[req.Hash()]
 	approveDo(t, b, req, id)
@@ -219,4 +220,9 @@ func TestExpiredPendingDroppedOnLookup(t *testing.T) {
 			}
 		})
 	}
+}
+
+// setTokenTTL swaps in a policy with the given token TTL, as a reload would.
+func setTokenTTL(b *Broker, ttl time.Duration) {
+	b.pol.Store(&policy{cfg: b.conf(), ttl: ttl, wait: b.approvalWait()})
 }

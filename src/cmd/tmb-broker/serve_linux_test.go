@@ -23,7 +23,7 @@ func unixBroker(t *testing.T, allowSelf bool) (*Broker, string) {
 		if uid < 0 || uid > math.MaxUint32 {
 			panic("uid does not fit a uint32")
 		}
-		b.cfg.AllowedRequesterUIDs = []uint32{uint32(uid)}
+		b.conf().AllowedRequesterUIDs = []uint32{uint32(uid)}
 	}
 	dir, err := os.MkdirTemp("", "tmbsock")
 	if err != nil {

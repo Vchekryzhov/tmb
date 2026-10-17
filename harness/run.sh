@@ -755,6 +755,64 @@ assert_err_has "N24: -tls-ca is an unknown flag" "flag provided but not defined:
 state_dump
 
 # -----------------------------------------------------------------------------
+log "SCENARIO N28: a queued request and a pending approval survive SIGHUP"
+# SIGHUP re-reads the config (here the same file). The waiting request keeps
+# its place and is approved after the reload; an approval granted before
+# the reload is redeemed after it. The process is the same throughout.
+reload_count() { docker exec "$HOST" grep -c '"event":"reload"' /var/log/tmb/broker.log 2>/dev/null | tr -d '[:space:]'; }
+hup_and_wait_reload() { # hup_and_wait_reload -> 0 once one more reload event is logged
+  local _ before
+  before=$(reload_count); before=${before:-0}
+  echo "-- SIGHUP to tmb-broker"
+  docker exec "$HOST" pkill -HUP -x tmb-broker
+  for _ in $(seq 1 150); do
+    [ "$(reload_count)" -gt "$before" ] 2>/dev/null && return 0
+    sleep 0.1
+  done
+  return 1
+}
+stop_broker
+start_broker queue 30
+PID28=$(docker exec "$HOST" pgrep -x tmb-broker | tr -d '[:space:]')
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/n28a.out" 2>"$TD/n28a.err" &
+CLI28=$!
+if wait_queue 1; then ok "N28: request waits in the queue"; else bad "N28: request never reached the queue"; fi
+ID28=$(queue_id)
+if hup_and_wait_reload; then ok "N28: SIGHUP -> reload event"; else bad "N28: no reload event after SIGHUP"; fi
+docker exec "$HOST" grep '"event":"reload"' /var/log/tmb/broker.log | tail -1 | sed 's/^/  | /'
+if wait_queue 1 && [ "$(queue_id)" = "$ID28" ]; then ok "N28: the same item $ID28 still waits after the reload"; else bad "N28: queue lost item $ID28 on reload"; fi
+OUT_FILE=$TD/n28y.out; ERR_FILE=$TD/n28y.err
+approve_as human --yes "$ID28" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc "N28: tmb approve --yes after the reload -> exit 0" 0
+wait $CLI28; RUNC=$?
+OUT_FILE=$TD/n28a.out; ERR_FILE=$TD/n28a.err; show_io
+assert_rc     "N28: the queued request ran -> exit 0" 0
+assert_out_eq "N28: stdout '0'" "0"
+
+echo "-- pending approval: approve before SIGHUP, claim after"
+cat >"$TD/n28.json" <<'EOF'
+{"type":"approve","executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"nonce":"n28-nonce-fixed-000028"}
+EOF
+OUT_FILE=$TD/n28p.out; ERR_FILE=$TD/n28p.err
+docker exec -i "$SBX" tmb debug approve --json - <"$TD/n28.json" >"$OUT_FILE" 2>"$ERR_FILE" &
+CLI28P=$!
+wait_queue 1 || bad "N28: approve request never reached the queue"
+approve_as human --yes "$(queue_id)" >/dev/null 2>&1
+wait $CLI28P; RUNC=$?; show_io
+assert_rc "N28: approve phase ok before the reload" 0
+T28=$(token_of)
+if [ -n "$T28" ]; then ok "N28: got one-shot token $T28"; else bad "N28: no token parsed"; fi
+if hup_and_wait_reload; then ok "N28: second SIGHUP -> reload event"; else bad "N28: no reload event after the second SIGHUP"; fi
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err
+docker exec -i "$SBX" tmb debug claim --token "$T28" --json - <"$TD/n28.json" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc     "N28: claim after the reload redeems the pending approval -> exit 0" 0
+assert_out_eq "N28: stdout '0'" "0"
+if [ "$(docker exec "$HOST" pgrep -x tmb-broker | tr -d '[:space:]')" = "$PID28" ]; then ok "N28: broker pid unchanged ($PID28)"; else bad "N28: broker pid changed"; fi
+stop_broker
+start_broker mock-approve 10
+state_dump
+
+# -----------------------------------------------------------------------------
 log "SCENARIO N3a: mock-deny -> deny, nothing runs"
 stop_broker
 start_broker mock-deny "$TTL"

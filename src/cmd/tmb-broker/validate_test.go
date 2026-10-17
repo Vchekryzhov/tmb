@@ -54,9 +54,9 @@ func TestApproveDeniesInvalidRequests(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			b := newTestBroker(t)
-			b.cfg.ShellDenyList = []string{sh}
+			b.conf().ShellDenyList = []string{sh}
 			for k := range manyEnv {
-				b.cfg.AllowedEnvKeys = append(b.cfg.AllowedEnvKeys, k)
+				b.conf().AllowedEnvKeys = append(b.conf().AllowedEnvKeys, k)
 			}
 			req := testReq(t, "validate")
 			c.edit(req)

@@ -18,9 +18,11 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "ca" {
 		os.Exit(runCA(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, stop))
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, stop, hup))
 }
 
 // chown is os.Chown; unprivileged tests replace it, since only root may
@@ -28,9 +30,9 @@ func main() {
 var chown = os.Chown
 
 // run starts the broker and serves until stop fires (exit 0, socket and
-// pidfile removed) or a listener fails (exit 1). Setup errors exit 1, flag
-// errors 2.
-func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
+// pidfile removed) or a listener fails (exit 1). Each value on hup reloads
+// the config. Setup errors exit 1, flag errors 2.
+func run(args []string, stdout, stderr io.Writer, stop, hup <-chan os.Signal) int {
 	fs := flag.NewFlagSet("tmb-broker", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfgPath := fs.String("config", "/etc/tmb/config.json", "config file path")
@@ -130,6 +132,12 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 	}
 
 	b := NewBroker(cfg, log, claims, mode, ttl)
+	if *ttlSec > 0 {
+		b.ttlFlag = ttl
+	}
+	if tlsCfg != nil {
+		b.tlsCfg.Store(tlsCfg)
+	}
 	startEv := map[string]any{
 		"pid": os.Getpid(), "socket": cfg.SocketPath, "mode": mode,
 		"ttl_seconds": int(ttl.Seconds()), "allowed_requester_uids": cfg.AllowedRequesterUIDs,
@@ -148,12 +156,30 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 	if tlsLn != nil {
 		log.Event("tls_listen", map[string]any{"addr": tlsAddr})
 		fmt.Fprintf(stdout, "tmb-broker: tls listening on %s (client certificates required, no plaintext)\n", tlsAddr)
-		go func() { served <- fmt.Errorf("tls serve: %w", b.ServeTLS(tls.NewListener(tlsLn, tlsCfg))) }()
+		go func() {
+			served <- fmt.Errorf("tls serve: %w", b.ServeTLS(tls.NewListener(tlsLn, b.listenerTLSConfig())))
+		}()
 	}
 
 	if err := b.startApprover(cfg.ApproverSocketPath); err != nil {
 		return fail("approver socket: %v", err)
 	}
+
+	// SIGHUP (systemctl reload): re-read the config; the sockets, the queue
+	// and pending approvals stay. main subscribes before run starts, so an
+	// early SIGHUP waits in hup instead of killing the process.
+	reloadDone := make(chan struct{})
+	defer close(reloadDone)
+	go func() {
+		for {
+			select {
+			case <-hup:
+				b.Reload(*cfgPath)
+			case <-reloadDone:
+				return
+			}
+		}
+	}()
 
 	select {
 	case <-stop:

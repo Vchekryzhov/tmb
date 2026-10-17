@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -24,7 +25,7 @@ import (
 // no_pending_approval instead of token_consumed_replay.
 type ClaimStore struct {
 	dir       string
-	retention time.Duration
+	retention atomic.Int64 // time.Duration; only grows (ExtendRetention)
 	now       func() time.Time
 	open      func(path string) (claimFile, error) // openClaimFile; replaced by fault-injection tests
 }
@@ -50,7 +51,22 @@ func NewClaimStore(stateDir string, ttl time.Duration) (*ClaimStore, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	return &ClaimStore{dir: dir, retention: ttl + ClaimGrace, now: time.Now, open: openClaimFile}, nil
+	s := &ClaimStore{dir: dir, now: time.Now, open: openClaimFile}
+	s.retention.Store(int64(ttl + ClaimGrace))
+	return s, nil
+}
+
+// ExtendRetention raises the retention to ttl + ClaimGrace when a reload
+// grows the token TTL. It never shrinks it: a file written under a longer
+// TTL keeps protecting a token whose approval may still be live.
+func (s *ClaimStore) ExtendRetention(ttl time.Duration) {
+	want := int64(ttl + ClaimGrace)
+	for {
+		cur := s.retention.Load()
+		if want <= cur || s.retention.CompareAndSwap(cur, want) {
+			return
+		}
+	}
 }
 
 func (s *ClaimStore) tokenPath(fullHash string) string {
@@ -67,7 +83,7 @@ func (s *ClaimStore) noncePath(nonce string) string {
 // and an error on real I/O trouble. Both file and parent dir are fsynced
 // before returning success.
 func (s *ClaimStore) Claim(path string, meta map[string]any) (bool, error) {
-	meta["expires_at"] = s.now().Add(s.retention).Unix()
+	meta["expires_at"] = s.now().Add(time.Duration(s.retention.Load())).Unix()
 	f, err := s.open(path)
 	if err != nil {
 		if os.IsExist(err) {
@@ -177,5 +193,5 @@ func (s *ClaimStore) expiry(path string, mtime time.Time) (time.Time, error) {
 	if meta.ExpiresAt != nil {
 		return time.Unix(*meta.ExpiresAt, 0), nil
 	}
-	return mtime.Add(s.retention), nil
+	return mtime.Add(time.Duration(s.retention.Load())), nil
 }

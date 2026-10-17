@@ -166,7 +166,7 @@ func (b *Broker) buildEnv(req *proto.Request) []string {
 			vals[k] = v
 		}
 	}
-	for k, v := range b.cfg.FixedEnv {
+	for k, v := range b.conf().FixedEnv {
 		vals[k] = v
 	}
 	keys := make([]string, 0, len(vals))

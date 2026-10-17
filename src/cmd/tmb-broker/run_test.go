@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -55,7 +56,7 @@ func runBroker(t *testing.T, args ...string) (int, string) {
 	t.Helper()
 	var out, errb bytes.Buffer
 	stop := make(chan os.Signal)
-	code := run(args, &out, &errb, stop)
+	code := run(args, &out, &errb, stop, nil)
 	return code, out.String() + errb.String()
 }
 
@@ -139,10 +140,10 @@ func TestBrokerRunServesUntilStopped(t *testing.T) {
 	}
 
 	var out, errb bytes.Buffer
-	stop := make(chan os.Signal, 1)
+	stop, hup := make(chan os.Signal, 1), make(chan os.Signal, 1)
 	done := make(chan int)
 	go func() {
-		done <- run([]string{"-config", cfgPath, "-approval", ModeMockApprove, "-ttl", "7"}, &out, &errb, stop)
+		done <- run([]string{"-config", cfgPath, "-approval", ModeMockApprove, "-ttl", "7"}, &out, &errb, stop, hup)
 	}()
 
 	deadline := time.Now().Add(5 * time.Second)
@@ -159,6 +160,17 @@ func TestBrokerRunServesUntilStopped(t *testing.T) {
 	}
 	if st, _ := os.Stat(cfg.SocketPath); st.Mode().Perm() != 0o660 {
 		t.Errorf("socket mode %v, want 0660", st.Mode().Perm())
+	}
+	hup <- syscall.SIGHUP // reload while serving
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		if log, _ := os.ReadFile(cfg.LogPath); strings.Contains(string(log), `"event":"reload"`) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("SIGHUP did not reload the config")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	stop <- os.Interrupt
 	select {
