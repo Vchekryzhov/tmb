@@ -41,6 +41,7 @@ for a in amd64 arm64; do
       files=$(dpkg-deb -c "$f" | awk '{print $6}' | sed 's|^\./|/|')
     else
       eq "$p/$a name arch version" "$(rpm -qp --qf '%{NAME} %{ARCH} %{VERSION}-%{RELEASE}' "$f")" "$p $(darch "$a") $pkgver-1"
+      eq "$p/$a build host" "$(rpm -qp --qf '%{BUILDHOST}' "$f")" "reproducible"
       files=$(rpm -qlp "$f")
     fi
     if [ "$p" = tmb-broker ]; then

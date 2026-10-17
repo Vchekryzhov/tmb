@@ -12,6 +12,10 @@ section: admin
 priority: optional
 maintainer: Viktor Chekryzhov <Vchekryzhov@users.noreply.github.com>
 homepage: https://github.com/Vchekryzhov/tmb
+# nfpm writes os.Hostname() into the rpm header by default: a fixed build
+# host keeps the rpm byte-identical across builders (Fedora uses the same name)
+rpm:
+  buildhost: reproducible
 description: |-
   TMB privileged execution broker.
   Runs commands that a human approved for a sandboxed agent, as root,

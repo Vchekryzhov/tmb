@@ -441,7 +441,11 @@ cmd_package() {
   }
   ver=$(cat "$REPORTS/dist/version.txt")
   log "second clean dist build (fresh GOCACHE) for byte comparison"
-  if GOCACHE=$(mktemp -d) dist_build "$P/second" "$ver" "$P/second.log"; then
+  local gocache rc2=0
+  gocache=$(mktemp -d)
+  GOCACHE=$gocache dist_build "$P/second" "$ver" "$P/second.log" || rc2=$?
+  rm -rf "$gocache"
+  if [ $rc2 -eq 0 ]; then
     if diff -u "$DIST/SHA256SUMS" "$P/second/SHA256SUMS" >"$P/repro.diff"; then
       result package/reproducible PASS "two clean builds give byte-identical binaries, packages and archives" "$DIST/SHA256SUMS"
     else

@@ -40,12 +40,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           # plain vMAJOR.MINOR.PATCH only: a pre-release puts ~ and + into
           # package file names, and GitHub renames such assets, so they
           # would no longer match SHA256SUMS
           [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "tag $TAG is not vMAJOR.MINOR.PATCH; nothing published" >&2; exit 1; }
+          # only a commit on main is released (docs/ci.md "Пакеты и релиз"):
+          # a tag on an unmerged branch commit stops here
+          status=$(gh api "repos/$GH_REPO/compare/main...$SHA" --jq .status)
+          case "$status" in identical|behind) ;; *) echo "tag $TAG points at $SHA, which is not on main ($status); nothing published" >&2; exit 1 ;; esac
           cd dist
           sha256sum -c SHA256SUMS
           # SHA256SUMS lists exactly the files that are published
