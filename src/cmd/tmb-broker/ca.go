@@ -26,6 +26,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"math/big"
 	"net"
 	"os"
@@ -161,15 +162,13 @@ func caCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, now tim
 }
 
 // caInit creates the CA key and self-signed certificate in dir. An existing
-// key is never overwritten.
-func caInit(dir string, now time.Time) error {
+// key is never overwritten (the key file is created exclusively), and a
+// failed certificate write removes the new key, so a later init can retry.
+func caInit(dir string, now time.Time) (err error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	keyPath := filepath.Join(dir, "ca.key")
-	if _, err := os.Stat(keyPath); err == nil {
-		return fmt.Errorf("%s already exists; refusing to replace the CA key", keyPath)
-	}
 	key := newP256Key()
 	serial := randomSerial()
 	tmpl := &x509.Certificate{
@@ -187,9 +186,21 @@ func caInit(dir string, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	if err := writeKey(keyPath, key); err != nil {
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
 		return err
 	}
+	if err := writePEMFileFlags(keyPath, "PRIVATE KEY", keyDER, 0o600, os.O_EXCL); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return fmt.Errorf("%s already exists; refusing to replace the CA key", keyPath)
+		}
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = os.Remove(keyPath)
+		}
+	}()
 	return writePEMFile(filepath.Join(dir, "ca.crt"), "CERTIFICATE", der, 0o644)
 }
 
@@ -360,7 +371,13 @@ func writeKey(path string, key *ecdsa.PrivateKey) error {
 // writePEMFile writes one PEM block, creating the file with mode or replacing
 // an existing file's content (its mode is then set to mode too).
 func writePEMFile(path, blockType string, der []byte, mode os.FileMode) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	return writePEMFileFlags(path, blockType, der, mode, os.O_TRUNC)
+}
+
+// writePEMFileFlags is writePEMFile with extra open flags (os.O_TRUNC to
+// replace, os.O_EXCL to refuse an existing file).
+func writePEMFileFlags(path, blockType string, der []byte, mode os.FileMode, flags int) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|flags, mode)
 	if err != nil {
 		return err
 	}
