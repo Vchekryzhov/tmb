@@ -272,15 +272,6 @@ func TestApproveListEscapesControlSequences(t *testing.T) {
 	}
 }
 
-func TestSafeTextQuotesInvalidUTF8(t *testing.T) {
-	if got := safeText("/tmp/\xffexe"); got != `"/tmp/\xffexe"` {
-		t.Errorf("safeText = %s", got)
-	}
-	if got := safeText("/usr/bin/id"); got != "/usr/bin/id" {
-		t.Errorf("safeText changed a plain path: %s", got)
-	}
-}
-
 // End of input is no answer: the item it stops at stays queued for another
 // approver instead of being denied.
 func TestApproveInteractiveEndOfInputLeavesItemsQueued(t *testing.T) {

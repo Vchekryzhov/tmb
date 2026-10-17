@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"tmb-poc/internal/proto"
+	"tmb-poc/internal/termsafe"
 )
 
 // Approval modes.
@@ -473,18 +474,8 @@ func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal strin
 	case ModeManual:
 		b.mu.Lock() // serialize prompts so they never interleave
 		defer b.mu.Unlock()
-		fmt.Fprintf(b.console, "=== TMB APPROVAL REQUIRED ===\n")
-		fmt.Fprintf(b.console, "  requester : %s\n", id.ConsoleLine())
-		fmt.Fprintf(b.console, "  executable: %s (realpath %s, dev=%d ino=%d)\n", req.Executable, exeReal, dev, ino)
-		argvJ, _ := json.Marshal(req.Argv)
-		fmt.Fprintf(b.console, "  argv      : %s\n", argvJ)
-		fmt.Fprintf(b.console, "  cwd       : %s\n", req.Cwd)
-		fmt.Fprintf(b.console, "  run as uid: %d\n", req.UID)
 		// the environment the process will actually get, not the request's
-		envJ, _ := json.Marshal(b.buildEnv(req))
-		fmt.Fprintf(b.console, "  env       : %s\n", envJ)
-		fmt.Fprintf(b.console, "  nonce     : %s\n", req.Nonce)
-		fmt.Fprintf(b.console, "Approve exactly this command? [y/N]: ")
+		printManualPrompt(b.console, req, id, exeReal, dev, ino, b.buildEnv(req))
 		line, err := b.stdin.ReadString('\n')
 		if err != nil && line == "" {
 			// stdin closed (detached broker) -> fail closed
@@ -500,6 +491,24 @@ func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal strin
 	default:
 		return false, "approval_mode_unknown"
 	}
+}
+
+// printManualPrompt renders the manual console prompt. Every requester-chosen
+// field passes through termsafe, as in tmb approve: a control sequence in the
+// nonce, argv, env or a path must not redraw the lines the operator reads
+// before answering y/N.
+func printManualPrompt(w io.Writer, req *proto.Request, id RequesterID, exeReal string, dev, ino uint64, env []string) {
+	argvJ, _ := json.Marshal(req.Argv)
+	envJ, _ := json.Marshal(env)
+	fmt.Fprintf(w, "=== TMB APPROVAL REQUIRED ===\n")
+	fmt.Fprintf(w, "  requester : %s\n", termsafe.Text(id.ConsoleLine()))
+	fmt.Fprintf(w, "  executable: %s (realpath %s, dev=%d ino=%d)\n", termsafe.Text(req.Executable), termsafe.Text(exeReal), dev, ino)
+	fmt.Fprintf(w, "  argv      : %s\n", termsafe.JSON(argvJ))
+	fmt.Fprintf(w, "  cwd       : %s\n", termsafe.Text(req.Cwd))
+	fmt.Fprintf(w, "  run as uid: %d\n", req.UID)
+	fmt.Fprintf(w, "  env       : %s\n", termsafe.JSON(envJ))
+	fmt.Fprintf(w, "  nonce     : %s\n", termsafe.Text(req.Nonce))
+	fmt.Fprintf(w, "Approve exactly this command? [y/N]: ")
 }
 
 // --- claim / execution ----------------------------------------------------

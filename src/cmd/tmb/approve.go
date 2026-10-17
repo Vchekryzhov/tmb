@@ -17,13 +17,11 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strconv"
 	"strings"
 	"time"
-	"unicode/utf16"
-	"unicode/utf8"
 
 	"tmb-poc/internal/proto"
+	"tmb-poc/internal/termsafe"
 )
 
 const defaultApproveSocket = "/run/tmb/approve.sock"
@@ -204,54 +202,20 @@ func (c approverClient) interactive(stdin io.Reader, stdout io.Writer) error {
 }
 
 // printItem renders one queue item: what will run, as the broker resolved it.
-// Every field passes through safeText or safeJSON: the requester chooses the
-// nonce, argv, env and the paths, and a control sequence in any of them must
-// not redraw the lines the approver reads.
+// Every field passes through termsafe.Text or termsafe.JSON: the requester
+// chooses the nonce, argv, env and the paths, and a control sequence in any of
+// them must not redraw the lines the approver reads.
 func printItem(w io.Writer, it proto.QueueItem) {
 	argv, _ := json.Marshal(it.Argv)
 	env, _ := json.Marshal(it.Env)
-	fmt.Fprintf(w, "=== %s ===\n", safeText(it.ID))
-	fmt.Fprintf(w, "  requester : %s\n", safeText(it.Requester))
-	fmt.Fprintf(w, "  executable: %s\n", safeText(it.Executable))
-	fmt.Fprintf(w, "  argv      : %s\n", safeJSON(argv))
-	fmt.Fprintf(w, "  cwd       : %s\n", safeText(it.Cwd))
+	fmt.Fprintf(w, "=== %s ===\n", termsafe.Text(it.ID))
+	fmt.Fprintf(w, "  requester : %s\n", termsafe.Text(it.Requester))
+	fmt.Fprintf(w, "  executable: %s\n", termsafe.Text(it.Executable))
+	fmt.Fprintf(w, "  argv      : %s\n", termsafe.JSON(argv))
+	fmt.Fprintf(w, "  cwd       : %s\n", termsafe.Text(it.Cwd))
 	fmt.Fprintf(w, "  run as uid: %d\n", it.UID)
-	fmt.Fprintf(w, "  env       : %s\n", safeJSON(env))
-	fmt.Fprintf(w, "  nonce     : %s\n", safeText(it.Nonce))
-	fmt.Fprintf(w, "  queued at : %s\n", safeText(it.QueuedAt))
-	fmt.Fprintf(w, "  hash      : %s\n", safeText(it.Hash))
-}
-
-// safeText returns s as is when it is valid UTF-8 made only of printable
-// characters, and Go-quoted otherwise, so control, format (bidi) and invalid
-// bytes show as escapes instead of reaching the terminal.
-func safeText(s string) string {
-	if !utf8.ValidString(s) {
-		return strconv.Quote(s)
-	}
-	for _, r := range s {
-		if !strconv.IsPrint(r) {
-			return strconv.Quote(s)
-		}
-	}
-	return s
-}
-
-// safeJSON escapes, as JSON \u sequences, the non-printable characters that
-// json.Marshal leaves raw (DEL, C1 controls, bidi and other format runes).
-func safeJSON(b []byte) string {
-	var sb strings.Builder
-	for _, r := range string(b) {
-		if strconv.IsPrint(r) {
-			sb.WriteRune(r)
-			continue
-		}
-		if r > 0xffff {
-			r1, r2 := utf16.EncodeRune(r)
-			fmt.Fprintf(&sb, "\\u%04x\\u%04x", r1, r2)
-			continue
-		}
-		fmt.Fprintf(&sb, "\\u%04x", r)
-	}
-	return sb.String()
+	fmt.Fprintf(w, "  env       : %s\n", termsafe.JSON(env))
+	fmt.Fprintf(w, "  nonce     : %s\n", termsafe.Text(it.Nonce))
+	fmt.Fprintf(w, "  queued at : %s\n", termsafe.Text(it.QueuedAt))
+	fmt.Fprintf(w, "  hash      : %s\n", termsafe.Text(it.Hash))
 }
