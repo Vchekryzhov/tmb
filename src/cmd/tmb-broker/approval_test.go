@@ -139,3 +139,23 @@ func TestUnclaimedApprovalDroppedAtExpiry(t *testing.T) {
 		t.Errorf("stale timer evicted the re-approved pending: pending = %d, want 1", got)
 	}
 }
+
+// TestExpiredPendingDroppedOnLookup: a lookup that beats the expiry timer
+// still treats an expired entry as gone and drops it.
+func TestExpiredPendingDroppedOnLookup(t *testing.T) {
+	for name, lookup := range map[string]func(*Broker, string) (*pendingApproval, bool){
+		"peek": (*Broker).peekPending,
+		"take": (*Broker).takePending,
+	} {
+		t.Run(name, func(t *testing.T) {
+			b := newTestBroker(t)
+			b.pending["h"] = &pendingApproval{Hash: "h", Expiry: time.Now().Add(-time.Second)}
+			if _, has := lookup(b, "h"); has {
+				t.Errorf("%s returned an expired pending", name)
+			}
+			if got := pendingCount(b); got != 0 {
+				t.Errorf("%s left the expired pending: pending = %d, want 0", name, got)
+			}
+		})
+	}
+}
