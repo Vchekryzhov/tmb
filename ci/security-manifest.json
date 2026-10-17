@@ -16,8 +16,8 @@
      "scenarios": ["N2", "N8"]},
     {"id": "SEC-06", "title": "missing client cert, foreign CA/fingerprint, wrong SAN, expired cert, bad TLS version: denied before execution",
      "tests": ["tmb-poc/cmd/tmb-broker.TestTLSListenerCertIdentity", "tmb-poc/cmd/tmb-broker.TestDenyRequesterNotAllowed", "tmb-poc/cmd/tmb.TestDialEndpointRequiresCertMaterial", "tmb-poc/cmd/tmb.TestDialTLSWrongCAIsTransportErrWithX509Reason"],
-     "scenarios": ["O7-A", "O7-B", "O7-C", "O8", "PAIR-NOKEY", "PAIR-PLAINTEXT"],
-     "gap": {"what": "wrong SAN, expired certificate and disallowed TLS version", "owner": "Vchekryzhov", "issue": "https://github.com/Vchekryzhov/tmb/issues/15", "due": "2026-11-16"}},
+     "scenarios": ["O7-A", "O7-B", "O7-C", "O8", "PAIR-NOKEY", "PAIR-PLAINTEXT", "N30"],
+     "gap": {"what": "wrong SAN and disallowed TLS version", "owner": "Vchekryzhov", "issue": "https://github.com/Vchekryzhov/tmb/issues/15", "due": "2026-11-16"}},
     {"id": "SEC-07", "title": "malformed, wrong-type, empty, truncated or oversized frames: controlled denial, no panic or hang",
      "gap": {"what": "frame and JSON fuzzing with a deterministic corpus", "owner": "Vchekryzhov", "issue": "https://github.com/Vchekryzhov/tmb/issues/15", "due": "2026-11-16"}},
     {"id": "SEC-08", "title": "read/write errors and short header/body writes are not reported as a delivered frame",
@@ -59,6 +59,9 @@
      "scenarios": ["N13", "N14", "N16", "PAIR-APPROVE"]},
     {"id": "SEC-22", "title": "a queued request is denied approval_timeout after approval_wait_seconds and nothing runs; a requester that hangs up leaves the queue; waiting does not block other requests",
      "tests": ["tmb-poc/cmd/tmb-broker.TestQueueWaitTimesOut", "tmb-poc/cmd/tmb-broker.TestQueueRequesterHangupWithdraws", "tmb-poc/cmd/tmb-broker.TestQueueIsNotAMutex", "tmb-poc/cmd/tmb-broker.TestQueueWithdrawLosesToDecision"],
-     "scenarios": ["N15", "N17"]}
+     "scenarios": ["N15", "N17"]},
+    {"id": "SEC-23", "title": "the sandbox identity is its public key: a reissued certificate keeps it, another key with the same Subject is not allowed, the private key never leaves the sandbox",
+     "tests": ["tmb-poc/cmd/tmb-broker.TestKeyFingerprintSurvivesReissue", "tmb-poc/cmd/tmb-broker.TestLoadConfigRejectsAllowedRequesterFPs", "tmb-poc/cmd/tmb.TestKeygenAndFingerprintAgree"],
+     "scenarios": ["N23", "N24", "PAIR-KEY"]}
   ]
 }

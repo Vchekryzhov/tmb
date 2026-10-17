@@ -291,15 +291,12 @@ CA_BIN=$TD/tmb-broker-ca
 if ! { openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$TD/client1.key" 2>/dev/null \
     && openssl pkey -in "$TD/client1.key" -pubout -out "$TD/client1.pub" 2>/dev/null \
     && "$CA_BIN" ca issue-sandbox --dir "$TD" --in "$TD/client1.pub" --name tmb-osh-client1 \
-      --out "$TD/client1.crt" >/dev/null; }; then
+      --out "$TD/client1.crt" >"$TD/client1.fp.out"; }; then
   fatal "client1 certificate failed"
 fi
 
-fp_of() {
-  openssl x509 -in "$1" -noout -fingerprint -sha256 \
-    | sed -n 's/^.*Fingerprint=//p' | tr -d ':' | tr 'A-F' 'a-f'
-}
-FP1=$(fp_of "$TD/client1.crt")
+# the key fingerprint (SHA-256 of the public key) as the CA printed it
+FP1=$(sed -n 's/^fingerprint: //p' "$TD/client1.fp.out")
 echo "-- fp1=$FP1 (the ONLY allowlisted requester identity)"
 [ "${#FP1}" = 64 ] || fatal "fingerprint must be 64 hex chars"
 
@@ -313,7 +310,7 @@ cat > "$TD/config-osh.json" <<EOF
   "allowed_requester_uids": [4242],
   "approver_uids": [1500],
   "approver_socket_path": "/run/tmb-approver/approve.sock",
-  "allowed_requester_fps": ["$FP1"],
+  "allowed_requester_keys": ["$FP1"],
   "socket_gid": 4242,
   "allowed_cwd_roots": ["/tmp"],
   "allowed_env_keys": ["LANG"],
@@ -942,7 +939,7 @@ OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err   # restore plumbing for any later 
 # console-side: the human saw the EXACT request and WHO asks
 O6C=$(tr -d '\r' < "$O6_CONSOLE")
 console_has() { if printf '%s' "$O6C" | grep -qF -- "$2"; then ok "$1"; else bad "$1 (console lacks '$2')"; fi; }
-console_has "O6: console shows the requester identity line cert fp=$FP16" "requester : cert fp=$FP16"
+console_has "O6: console shows the requester identity line key fp=$FP16" "requester : key fp=$FP16"
 console_has "O6: console shows EXACT argv of the y-request" '"/usr/bin/id","-u"'
 console_has "O6: console shows EXACT argv of the n-request" '"/usr/bin/id","-G"'
 console_has "O6: console shows the approval prompt" "Approve exactly this command? [y/N]:"

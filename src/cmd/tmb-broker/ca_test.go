@@ -338,3 +338,24 @@ func TestCAWriteFailures(t *testing.T) {
 		t.Errorf("issue-server into a read-only directory succeeded")
 	}
 }
+
+// --not-before backdates a sandbox certificate: one issued 30 days ago has
+// already expired, as harness N30 needs.
+func TestCAIssueSandboxNotBefore(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ca")
+	if code, _, errs := runCACmd(t, "", "init", "--dir", dir); code != 0 {
+		t.Fatalf("init: %d %s", code, errs)
+	}
+	_, pubPEM := newSandboxKey(t)
+	from := time.Now().Add(-30 * 24 * time.Hour).UTC().Format(time.RFC3339)
+	out := filepath.Join(dir, "old.crt")
+	if code, _, errs := runCACmd(t, string(pubPEM), "issue-sandbox", "--dir", dir, "--in", "-", "--name", "old", "--out", out, "--not-before", from); code != 0 {
+		t.Fatalf("issue: %d %s", code, errs)
+	}
+	if c := readCert(t, out); !c.NotAfter.Before(time.Now()) {
+		t.Errorf("backdated certificate valid until %v, want expired", c.NotAfter)
+	}
+	if code, _, _ := runCACmd(t, string(pubPEM), "issue-sandbox", "--dir", dir, "--in", "-", "--name", "x", "--not-before", "yesterday"); code != 2 {
+		t.Errorf("bad --not-before: exit %d, want 2", code)
+	}
+}

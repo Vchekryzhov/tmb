@@ -529,6 +529,36 @@
       "owner": "Vchekryzhov",
       "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
       "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb/keys.go",
+      "match": "f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)",
+      "reason": "tmb keygen creates the key file named by the client's own user on its command line; O_EXCL never overwrites, and the client runs unprivileged",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb/keys.go",
+      "match": "b, err := os.ReadFile(args[0])",
+      "reason": "tmb fingerprint reads a file named by the client's own user on its command line; the client runs unprivileged and only prints a hash",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb/keys_test.go",
+      "match": "keyPEM, _ := os.ReadFile(keyPath)",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     }
   ]
 }

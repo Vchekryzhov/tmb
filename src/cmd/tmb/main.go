@@ -43,6 +43,10 @@ func main() {
 		err = cmdDebug(os.Args[2:])
 	case "approve":
 		os.Exit(cmdApprover(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	case "keygen":
+		os.Exit(cmdKeygen(os.Args[2:], os.Stdout, os.Stderr))
+	case "fingerprint":
+		os.Exit(cmdFingerprint(os.Args[2:], os.Stdout, os.Stderr))
 	default:
 		usage()
 		os.Exit(2)
@@ -59,6 +63,8 @@ usage:
   tmb exec [--root] [--cwd DIR] [--env K=V]... -- /abs/executable [args...]   full flow
   tmb approve [--list | --yes ID | --no ID] [--socket PATH]                   approver: decide queued requests
                         (socket env TMB_APPROVE_SOCK, default %[2]s)
+  tmb keygen --out FILE                                                      sandbox key (P-256, 0600); prints public key + fingerprint
+  tmb fingerprint FILE                                                       key fingerprint of a PEM key, certificate or CSR
   tmb debug approve --json FILE|-                                            debug: approval phase only
   tmb debug claim --token TOKEN --json FILE|-                                debug: claim phase only
   tmb debug raw --json FILE|-                                                debug: raw request verbatim
