@@ -283,3 +283,24 @@ func TestExecRejectsMalformedEnvFlag(t *testing.T) {
 		t.Fatalf("cmdExec = %v, want the --env K=V error", err)
 	}
 }
+
+func TestResolveExecutable(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "tool")
+	if err := os.Symlink("/bin/sh", exe); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", "relative:"+dir)
+	if got, err := resolveExecutable("tool"); err != nil || got != exe {
+		t.Errorf("resolveExecutable(tool) = %q, %v; want %q", got, err, exe)
+	}
+	if got, err := resolveExecutable("/usr/bin/id"); err != nil || got != "/usr/bin/id" {
+		t.Errorf("absolute path changed: %q, %v", got, err)
+	}
+	if _, err := resolveExecutable("bin/id"); err == nil {
+		t.Error("relative path with a slash accepted")
+	}
+	if _, err := resolveExecutable("no-such-tool"); err == nil {
+		t.Error("missing executable resolved")
+	}
+}
