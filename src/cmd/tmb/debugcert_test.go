@@ -90,7 +90,7 @@ func TestDialTLSDebugPrintsBrokerSerial(t *testing.T) {
 		_, _ = c.Read(buf[:])
 	}()
 
-	errFile, err := os.Create(filepath.Join(dir, "stderr"))
+	errFile, err := os.CreateTemp(dir, "stderr")
 	if err != nil {
 		t.Fatalf("stderr file: %v", err)
 	}
