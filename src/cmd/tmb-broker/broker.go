@@ -8,6 +8,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -16,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -61,12 +63,16 @@ func (p *pendingApproval) closePins() {
 }
 
 type Broker struct {
-	cfg    *Config
-	mode   string
-	ttl    time.Duration // token: approval -> claim
-	wait   time.Duration // queue: enqueue -> decision (approval_wait_seconds)
-	log    *Logger
-	claims *ClaimStore
+	// pol is the reloadable policy (allowlists, env and cwd policy, TTLs).
+	// SIGHUP swaps it whole (reload.go); every reader loads it atomically.
+	pol    atomic.Pointer[policy]
+	tlsCfg atomic.Pointer[tls.Config] // TLS listener material, swapped whole on reload
+	// ttlFlag is the -ttl override: when set, token_ttl_seconds in a
+	// reloaded config does not change the effective TTL.
+	ttlFlag time.Duration
+	mode    string
+	log     *Logger
+	claims  *ClaimStore
 
 	mu      sync.Mutex // guards pending + manual prompt serialization
 	pending map[string]*pendingApproval
@@ -78,19 +84,14 @@ type Broker struct {
 
 func NewBroker(cfg *Config, log *Logger, claims *ClaimStore, mode string, ttl time.Duration) *Broker {
 	b := &Broker{
-		cfg:     cfg,
 		mode:    mode,
-		ttl:     ttl,
 		log:     log,
 		claims:  claims,
 		pending: map[string]*pendingApproval{},
 		stdin:   bufio.NewReader(os.Stdin),
 		queue:   newApprovalQueue(),
-		wait:    time.Duration(cfg.ApprovalWaitSeconds) * time.Second,
 	}
-	if b.wait <= 0 {
-		b.wait = 300 * time.Second
-	}
+	b.pol.Store(newPolicy(cfg, ttl))
 	return b
 }
 
@@ -100,13 +101,13 @@ func NewBroker(cfg *Config, log *Logger, claims *ClaimStore, mode string, ttl ti
 func (b *Broker) allowedRequester(id RequesterID) bool {
 	switch id.Kind {
 	case KindUID:
-		for _, u := range b.cfg.AllowedRequesterUIDs {
+		for _, u := range b.conf().AllowedRequesterUIDs {
 			if u == id.UID {
 				return true
 			}
 		}
 	case KindKeyFP:
-		for _, fp := range b.cfg.AllowedRequesterKeys {
+		for _, fp := range b.conf().AllowedRequesterKeys {
 			if fp == id.FP {
 				return true
 			}
@@ -116,7 +117,7 @@ func (b *Broker) allowedRequester(id RequesterID) bool {
 }
 
 func (b *Broker) envKeyAllowed(k string) bool {
-	for _, a := range b.cfg.AllowedEnvKeys {
+	for _, a := range b.conf().AllowedEnvKeys {
 		if a == k {
 			return true
 		}
@@ -159,7 +160,7 @@ func (b *Broker) checkEnv(env map[string]string) (deny, detail string) {
 }
 
 func (b *Broker) envKeyFixed(k string) bool {
-	_, fixed := b.cfg.FixedEnv[k]
+	_, fixed := b.conf().FixedEnv[k]
 	return fixed
 }
 
@@ -167,7 +168,7 @@ func (b *Broker) envKeyFixed(k string) bool {
 // roots or lies below one. Roots are realpaths already (normalizeCwdRoots);
 // an empty list allows nothing.
 func (b *Broker) cwdAllowed(cwdReal string) bool {
-	for _, root := range b.cfg.AllowedCwdRoots {
+	for _, root := range b.conf().AllowedCwdRoots {
 		if cwdReal == root || strings.HasPrefix(cwdReal, strings.TrimSuffix(root, "/")+"/") {
 			return true
 		}
@@ -179,7 +180,7 @@ func (b *Broker) cwdAllowed(cwdReal string) bool {
 // list (entries themselves resolved, so /bin/sh -> /usr/bin/dash matches).
 func (b *Broker) shellDenied(rawPath, realPath string) bool {
 	set := map[string]bool{}
-	for _, e := range b.cfg.ShellDenyList {
+	for _, e := range b.conf().ShellDenyList {
 		set[e] = true
 		if rp, err := filepath.EvalSymlinks(e); err == nil {
 			set[rp] = true
@@ -259,7 +260,7 @@ func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
 		hash := req.Hash()
 		proto.WriteFrame(conn, &proto.Frame{Type: "approved",
 			Token:  proto.TokenID(hash),
-			Detail: fmt.Sprintf("one-shot token, ttl=%s", b.ttl)})
+			Detail: fmt.Sprintf("one-shot token, ttl=%s", b.tokenTTL())})
 		req.ClaimToken = proto.TokenID(hash) // broker-side binding
 		b.claimStage(&req, id, conn)
 	default:
@@ -375,7 +376,7 @@ func (b *Broker) doApprove(req *proto.Request, id RequesterID, conn net.Conn) {
 	}
 	proto.WriteFrame(conn, &proto.Frame{Type: "approved",
 		Token:  proto.TokenID(req.Hash()),
-		Detail: fmt.Sprintf("one-shot token, ttl=%s", b.ttl)})
+		Detail: fmt.Sprintf("one-shot token, ttl=%s", b.tokenTTL())})
 }
 
 // approveStage validates, runs the approval interaction, and on grant stores
@@ -407,7 +408,7 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 
 	hash := req.Hash()
 	pend := &pendingApproval{
-		Hash: hash, Expiry: time.Now().Add(b.ttl),
+		Hash: hash, Expiry: time.Now().Add(b.tokenTTL()),
 		ExePath: exeReal, ExeDev: dev, ExeIno: ino, CwdReal: cwdReal,
 		Requester: id,
 	}
@@ -464,7 +465,7 @@ func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal strin
 		return false, "approval_denied_by_mode"
 	case ModeMockTimeout:
 		// no approval ever arrives; wait out the TTL, then deny
-		time.Sleep(b.ttl + 500*time.Millisecond)
+		time.Sleep(b.tokenTTL() + 500*time.Millisecond)
 		return false, "approval_timeout"
 	case ModeManual:
 		b.mu.Lock() // serialize prompts so they never interleave

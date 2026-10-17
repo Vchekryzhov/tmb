@@ -54,14 +54,14 @@ func TestLoadConfigWithoutCwdRootsAllowsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfig: %v", err)
 	}
-	b := &Broker{cfg: c}
+	b := policyBroker(c)
 	if b.cwdAllowed("/tmp") || b.cwdAllowed("/") {
 		t.Fatalf("empty allowed_cwd_roots must deny every cwd")
 	}
 }
 
 func TestCwdAllowedMatchesRootOrBelow(t *testing.T) {
-	b := &Broker{cfg: &Config{AllowedCwdRoots: []string{"/srv/work", "/opt"}}}
+	b := policyBroker(&Config{AllowedCwdRoots: []string{"/srv/work", "/opt"}})
 	for cwd, want := range map[string]bool{
 		"/srv/work":     true,
 		"/srv/work/a/b": true,
@@ -74,7 +74,7 @@ func TestCwdAllowedMatchesRootOrBelow(t *testing.T) {
 			t.Errorf("cwdAllowed(%q) = %v, want %v", cwd, got, want)
 		}
 	}
-	root := &Broker{cfg: &Config{AllowedCwdRoots: []string{"/"}}}
+	root := policyBroker(&Config{AllowedCwdRoots: []string{"/"}})
 	if !root.cwdAllowed("/etc") {
 		t.Errorf("root / must allow every cwd")
 	}
@@ -96,7 +96,7 @@ func TestValidateRequestDeniesCwdOutsideRoots(t *testing.T) {
 	if err := os.Symlink(outside, link); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
-	b.cfg.AllowedCwdRoots = []string{inside}
+	b.conf().AllowedCwdRoots = []string{inside}
 
 	req := testReq(t, "cwd-roots-1")
 	req.Cwd = link

@@ -149,11 +149,12 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 	ev["cwd"] = cwdReal
 	ev["nonce"] = short(req.Nonce, 12)
 	b.log.Event("queued", ev)
+	wait := b.approvalWait() // fixed for this item: a reload does not move it
 	proto.WriteFrame(conn, &proto.Frame{Type: "waiting", Token: item.ID,
-		Detail: fmt.Sprintf("at most %s", b.wait)})
+		Detail: fmt.Sprintf("at most %s", wait)})
 
 	hangup := watchHangup(conn)
-	timer := time.NewTimer(b.wait)
+	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	var d queueDecision
 	select {
@@ -161,13 +162,13 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 	case <-timer.C:
 		if b.queue.withdraw(item.ID) {
 			stopWatch(conn, hangup)
-			b.log.Event("approval_timeout", queueEvent(id, item.ID, b.wait))
+			b.log.Event("approval_timeout", queueEvent(id, item.ID, wait))
 			return false, "approval_timeout", "mode:" + ModeQueue
 		}
 		d = <-e.result // decided at the last moment
 	case <-hangup:
 		if b.queue.withdraw(item.ID) {
-			b.log.Event("request_abandoned", queueEvent(id, item.ID, b.wait))
+			b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))
 			return false, "request_abandoned", "mode:" + ModeQueue
 		}
 		d = <-e.result
@@ -217,7 +218,7 @@ func (b *Broker) allowedApprover(id RequesterID) bool {
 	if id.Kind != KindUID {
 		return false
 	}
-	for _, u := range b.cfg.ApproverUIDs {
+	for _, u := range b.conf().ApproverUIDs {
 		if u == id.UID {
 			return true
 		}

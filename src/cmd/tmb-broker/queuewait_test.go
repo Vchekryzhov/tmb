@@ -52,11 +52,11 @@ func approveFrames(b *Broker, req *proto.Request, id RequesterID, hangup <-chan 
 
 func TestQueueWaitTimesOut(t *testing.T) {
 	b := newQueueBroker(t)
-	b.wait = 150 * time.Millisecond
+	b.pol.Store(&policy{cfg: b.conf(), ttl: b.tokenTTL(), wait: 150 * time.Millisecond})
 	start := time.Now()
 	frames := <-approveFrames(b, testReq(t, "queue-timeout"), UIDRequester(4242, 1), nil)
-	if took := time.Since(start); took < b.wait {
-		t.Errorf("denied after %v, before the %v wait", took, b.wait)
+	if took := time.Since(start); took < b.approvalWait() {
+		t.Errorf("denied after %v, before the %v wait", took, b.approvalWait())
 	}
 	if len(frames) != 2 || frames[0].Type != "waiting" || frames[1].Reason != "approval_timeout" {
 		t.Fatalf("frames %+v, want waiting then denied approval_timeout", frames)
@@ -153,7 +153,7 @@ func TestLoadConfigApprovalWaitIsSeparate(t *testing.T) {
 	}
 	c.ApprovalWaitSeconds = 2
 	b := NewBroker(c, nil, nil, ModeQueue, time.Minute)
-	if b.wait != 2*time.Second || b.ttl != time.Minute {
-		t.Errorf("broker wait %v ttl %v", b.wait, b.ttl)
+	if b.approvalWait() != 2*time.Second || b.tokenTTL() != time.Minute {
+		t.Errorf("broker wait %v ttl %v", b.approvalWait(), b.tokenTTL())
 	}
 }

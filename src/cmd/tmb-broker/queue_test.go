@@ -17,7 +17,7 @@ func newQueueBroker(t *testing.T) *Broker {
 	t.Helper()
 	b := newTestBroker(t)
 	b.mode = ModeQueue
-	b.cfg.ApproverUIDs = []uint32{humanUID}
+	b.conf().ApproverUIDs = []uint32{humanUID}
 	return b
 }
 

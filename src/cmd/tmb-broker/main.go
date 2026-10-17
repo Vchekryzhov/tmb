@@ -41,6 +41,9 @@ func main() {
 		ttl = time.Duration(*ttlSec) * time.Second
 	}
 
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+
 	log, err := NewLogger(cfg.LogPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tmb-broker: log: %v\n", err)
@@ -114,6 +117,12 @@ func main() {
 	}
 
 	b := NewBroker(cfg, log, claims, mode, ttl)
+	if *ttlSec > 0 {
+		b.ttlFlag = ttl
+	}
+	if tlsCfg != nil {
+		b.tlsCfg.Store(tlsCfg)
+	}
 	startEv := map[string]any{
 		"pid": os.Getpid(), "socket": cfg.SocketPath, "mode": mode,
 		"ttl_seconds": int(ttl.Seconds()), "allowed_requester_uids": cfg.AllowedRequesterUIDs,
@@ -128,7 +137,7 @@ func main() {
 		log.Event("tls_listen", map[string]any{"addr": tlsAddr})
 		fmt.Printf("tmb-broker: tls listening on %s (client certificates required, no plaintext)\n", tlsAddr)
 		go func() {
-			if err := b.ServeTLS(tls.NewListener(tlsLn, tlsCfg)); err != nil {
+			if err := b.ServeTLS(tls.NewListener(tlsLn, b.listenerTLSConfig())); err != nil {
 				fmt.Fprintf(os.Stderr, "tmb-broker: tls serve: %v\n", err)
 				os.Exit(1)
 			}
@@ -139,6 +148,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "tmb-broker: approver socket: %v\n", err)
 		os.Exit(1)
 	}
+
+	// SIGHUP (systemctl reload): re-read the config; the sockets, the queue
+	// and pending approvals stay. Registered before the sockets open, so an
+	// early SIGHUP waits here instead of killing the process.
+	go func() {
+		for range hup {
+			b.Reload(*cfgPath)
+		}
+	}()
 
 	// SIGTERM/SIGINT: remove socket + pidfile, then exit. A stale socket is
 	// also unlinked at next startup.

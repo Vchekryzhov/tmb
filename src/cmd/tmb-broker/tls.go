@@ -37,6 +37,19 @@ func loadTLSConfig(caFile, certFile, keyFile string) (*tls.Config, error) {
 	}, nil
 }
 
+// listenerTLSConfig is the config of the TLS listener itself: every
+// handshake takes the current material from the snapshot, so a reload
+// reaches new connections only; an established connection keeps what it
+// was handshaken with until it closes.
+func (b *Broker) listenerTLSConfig() *tls.Config {
+	return &tls.Config{
+		MinVersion: tls.VersionTLS13,
+		GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
+			return b.tlsCfg.Load(), nil
+		},
+	}
+}
+
 // keyFingerprint is the requester identity of a client certificate:
 // lowercase hex SHA-256 over its DER SubjectPublicKeyInfo. Every
 // certificate issued on the same key has the same fingerprint (ADR 0005).
