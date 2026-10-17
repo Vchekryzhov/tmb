@@ -67,6 +67,12 @@
      "tests": ["tmb-poc/internal/termsafe.TestTextQuotesControlAndFormatRunes", "tmb-poc/internal/termsafe.TestJSONEscapesNonPrintable", "tmb-poc/cmd/tmb.TestApproveListEscapesControlSequences", "tmb-poc/cmd/tmb-broker.TestManualPromptEscapesRequesterFields"]},
     {"id": "SEC-26", "title": "every journal event is fsynced before the client hears back and carries schema 1; a failed write, fsync or reopen refuses new connections with audit_unavailable and starts nothing, a running command finishes with exec_exit on stderr; SIGHUP reopens the journal; docs/audit-schema.md matches the events the code writes",
      "tests": ["tmb-poc/cmd/tmb-broker.TestJournalFailureFailsClosed", "tmb-poc/cmd/tmb-broker.TestJournalFailureBeforeExec", "tmb-poc/cmd/tmb-broker.TestJournalReopenFailureAndRecovery", "tmb-poc/cmd/tmb-broker.TestJournalReopenAfterRename", "tmb-poc/cmd/tmb-broker.TestJournalLinesCarrySchema", "tmb-poc/cmd/tmb-broker.TestTLSConnRefusedWhileJournalDown", "tmb-poc/cmd/tmb-broker.TestReloadReopensJournal", "tmb-poc/cmd/tmb-broker.TestAuditSchemaDoc", "tmb-poc/cmd/tmb-broker.TestAuditSchemaCode", "tmb-poc/cmd/tmb-broker.TestAuditSchemaVersion", "tmb-poc/cmd/tmb-broker.TestJournalPartialLineEndsOnReopen"],
-     "scenarios": ["N29"]}
+     "scenarios": ["N29"]},
+    {"id": "SEC-27", "title": "on a systemd host the packaged logrotate renames the journal, the postrotate reload reopens it, events continue in a new 0600 file and a tail -F consumer keeps reading",
+     "level": "vm",
+     "scenarios": ["V6"]},
+    {"id": "SEC-28", "title": "on a systemd host SIGKILL of the broker fails an in-flight sandbox request closed (exit 3, nothing runs), Restart=on-failure brings it back, human password sudo works, sudo.conf has no Plugin line",
+     "level": "vm",
+     "scenarios": ["V7"]}
   ]
 }
