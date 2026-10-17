@@ -210,6 +210,12 @@ jobs:
           retention-days: ${{ env.RETENTION }}
           overwrite: true
 
+  package:
+    # deb/rpm and client archives exactly as release.yml builds them on a tag
+    permissions:
+      contents: read
+    uses: ./.github/workflows/package.yml # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+
   fuzz:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -397,7 +403,7 @@ jobs:
     # The one stable required check. It runs for every event, including
     # docs-only PRs (no path filters anywhere), and is red unless every
     # required job and check for this event passed on this SHA and run.
-    needs: [lint, test, ci-selftest, coverage, security, build, fuzz, secrets, harness, images, manifest, nightly]
+    needs: [lint, test, ci-selftest, coverage, security, build, package, fuzz, secrets, harness, images, manifest, nightly]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 3

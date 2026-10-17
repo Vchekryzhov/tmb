@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Installs the pinned CI tools into $1 (default out/ci/bin):
+# Installs the pinned CI tools into $1 (default out/ci/bin). With tool names
+# after $1 it builds tmbci and installs only those binary tools from
+# ci/tools.lock (ci/run.sh dist needs only nfpm):
 #   - Go tools are built from their own pinned module in ci/tools/<name>
 #     (go.sum verified, GOFLAGS=-mod=readonly), never `go install @latest`;
 #   - binary tools are downloaded from ci/tools.lock and verified by SHA-256
@@ -10,6 +12,8 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 BIN=${1:-$ROOT/out/ci/bin}
 mkdir -p "$BIN"
 BIN=$(cd "$BIN" && pwd)
+shift || true
+ONLY=" $* "
 
 case "$(uname -s)" in Linux) OS=linux ;; Darwin) OS=darwin ;; *) echo "unsupported OS" >&2; exit 2 ;; esac
 case "$(uname -m)" in x86_64|amd64) ARCH=amd64 ;; arm64|aarch64) ARCH=arm64 ;; *) echo "unsupported arch" >&2; exit 2 ;; esac
@@ -20,6 +24,7 @@ sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -
 (cd "$ROOT/ci" && GOFLAGS=-mod=readonly CGO_ENABLED=0 go build -trimpath -o "$BIN/tmbci" ./cmd/tmbci)
 
 for dir in "$ROOT"/ci/tools/*/; do
+  [ "$ONLY" = "  " ] || break
   name=$(basename "$dir")
   pkg=$(sed -n 's/^tool[[:space:]]\{1,\}\([^[:space:]]*\)$/\1/p' "$dir/go.mod")
   [ -n "$pkg" ] || { echo "ci/tools/$name: no single tool directive" >&2; exit 2; }
@@ -32,6 +37,7 @@ found=0
 while read -r name version os arch url sum inner; do
   case "$name" in ''|'#'*) continue ;; esac
   [ "$os" = "$OS" ] && [ "$arch" = "$ARCH" ] || continue
+  [ "$ONLY" = "  " ] || [[ "$ONLY" == *" $name "* ]] || continue
   found=$((found + 1))
   file="$TMP/$(basename "$url")"
   curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$file" "$url"
