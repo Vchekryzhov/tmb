@@ -3,21 +3,11 @@
   "targets": [
     {
       "package": "tmb-poc/internal/proto",
-      "name": "FuzzReadFrame",
-      "gap": {
-        "owner": "Vchekryzhov",
-        "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-        "due": "2026-11-16"
-      }
+      "name": "FuzzReadFrame"
     },
     {
       "package": "tmb-poc/internal/proto",
-      "name": "FuzzDecodeRequest",
-      "gap": {
-        "owner": "Vchekryzhov",
-        "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-        "due": "2026-11-16"
-      }
+      "name": "FuzzDecodeRequest"
     }
   ]
 }

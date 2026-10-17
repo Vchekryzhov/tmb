@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -303,17 +304,9 @@ func TestExecPrintsWaitingOnce(t *testing.T) {
 		proto.WriteFrame(server, &proto.Frame{Type: "approved", Token: "aaaaaaaaaaaaaaaa"})
 		proto.WriteFrame(server, &proto.Frame{Type: "exit", Code: &code})
 	}()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe: %v", err)
-	}
-	orig := os.Stderr
-	os.Stderr = w
-	got, serr := streamFrames(client, true)
-	os.Stderr = orig
-	w.Close()
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	c := &cli{stdin: strings.NewReader(""), stdout: io.Discard, stderr: &buf}
+	got, serr := c.streamFrames(client, true)
 	if serr != nil || got != 0 {
 		t.Fatalf("streamFrames = %d %v", got, serr)
 	}

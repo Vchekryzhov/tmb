@@ -79,7 +79,8 @@ type Broker struct {
 	mu      sync.Mutex // guards pending + manual prompt serialization
 	pending map[string]*pendingApproval
 
-	stdin *bufio.Reader // broker console stdin (manual approval)
+	stdin   *bufio.Reader // broker console stdin (manual approval)
+	console io.Writer     // broker console output (manual approval)
 
 	queue *approvalQueue // queue mode: requests waiting for an approver
 }
@@ -91,6 +92,7 @@ func NewBroker(cfg *Config, log *Logger, claims *ClaimStore, mode string, ttl ti
 		claims:  claims,
 		pending: map[string]*pendingApproval{},
 		stdin:   bufio.NewReader(os.Stdin),
+		console: os.Stdout,
 		queue:   newApprovalQueue(),
 	}
 	b.pol.Store(newPolicy(cfg, ttl))
@@ -230,8 +232,8 @@ func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
 		b.log.Event("bad_frame", ev)
 		return
 	}
-	var req proto.Request
-	if err := json.Unmarshal(raw, &req); err != nil {
+	req, err := proto.DecodeRequest(raw)
+	if err != nil {
 		ev := id.LogFields()
 		ev["error"] = err.Error()
 		b.log.Event("bad_request", ev)
@@ -257,12 +259,12 @@ func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
 
 	switch req.Type {
 	case "approve":
-		b.doApprove(&req, id, conn)
+		b.doApprove(req, id, conn)
 	case "claim":
-		b.doClaim(&req, id, conn)
+		b.doClaim(req, id, conn)
 	case "exec":
 		// approve + claim + exec from the SAME in-memory request object
-		if !b.approveStage(&req, id, conn) {
+		if !b.approveStage(req, id, conn) {
 			return
 		}
 		hash := req.Hash()
@@ -270,9 +272,9 @@ func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
 			Token:  proto.TokenID(hash),
 			Detail: fmt.Sprintf("one-shot token, ttl=%s", b.tokenTTL())})
 		req.ClaimToken = proto.TokenID(hash) // broker-side binding
-		b.claimStage(&req, id, conn)
+		b.claimStage(req, id, conn)
 	default:
-		b.deny(&req, id, "unknown_request_type", req.Type, conn)
+		b.deny(req, id, "unknown_request_type", req.Type, conn)
 	}
 }
 
@@ -510,15 +512,15 @@ func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal strin
 		b.mu.Lock() // serialize prompts so they never interleave
 		defer b.mu.Unlock()
 		// the environment the process will actually get, not the request's
-		printManualPrompt(os.Stdout, req, id, exeReal, dev, ino, b.buildEnv(req))
+		printManualPrompt(b.console, req, id, exeReal, dev, ino, b.buildEnv(req))
 		line, err := b.stdin.ReadString('\n')
 		if err != nil && line == "" {
 			// stdin closed (detached broker) -> fail closed
-			fmt.Printf("CLOSED (no human input) -> DENIED\n")
+			fmt.Fprintf(b.console, "CLOSED (no human input) -> DENIED\n")
 			return false, "approval_input_closed"
 		}
 		ans := strings.ToLower(strings.TrimSpace(line))
-		fmt.Printf("HUMAN ANSWER: %q -> %s\n", ans, map[bool]string{true: "APPROVED", false: "DENIED"}[ans == "y" || ans == "yes"])
+		fmt.Fprintf(b.console, "HUMAN ANSWER: %q -> %s\n", ans, map[bool]string{true: "APPROVED", false: "DENIED"}[ans == "y" || ans == "yes"])
 		if ans == "y" || ans == "yes" {
 			return true, ""
 		}

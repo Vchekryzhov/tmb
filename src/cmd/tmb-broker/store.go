@@ -27,6 +27,20 @@ type ClaimStore struct {
 	dir       string
 	retention atomic.Int64 // time.Duration; only grows (ExtendRetention)
 	now       func() time.Time
+	open      func(path string) (claimFile, error) // openClaimFile; replaced by fault-injection tests
+}
+
+// claimFile is the part of *os.File a claim needs.
+type claimFile interface {
+	Write(p []byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+// openClaimFile creates a claim file exclusively: O_EXCL is the one-shot
+// primitive, an existing file means the token or nonce was already used.
+func openClaimFile(path string) (claimFile, error) {
+	return os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 }
 
 // ClaimGrace is how long a claim file outlives the token TTL.
@@ -37,7 +51,7 @@ func NewClaimStore(stateDir string, ttl time.Duration) (*ClaimStore, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	s := &ClaimStore{dir: dir, now: time.Now}
+	s := &ClaimStore{dir: dir, now: time.Now, open: openClaimFile}
 	s.retention.Store(int64(ttl + ClaimGrace))
 	return s, nil
 }
@@ -70,7 +84,7 @@ func (s *ClaimStore) noncePath(nonce string) string {
 // before returning success.
 func (s *ClaimStore) Claim(path string, meta map[string]any) (bool, error) {
 	meta["expires_at"] = s.now().Add(time.Duration(s.retention.Load())).Unix()
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	f, err := s.open(path)
 	if err != nil {
 		if os.IsExist(err) {
 			return false, nil
@@ -78,7 +92,10 @@ func (s *ClaimStore) Claim(path string, meta map[string]any) (bool, error) {
 		return false, err
 	}
 	b, _ := json.MarshalIndent(meta, "", "  ")
-	f.Write(append(b, '\n'))
+	if _, err := f.Write(append(b, '\n')); err != nil {
+		f.Close()
+		return false, err
+	}
 	if err := f.Sync(); err != nil {
 		f.Close()
 		return false, err

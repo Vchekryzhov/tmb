@@ -5,11 +5,7 @@
     {
       "name": "overall",
       "min": 80,
-      "gap": {
-        "owner": "Vchekryzhov",
-        "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-        "due": "2026-11-16"
-      }
+      "enforced": true
     },
     {
       "name": "proto",
@@ -17,11 +13,7 @@
       "files": [
         "tmb-poc/internal/proto/"
       ],
-      "gap": {
-        "owner": "Vchekryzhov",
-        "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-        "due": "2026-11-16"
-      }
+      "enforced": true
     },
     {
       "name": "security",
@@ -39,11 +31,7 @@
         "tmb-poc/cmd/tmb/keys.go",
         "tmb-poc/internal/termsafe/"
       ],
-      "gap": {
-        "owner": "Vchekryzhov",
-        "issue": "https://github.com/Vchekryzhov/tmb/issues/15",
-        "due": "2026-11-16"
-      }
+      "enforced": true
     }
   ]
 }

@@ -77,18 +77,7 @@ func approveDo(t *testing.T, b *Broker, req *proto.Request, id RequesterID) *pro
 // terminal frame (denied or exit).
 func claimDo(t *testing.T, b *Broker, req *proto.Request, id RequesterID) *proto.Frame {
 	t.Helper()
-	server, client := net.Pipe()
-	go func() { defer server.Close(); b.claimStage(req, id, server) }()
-	defer client.Close()
-	for {
-		f, err := proto.ReadFrame(client)
-		if err != nil {
-			t.Fatalf("claim: read frame: %v", err)
-		}
-		if f.Type == "denied" || f.Type == "exit" {
-			return f
-		}
-	}
+	return claimStream(t, b, req, id).exit
 }
 
 // --- identity rendering ------------------------------------------------------
@@ -298,5 +287,21 @@ func TestClaimRequesterMismatchCert(t *testing.T) {
 	f = claimDo(t, b, claim, alice)
 	if f.Type != "exit" || f.Code == nil || *f.Code != 0 {
 		t.Fatalf("claim under cert A after mismatch: got frame %+v, want exit 0", f)
+	}
+}
+
+// An identity of unknown kind never matches and renders as unknown.
+func TestUnknownRequesterKind(t *testing.T) {
+	var zero RequesterID
+	if zero.Equal(zero) {
+		t.Error("an identity of unknown kind must not equal anything")
+	}
+	if zero.Key() != "unknown:" || zero.ConsoleLine() != "unknown" || len(zero.LogFields()) != 0 ||
+		zero.NotAllowedDetail() != "requester not in the broker allowlist" {
+		t.Errorf("unknown kind renders as key %q, console %q, fields %v, detail %q",
+			zero.Key(), zero.ConsoleLine(), zero.LogFields(), zero.NotAllowedDetail())
+	}
+	if newTestBroker(t).allowedRequester(zero) {
+		t.Error("an identity of unknown kind passed the allowlist")
 	}
 }

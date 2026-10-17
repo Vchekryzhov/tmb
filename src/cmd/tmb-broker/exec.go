@@ -138,8 +138,9 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 	if waitErr != nil {
 		if ee, ok := waitErr.(*exec.ExitError); ok {
 			code = ee.ExitCode()
-			if code < 0 { // killed by signal
-				code = 128 + (-code)
+			// ExitCode is -1 for a signal death; report it the shell way
+			if ws, ok := ee.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+				code = 128 + int(ws.Signal())
 			}
 		} else {
 			code = 255

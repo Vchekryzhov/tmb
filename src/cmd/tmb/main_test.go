@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"io"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -268,7 +269,8 @@ func TestDebugDispatchesProtocolSteps(t *testing.T) {
 		{nil, "expected approve, claim or raw"},
 		{[]string{"exec"}, `unknown step "exec"`},
 	} {
-		err := cmdDebug(tc.args)
+		c := &cli{stdin: strings.NewReader(""), stdout: io.Discard, stderr: io.Discard}
+		_, err := c.cmdDebug(tc.args)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("cmdDebug(%q) = %v, want error containing %q", tc.args, err, tc.want)
 		}
@@ -278,7 +280,8 @@ func TestDebugDispatchesProtocolSteps(t *testing.T) {
 // The client sends only the env the caller asked for and rejects a
 // malformed --env before connecting.
 func TestExecRejectsMalformedEnvFlag(t *testing.T) {
-	err := cmdExec([]string{"--root", "--env", "NOEQUALS", "--", "/usr/bin/true"})
+	c := &cli{stdin: strings.NewReader(""), stdout: io.Discard, stderr: io.Discard}
+	_, err := c.cmdExec([]string{"--root", "--env", "NOEQUALS", "--", "/usr/bin/true"})
 	if err == nil || !strings.Contains(err.Error(), `--env expects K=V, got "NOEQUALS"`) {
 		t.Fatalf("cmdExec = %v, want the --env K=V error", err)
 	}
