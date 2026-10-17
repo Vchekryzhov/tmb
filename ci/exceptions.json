@@ -354,6 +354,26 @@
       "scanner": "gosec",
       "rule": "G703",
       "location": "src/cmd/tmb-broker/ca.go",
+      "match": "err = os.Rename(tmp, path)",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/ca.go",
+      "match": "_ = os.Remove(tmp)",
+      "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/ca.go",
       "match": "certPEM, err := os.ReadFile(filepath.Join(dir, \"ca.crt\"))",
       "reason": "tmb-broker ca is an operator command run as root on the host; the CA dir and file paths come from its own command line, never from a request",
       "owner": "Vchekryzhov",

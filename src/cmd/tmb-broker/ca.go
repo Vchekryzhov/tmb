@@ -263,11 +263,15 @@ func issueServer(caDir, out string, dns []string, ips []net.IP, now time.Time) (
 	if err := os.MkdirAll(out, 0o700); err != nil {
 		return "", "", err
 	}
+	// Each file is written in full under a temporary name and renamed over
+	// the old one, so a broker reload (SIGHUP) never reads a truncated file.
+	// Between the two renames the key and the certificate do not match; a
+	// reload then fails (reload_failed) and keeps the running pair.
 	crtPath, keyPath := filepath.Join(out, "server.crt"), filepath.Join(out, "server.key")
 	if err := writeKey(keyPath, key); err != nil {
 		return "", "", err
 	}
-	return crtPath, keyPath, writePEMFile(crtPath, "CERTIFICATE", der, 0o644)
+	return crtPath, keyPath, replacePEMFile(crtPath, "CERTIFICATE", der, 0o644)
 }
 
 // issueSandbox signs the sandbox public key (from a PEM public key or a CSR,
@@ -365,7 +369,35 @@ func writeKey(path string, key *ecdsa.PrivateKey) error {
 	if err != nil {
 		return err
 	}
-	return writePEMFile(path, "PRIVATE KEY", der, 0o600)
+	return replacePEMFile(path, "PRIVATE KEY", der, 0o600)
+}
+
+// replacePEMFile writes one PEM block with mode into a temporary file next
+// to path, syncs it and renames it over path: a reader sees the old file or
+// the new one, never a partial one. A failure removes the temporary file.
+func replacePEMFile(path, blockType string, der []byte, mode os.FileMode) error {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	err = f.Chmod(mode)
+	if err == nil {
+		err = pem.Encode(f, &pem.Block{Type: blockType, Bytes: der})
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
 }
 
 // writePEMFile writes one PEM block, creating the file with mode or replacing

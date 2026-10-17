@@ -489,11 +489,27 @@ func TestReloadTLSMaterial(t *testing.T) {
 		t.Error("pre-reload connection changed its certificate")
 	}
 
+	// A reload between the two renames of ca issue-server sees the new key
+	// next to the old certificate: the pair does not match, nothing changes.
+	_, otherKey, _ := ca.issue(t, dir, "other", []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, []string{"localhost"})
+	if err := os.Rename(otherKey, serverKey); err != nil {
+		t.Fatalf("swap key: %v", err)
+	}
+	b.Reload(path)
+	if len(logEvents(t, b, "reload_failed")) != 1 {
+		t.Error("a key that does not match the certificate did not fail the reload")
+	}
+	mixed := dial()
+	if serial(mixed) != certB.SerialNumber.String() {
+		t.Errorf("after a mismatched pair the listener serves serial %s, want %s", serial(mixed), certB.SerialNumber)
+	}
+	mixed.Close()
+
 	if err := os.WriteFile(serverKey, []byte("not a key"), 0o600); err != nil {
 		t.Fatalf("break key: %v", err)
 	}
 	b.Reload(path)
-	if len(logEvents(t, b, "reload_failed")) != 1 {
+	if len(logEvents(t, b, "reload_failed")) != 2 {
 		t.Error("broken TLS files did not fail the reload")
 	}
 	again := dial()
@@ -507,7 +523,7 @@ func TestReloadTLSMaterial(t *testing.T) {
 		"tls_ca_file": caFile, "tls_cert_file": serverCert,
 	}))
 	b.Reload(path)
-	if len(logEvents(t, b, "reload_failed")) != 2 {
+	if len(logEvents(t, b, "reload_failed")) != 3 {
 		t.Error("a TLS listener without tls_key_file did not fail the reload")
 	}
 }
