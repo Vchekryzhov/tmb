@@ -164,6 +164,46 @@
     {
       "scanner": "gitleaks",
       "rule": "generic-api-key",
+      "location": "harness/last-run.log",
+      "match": "token\":\"REDACTED\"",
+      "reason": "harness evidence log: spent one-shot TMB token IDs (16 hex of the request hash) from a disposable run, not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-pair-run.log",
+      "match": "token\":\"REDACTED\"",
+      "reason": "harness evidence log: spent one-shot TMB token IDs (16 hex of the request hash) from a disposable run, not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-openshell-run.log",
+      "match": "token\":\"REDACTED\"",
+      "reason": "harness evidence log: spent one-shot TMB token IDs (16 hex of the request hash) from a disposable run, not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-full-run.log",
+      "match": "token\":\"REDACTED\"",
+      "reason": "harness evidence log: spent one-shot TMB token IDs (16 hex of the request hash) from a disposable run, not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
       "location": "prototype/openshell-wiring/ref/last-run.log",
       "match": "token\":\"REDACTED\"",
       "reason": "history of prototype branches: spent one-shot TMB token IDs (16 hex of the request hash) from disposable harness runs, not credentials; history is immutable, re-review on expiry",
