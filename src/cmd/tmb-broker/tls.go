@@ -62,13 +62,7 @@ func keyFingerprint(cert *x509.Certificate) string {
 // explicitly per connection so failures surface as tls_handshake_failed
 // events instead of a lazy first-read error deep in the frame loop.
 func (b *Broker) ServeTLS(ln net.Listener) error {
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			return err
-		}
-		go b.handleTLSConn(conn.(*tls.Conn))
-	}
+	return serveConns(ln, func(c net.Conn) { b.handleTLSConn(c.(*tls.Conn)) })
 }
 
 // tlsHandshakeTimeout bounds one handshake so dead peers cannot pin

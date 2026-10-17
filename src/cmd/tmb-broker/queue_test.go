@@ -159,7 +159,7 @@ func TestApproverMessagesRejected(t *testing.T) {
 	if len(b.queue.list()) != 1 {
 		t.Fatalf("rejected messages changed the queue")
 	}
-	if !lineHasBoth(logText(t, b), `"event":"approver_denied"`, `"requester_uid":4242`) {
+	if !lineHasBoth(logText(t, b), `"event":"approver_denied"`, `"approver_uid":4242`) {
 		t.Errorf("approver_denied event for uid 4242 missing")
 	}
 	// clean up the waiting request
@@ -268,7 +268,7 @@ func TestStartApproverServesSocket(t *testing.T) {
 func TestQueueOrderAndDecidedMemory(t *testing.T) {
 	q := newApprovalQueue()
 	for _, it := range []proto.QueueItem{{ID: "b", QueuedAt: "2"}, {ID: "c", QueuedAt: "1"}, {ID: "a", QueuedAt: "2"}} {
-		if _, ok := q.add(it); !ok {
+		if _, refused := q.add(it, RequesterID{}); refused != "" {
 			t.Fatalf("add %s refused", it.ID)
 		}
 	}

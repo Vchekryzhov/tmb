@@ -64,7 +64,7 @@ func readFile(t *testing.T, path string) string {
 }
 
 // Every journal line, in the file and in the stderr reserve, carries
-// schema 1.
+// the current schema version.
 func TestJournalLinesCarrySchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "broker.log")
 	l, err := NewLogger(path)
@@ -90,8 +90,8 @@ func TestJournalLinesCarrySchema(t *testing.T) {
 		t.Fatalf("file %d lines, reserve %d lines; want 3 and 2:\n%s", len(file), len(reserve), stderr)
 	}
 	for _, ev := range append(file, reserve...) {
-		if ev["schema"] != float64(1) {
-			t.Errorf("line without schema 1: %v", ev)
+		if ev["schema"] != float64(auditSchemaVersion) {
+			t.Errorf("line without schema %d: %v", auditSchemaVersion, ev)
 		}
 	}
 	if l.Path() != path {
