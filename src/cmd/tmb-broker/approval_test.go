@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // approvalEvents returns every "approval" JSONL event the broker logged.
@@ -97,5 +98,64 @@ func TestManualConsoleShowsFinalEnv(t *testing.T) {
 	want := `  env       : ["LANG=ru_RU.UTF-8","PATH=/usr/bin:/bin"]`
 	if !strings.Contains(out, want+"\n") {
 		t.Fatalf("console lacks final env line %q:\n%s", want, out)
+	}
+}
+
+// pendingCount reads the size of the pending table under the broker lock.
+func pendingCount(b *Broker) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.pending)
+}
+
+// TestUnclaimedApprovalDroppedAtExpiry: an approval nobody claims leaves the
+// pending table (and closes its pins) when its ttl runs out, without another
+// request for the same hash; a re-approve's replaced entry does not evict
+// the new one.
+func TestUnclaimedApprovalDroppedAtExpiry(t *testing.T) {
+	b := newTestBroker(t)
+	b.mode = ModeMockApprove
+	b.ttl = 50 * time.Millisecond
+	req := testReq(t, "pending-expiry")
+	id := UIDRequester(4242, 1)
+	approveDo(t, b, req, id)
+	if got := pendingCount(b); got != 1 {
+		t.Fatalf("after approve: pending = %d, want 1", got)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for pendingCount(b) != 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := pendingCount(b); got != 0 {
+		t.Fatalf("after expiry: pending = %d, want 0", got)
+	}
+
+	b.ttl = time.Minute
+	approveDo(t, b, req, id)
+	old := b.pending[req.Hash()]
+	approveDo(t, b, req, id)
+	b.dropIfExpired(req.Hash(), old)
+	if got := pendingCount(b); got != 1 {
+		t.Errorf("stale timer evicted the re-approved pending: pending = %d, want 1", got)
+	}
+}
+
+// TestExpiredPendingDroppedOnLookup: a lookup that beats the expiry timer
+// still treats an expired entry as gone and drops it.
+func TestExpiredPendingDroppedOnLookup(t *testing.T) {
+	for name, lookup := range map[string]func(*Broker, string) (*pendingApproval, bool){
+		"peek": (*Broker).peekPending,
+		"take": (*Broker).takePending,
+	} {
+		t.Run(name, func(t *testing.T) {
+			b := newTestBroker(t)
+			b.pending["h"] = &pendingApproval{Hash: "h", Expiry: time.Now().Add(-time.Second)}
+			if _, has := lookup(b, "h"); has {
+				t.Errorf("%s returned an expired pending", name)
+			}
+			if got := pendingCount(b); got != 0 {
+				t.Errorf("%s left the expired pending: pending = %d, want 0", name, got)
+			}
+		})
 	}
 }
