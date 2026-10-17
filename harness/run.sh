@@ -359,10 +359,12 @@ assert_rc "N11: approve phase ok" 0
 T11=$(token_of)
 if [ -n "$T11" ]; then ok "N11: got one-shot token $T11"; else bad "N11: no token parsed"; fi
 echo "-- arming in-window swapper (SIGSTOP broker at claim-file creation)"
+docker exec "$HOST" rm -f /tmp/n11/armed
 docker exec "$HOST" sh -c '
   BEFORE=0
   for f in /var/lib/tmb-proto/claims/*; do [ -e "$f" ] && BEFORE=$((BEFORE+1)); done
   BPID=$(pgrep -x tmb-broker)
+  touch /tmp/n11/armed
   I=0
   while [ "$I" -lt 400000 ]; do
     N=0
@@ -379,6 +381,8 @@ docker exec "$HOST" sh -c '
   exit 3
 ' &
 N11_WATCH=$!
+# the watcher must count the store before the claim adds its file
+for _ in $(seq 1 100); do docker exec "$HOST" test -e /tmp/n11/armed && break; sleep 0.1; done
 run_client_json tmb debug claim --token "$T11" "$TD/n11.json"
 assert_rc "N11: claim exit 0 (a program ran)" 0
 wait "$N11_WATCH"; N11_WRC=$?
