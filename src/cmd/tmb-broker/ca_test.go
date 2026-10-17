@@ -324,6 +324,24 @@ func TestCAWriteFailures(t *testing.T) {
 	if _, err := issueSandbox(dir, filepath.Join(file, "x.crt"), pubPEM, "sbx", caNow); err == nil {
 		t.Errorf("issue-sandbox into a path under a regular file succeeded")
 	}
+	// ca.crt that cannot be written: init fails and takes the new key
+	// back, so the CA is not left as a key without a certificate.
+	half := filepath.Join(base, "half")
+	if err := os.MkdirAll(filepath.Join(half, "ca.crt"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := caInit(half, caNow); err == nil {
+		t.Errorf("init with an unwritable ca.crt succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(half, "ca.key")); !os.IsNotExist(err) {
+		t.Errorf("ca.key left behind after a failed init: %v", err)
+	}
+	if err := os.Remove(filepath.Join(half, "ca.crt")); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if err := caInit(half, caNow); err != nil {
+		t.Errorf("init after a failed init: %v", err)
+	}
 	if os.Geteuid() == 0 {
 		return // root writes into read-only directories
 	}
