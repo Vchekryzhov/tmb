@@ -76,9 +76,9 @@ func readTerminal(conn net.Conn) (*proto.Frame, error) {
 	}
 }
 
-// exchange sends req on a new connection and returns its terminal frame.
+// unixExchange sends req on a new connection and returns its terminal frame.
 // It does not touch t, so goroutines can call it.
-func exchange(sock string, req *proto.Request) (*proto.Frame, error) {
+func unixExchange(sock string, req *proto.Request) (*proto.Frame, error) {
 	conn, err := net.Dial("unix", sock)
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func TestServeUnixConcurrentConnectionsRunAtMostOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			f, err := exchange(sock, req)
+			f, err := unixExchange(sock, req)
 			if err != nil {
 				t.Errorf("concurrent claim: %v", err)
 				return
@@ -200,7 +200,7 @@ func TestServeUnixConcurrentForeignClaimsKeepIdentityBinding(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			f, err := exchange(sock, req)
+			f, err := unixExchange(sock, req)
 			if err != nil {
 				t.Errorf("foreign claim: %v", err)
 				return
