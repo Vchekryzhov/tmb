@@ -115,7 +115,7 @@ func pendingCount(b *Broker) int {
 func TestUnclaimedApprovalDroppedAtExpiry(t *testing.T) {
 	b := newTestBroker(t)
 	b.mode = ModeMockApprove
-	b.ttl = 50 * time.Millisecond
+	b.setTokenTTL(50 * time.Millisecond)
 	req := testReq(t, "pending-expiry")
 	id := UIDRequester(4242, 1)
 	approveDo(t, b, req, id)
@@ -130,7 +130,7 @@ func TestUnclaimedApprovalDroppedAtExpiry(t *testing.T) {
 		t.Fatalf("after expiry: pending = %d, want 0", got)
 	}
 
-	b.ttl = time.Minute
+	b.setTokenTTL(time.Minute)
 	approveDo(t, b, req, id)
 	old := b.pending[req.Hash()]
 	approveDo(t, b, req, id)

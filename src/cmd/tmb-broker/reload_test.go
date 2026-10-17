@@ -25,6 +25,13 @@ func policyBroker(cfg *Config) *Broker {
 	return b
 }
 
+// setTokenTTL swaps in a policy with another token TTL (tests only).
+func (b *Broker) setTokenTTL(ttl time.Duration) {
+	p := *b.pol.Load()
+	p.ttl = ttl
+	b.pol.Store(&p)
+}
+
 // reloadConfig is a valid broker config as JSON fields; tests override some.
 func reloadConfig(dir string, over map[string]any) map[string]any {
 	c := map[string]any{
