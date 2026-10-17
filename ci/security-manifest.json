@@ -65,6 +65,8 @@
      "scenarios": ["N23", "N24", "PAIR-KEY"]},
     {"id": "SEC-24", "title": "SIGHUP reloads allowlists, approvers, policy and TLS material from one atomic snapshot; an invalid config keeps the running one; startup-only fields are reported and not applied; the queue and pending approvals survive",
      "tests": ["tmb-poc/cmd/tmb-broker.TestReloadValidConfigSwapsPolicy", "tmb-poc/cmd/tmb-broker.TestReloadInvalidConfigKeepsRunningPolicy", "tmb-poc/cmd/tmb-broker.TestReloadFieldClassification", "tmb-poc/cmd/tmb-broker.TestReloadIgnoresStartupOnlyFields", "tmb-poc/cmd/tmb-broker.TestReloadSnapshotIsAtomic", "tmb-poc/cmd/tmb-broker.TestReloadKeepsQueueAndPending", "tmb-poc/cmd/tmb-broker.TestReloadTLSMaterial"],
-     "scenarios": ["N25", "N26", "N27", "N28"]}
+     "scenarios": ["N25", "N26", "N27", "N28"]},
+    {"id": "SEC-25", "title": "requester-chosen fields shown to an approver (tmb approve, manual console) are escaped: ESC, C1, bidi runes and invalid UTF-8 never reach the terminal raw",
+     "tests": ["tmb-poc/internal/termsafe.TestTextQuotesControlAndFormatRunes", "tmb-poc/internal/termsafe.TestJSONEscapesNonPrintable", "tmb-poc/cmd/tmb.TestApproveListEscapesControlSequences", "tmb-poc/cmd/tmb-broker.TestManualPromptEscapesRequesterFields"]}
   ]
 }
