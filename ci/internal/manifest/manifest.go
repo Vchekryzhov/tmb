@@ -22,6 +22,7 @@ var RequiredIDs = []string{
 	// spec #27: cwd roots, env policy, held cwd fd, claim GC, approver role, queue wait
 	"SEC-17", "SEC-18", "SEC-19", "SEC-20", "SEC-21", "SEC-22",
 	"SEC-23", // spec #39: identity by public key
+	"SEC-24", // spec #39: reload by SIGHUP
 }
 
 // Level says where a case's evidence can be produced.

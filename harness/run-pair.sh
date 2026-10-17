@@ -776,6 +776,148 @@ stop_broker
 state_dump
 
 # -----------------------------------------------------------------------------
+# Reload (N25-N27): the broker runs from a config and TLS files that live
+# inside host-sim (/etc/tmb/reload, written with docker exec), so the
+# scenarios can change them and send SIGHUP; nothing new is mounted.
+RL=/etc/tmb/reload
+put_host() { # put_host LOCAL-FILE PATH-IN-HOST-SIM
+  docker exec -i "$HOST" sh -c "cat >'$2'" <"$1"
+}
+hup_broker() {
+  echo "-- SIGHUP to tmb-broker"
+  docker exec "$HOST" pkill -HUP -x tmb-broker
+}
+broker_pid() { docker exec "$HOST" pgrep -x tmb-broker | tr -d '[:space:]'; }
+sock_inodes() { docker exec "$HOST" stat -c %i /run/tmb/tmb.sock /run/tmb-approver/approve.sock | tr '\n' ' '; }
+# serial_of FILE: the certificate serial as the client prints it (hex,
+# upper case, no leading zeros)
+serial_of() { openssl x509 -in "$1" -noout -serial | sed 's/^serial=//; s/^0*//'; }
+# client_serial: the serial a TMB_DEBUG client printed in $ERR_FILE
+client_serial() { sed -n 's/^tmb: debug: broker certificate serial=\([0-9A-F]*\) .*/\1/p' "$ERR_FILE" | head -1; }
+start_broker_reload() { # MODE TTL
+  echo "-- starting tmb-broker (mode=$1 ttl=$2s, config=$RL/config.json, console=$RL/console.log)"
+  docker exec -d "$HOST" sh -c \
+    "exec tmb-broker -approval '$1' -ttl '$2' -config $RL/config.json >$RL/console.log 2>&1"
+}
+
+docker exec "$HOST" mkdir -p "$RL"
+for f in ca.crt server.crt server.key; do put_host "$TD/$f" "$RL/$f"; done
+sed "s#/etc/tmb/certs/#$RL/#" "$TD/config-pair.json" >"$TD/rl-base.json"
+sed "s/\"$FP1\", //" "$TD/rl-base.json" >"$TD/rl-nofp1.json"
+printf '{"socket_path": "/run/tmb/tmb.sock",\n' >"$TD/rl-broken.json"
+sed "s/\"tls_addr\": \":$TLS_PORT\"/\"tls_addr\": \":$((TLS_PORT+1))\"/" "$TD/rl-base.json" >"$TD/rl-newaddr.json"
+grep -q "\"$FP1\"" "$TD/rl-base.json" || { echo "FATAL: reload base config lacks fp1"; exit 1; }
+if grep -q "\"$FP1\"" "$TD/rl-nofp1.json"; then echo "FATAL: fp1 not removed from the reload config"; exit 1; fi
+grep -q "\"tls_addr\": \":$((TLS_PORT+1))\"" "$TD/rl-newaddr.json" || { echo "FATAL: tls_addr not changed"; exit 1; }
+put_host "$TD/rl-base.json" "$RL/config.json"
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N25: SIGHUP reloads the key allowlist; sockets and pid stay"
+TLN=$(broker_log_count '"event":"tls_listen"'); TLN=${TLN:-0}
+start_broker_reload mock-approve 30
+wait_broker_log_count '"event":"tls_listen"' $((TLN+1))
+PID25=$(broker_pid)
+INO25=$(sock_inodes)
+echo "-- broker pid $PID25, socket inodes $INO25"
+run_tls_client client1 tmb exec --root -- /usr/bin/id -u
+assert_rc "N25: fp1 allowlisted -> exit 0" 0
+
+put_host "$TD/rl-nofp1.json" "$RL/config.json"
+RLN=$(broker_log_count '"event":"reload"'); RLN=${RLN:-0}
+hup_broker
+wait_broker_log_count '"event":"reload"' $((RLN+1))
+ok "N25: SIGHUP -> reload event"
+if docker exec "$HOST" grep '"event":"reload"' /var/log/tmb/broker.log | tail -1 | grep -q '"changed":\["allowed_requester_keys"\]'; then ok "N25: reload names allowed_requester_keys as changed"; else bad "N25: reload event does not name allowed_requester_keys"; fi
+docker exec "$HOST" grep '"event":"reload"' /var/log/tmb/broker.log | tail -1 | sed 's/^/  | /'
+run_tls_client client1 tmb exec --root -- /usr/bin/id -u
+assert_rc      "N25: fp1 removed, next request -> exit 125" 125
+assert_err_has "N25: deny reason requester_not_allowed" "requester_not_allowed"
+
+put_host "$TD/rl-base.json" "$RL/config.json"
+hup_broker
+wait_broker_log_count '"event":"reload"' $((RLN+2))
+run_tls_client client1 tmb exec --root -- /usr/bin/id -u
+assert_rc     "N25: fp1 back, SIGHUP -> exit 0" 0
+assert_out_eq "N25: stdout '0'" "0"
+if [ "$(broker_pid)" = "$PID25" ]; then ok "N25: broker pid unchanged ($PID25)"; else bad "N25: broker pid changed ($PID25 -> $(broker_pid))"; fi
+if [ "$(sock_inodes)" = "$INO25" ]; then ok "N25: socket inodes unchanged ($INO25)"; else bad "N25: socket inodes changed ($INO25 -> $(sock_inodes))"; fi
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N26: an invalid config keeps the running one; tls_addr is not reloaded"
+put_host "$TD/rl-broken.json" "$RL/config.json"
+RFN=$(broker_log_count '"event":"reload_failed"'); RFN=${RFN:-0}
+RLN=$(broker_log_count '"event":"reload"'); RLN=${RLN:-0}
+hup_broker
+wait_broker_log_count '"event":"reload_failed"' $((RFN+1))
+ok "N26: syntax error, SIGHUP -> reload_failed"
+docker exec "$HOST" grep '"event":"reload_failed"' /var/log/tmb/broker.log | tail -1 | sed 's/^/  | /'
+if docker exec "$HOST" grep -q "reload failed, keeping the running config" "$RL/console.log"; then ok "N26: stderr names the reload failure"; else bad "N26: stderr lacks the reload failure"; fi
+if [ "$(broker_log_count '"event":"reload"')" = "$RLN" ]; then ok "N26: no reload event for the broken config"; else bad "N26: broken config logged a reload"; fi
+run_tls_client client1 tmb exec --root -- /usr/bin/id -u
+assert_rc "N26: requests still pass on the old allowlist (fp1) -> exit 0" 0
+run_tls_client client2 tmb exec --root -- /usr/bin/id -u
+assert_rc "N26: fp2 still not allowed -> exit 125" 125
+
+put_host "$TD/rl-newaddr.json" "$RL/config.json"
+RIN=$(broker_log_count '"event":"reload_ignored_field"'); RIN=${RIN:-0}
+hup_broker
+wait_broker_log_count '"event":"reload"' $((RLN+1))
+if [ "$(broker_log_count '"event":"reload_ignored_field"')" = $((RIN+1)) ] \
+  && docker exec "$HOST" grep '"event":"reload_ignored_field"' /var/log/tmb/broker.log | tail -1 | grep -q '"field":"tls_addr"'; then
+  ok "N26: tls_addr changed -> one reload_ignored_field for tls_addr"
+else
+  bad "N26: reload_ignored_field for tls_addr missing"
+fi
+docker exec "$HOST" grep '"event":"reload_ignored_field"' /var/log/tmb/broker.log | tail -1 | sed 's/^/  | /'
+run_tls_client client1 tmb exec --root -- /usr/bin/id -u
+assert_rc "N26: the old port $TLS_PORT still serves -> exit 0" 0
+run_tls_client_addr "$SERVER_NAME:$((TLS_PORT+1))" client1 tmb exec --root -- /usr/bin/id -u
+assert_rc "N26: nothing listens on the new port $((TLS_PORT+1)) -> exit 3" 3
+put_host "$TD/rl-base.json" "$RL/config.json"
+hup_broker
+wait_broker_log_count '"event":"reload"' $((RLN+2))
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N27: a reissued server certificate is served after SIGHUP; an open connection keeps the old one"
+SERIAL_A=$(serial_of "$TD/server.crt")
+mkdir -p "$TD/reissue"
+"$CA_BIN" ca issue-server --dir "$TD" --dns "$SERVER_NAME" --out "$TD/reissue" >/dev/null \
+  || { echo "FATAL: reissuing the server certificate failed"; exit 1; }
+SERIAL_B=$(serial_of "$TD/reissue/server.crt")
+echo "-- serial before $SERIAL_A, reissued $SERIAL_B"
+{ [ -n "$SERIAL_A" ] && [ "$SERIAL_A" != "$SERIAL_B" ]; } || { echo "FATAL: reissued certificate has the same serial"; exit 1; }
+run_tls_client client1 env TMB_DEBUG=1 tmb exec --root -- /usr/bin/id -u
+assert_rc "N27: before reload -> exit 0" 0
+if [ "$(client_serial)" = "$SERIAL_A" ]; then ok "N27: client sees serial $SERIAL_A before reload"; else bad "N27: client saw serial '$(client_serial)', want $SERIAL_A"; fi
+
+echo "-- open a connection before the reload: an approved /usr/bin/sleep 4 holds it"
+ES=$(broker_log_count '"event":"exec_start"'); ES=${ES:-0}
+docker exec \
+  -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" -e TMB_CA=/certs/ca.crt \
+  -e TMB_CERT=/certs/client1.crt -e TMB_KEY=/certs/client1.key -e TMB_DEBUG=1 \
+  "$SBX" tmb exec --root -- /usr/bin/sleep 4 >"$TD/n27-old.out" 2>"$TD/n27-old.err" &
+CLI27=$!
+wait_broker_log_count '"event":"exec_start"' $((ES+1))
+put_host "$TD/reissue/server.crt" "$RL/server.crt"
+put_host "$TD/reissue/server.key" "$RL/server.key"
+RLN=$(broker_log_count '"event":"reload"'); RLN=${RLN:-0}
+hup_broker
+wait_broker_log_count '"event":"reload"' $((RLN+1))
+if docker exec "$HOST" grep '"event":"reload"' /var/log/tmb/broker.log | tail -1 | grep -q '"tls_material"'; then ok "N27: reload names tls_material as changed"; else bad "N27: reload event lacks tls_material"; fi
+run_tls_client client1 env TMB_DEBUG=1 tmb exec --root -- /usr/bin/id -u
+assert_rc "N27: new connection after reload -> exit 0" 0
+if [ "$(client_serial)" = "$SERIAL_B" ]; then ok "N27: new connection sees the reissued serial $SERIAL_B"; else bad "N27: new connection saw serial '$(client_serial)', want $SERIAL_B"; fi
+wait $CLI27; RUNC=$?
+OUT_FILE=$TD/n27-old.out; ERR_FILE=$TD/n27-old.err; show_io
+assert_rc "N27: the connection opened before reload finished its command -> exit 0" 0
+if [ "$(client_serial)" = "$SERIAL_A" ]; then ok "N27: that connection ran on the old serial $SERIAL_A"; else bad "N27: pre-reload connection saw serial '$(client_serial)', want $SERIAL_A"; fi
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err
+stop_broker
+state_dump
+
+# -----------------------------------------------------------------------------
 log "STAGE 4: N-series regression (harness/run.sh must stay green, untouched)"
 echo "-- running: bash run.sh"
 if bash run.sh; then

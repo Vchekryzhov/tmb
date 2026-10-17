@@ -62,6 +62,9 @@
      "scenarios": ["N15", "N17"]},
     {"id": "SEC-23", "title": "the sandbox identity is its public key: a reissued certificate keeps it, another key with the same Subject is not allowed, the private key never leaves the sandbox",
      "tests": ["tmb-poc/cmd/tmb-broker.TestKeyFingerprintSurvivesReissue", "tmb-poc/cmd/tmb-broker.TestLoadConfigRejectsAllowedRequesterFPs", "tmb-poc/cmd/tmb.TestKeygenAndFingerprintAgree"],
-     "scenarios": ["N23", "N24", "PAIR-KEY"]}
+     "scenarios": ["N23", "N24", "PAIR-KEY"]},
+    {"id": "SEC-24", "title": "SIGHUP reloads allowlists, approvers, policy and TLS material from one atomic snapshot; an invalid config keeps the running one; startup-only fields are reported and not applied; the queue and pending approvals survive",
+     "tests": ["tmb-poc/cmd/tmb-broker.TestReloadValidConfigSwapsPolicy", "tmb-poc/cmd/tmb-broker.TestReloadInvalidConfigKeepsRunningPolicy", "tmb-poc/cmd/tmb-broker.TestReloadFieldClassification", "tmb-poc/cmd/tmb-broker.TestReloadIgnoresStartupOnlyFields", "tmb-poc/cmd/tmb-broker.TestReloadSnapshotIsAtomic", "tmb-poc/cmd/tmb-broker.TestReloadKeepsQueueAndPending", "tmb-poc/cmd/tmb-broker.TestReloadTLSMaterial"],
+     "scenarios": ["N25", "N26", "N27", "N28"]}
   ]
 }
