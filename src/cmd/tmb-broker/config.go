@@ -19,7 +19,7 @@ type Config struct {
 	LogPath              string            `json:"log_path"`
 	PidFile              string            `json:"pid_file"`
 	AllowedRequesterUIDs []uint32          `json:"allowed_requester_uids"`
-	AllowedRequesterFPs  []string          `json:"allowed_requester_fps"`
+	AllowedRequesterKeys []string          `json:"allowed_requester_keys"` // key fingerprints (SPKI SHA-256)
 	SocketGID            uint32            `json:"socket_gid"`
 	AllowedEnvKeys       []string          `json:"allowed_env_keys"`
 	FixedEnv             map[string]string `json:"fixed_env"`
@@ -36,9 +36,9 @@ type Config struct {
 	// ApprovalWaitSeconds bounds how long a queued request waits for a
 	// decision (default 300); independent of token_ttl_seconds.
 	ApprovalWaitSeconds int `json:"approval_wait_seconds"`
-	// TLS listener (second listener, mTLS only). When tls_addr is set (config
-	// or -tls-addr flag), all three files must be set as well; empty
-	// tls_addr keeps the broker unix-socket-only.
+	// TLS listener (second listener, mTLS only). When tls_addr is set, all
+	// three files must be set as well; empty tls_addr keeps the broker
+	// unix-socket-only.
 	TLSAddr     string `json:"tls_addr"`
 	TLSCAFile   string `json:"tls_ca_file"`
 	TLSCertFile string `json:"tls_cert_file"`
@@ -53,6 +53,12 @@ func loadConfig(path string) (*Config, error) {
 	var c Config
 	if err := json.Unmarshal(b, &c); err != nil {
 		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(b, &fields); err == nil {
+		if _, old := fields["allowed_requester_fps"]; old {
+			return nil, fmt.Errorf("config: allowed_requester_fps was replaced by allowed_requester_keys: list key fingerprints (SHA-256 of the public key; tmb fingerprint FILE or tmb-broker ca issue-sandbox prints them)")
+		}
 	}
 	if c.SocketPath == "" || c.StateDir == "" || c.LogPath == "" {
 		return nil, fmt.Errorf("config: socket_path/state_dir/log_path are required")

@@ -108,8 +108,8 @@ func (b *Broker) allowedRequester(id RequesterID) bool {
 				return true
 			}
 		}
-	case KindCertFP:
-		for _, fp := range b.cfg.AllowedRequesterFPs {
+	case KindKeyFP:
+		for _, fp := range b.cfg.AllowedRequesterKeys {
 			if fp == id.FP {
 				return true
 			}

@@ -27,7 +27,7 @@ func tlsBroker(t *testing.T, ca *testCA, dir string, fps ...string) (addr string
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := &Config{AllowedRequesterFPs: fps, FixedEnv: map[string]string{"PATH": "/usr/bin:/bin"}, AllowedEnvKeys: []string{"LANG"}, AllowedCwdRoots: []string{"/"}}
+	cfg := &Config{AllowedRequesterKeys: fps, FixedEnv: map[string]string{"PATH": "/usr/bin:/bin"}, AllowedEnvKeys: []string{"LANG"}, AllowedCwdRoots: []string{"/"}}
 	b = NewBroker(cfg, log, claims, ModeMockApprove, 30*time.Second)
 	tlsCfg, err := loadTLSConfig(caFile, srvCert, srvKey)
 	if err != nil {
@@ -120,7 +120,7 @@ func TestTLSListenerRejectsUnverifiedClientCerts(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			dir := t.TempDir()
 			certFile, keyFile, der := c.issue(dir)
-			addr, b := tlsBroker(t, ca, dir, certFingerprint(der))
+			addr, b := tlsBroker(t, ca, dir, keyFingerprintOf(t, der))
 			pool := x509.NewCertPool()
 			pool.AddCert(ca.cert)
 			f, err := execOverTLS(t, addr, &tls.Config{
@@ -144,7 +144,7 @@ func TestTLSListenerRejectsMissingCertAndOldTLS(t *testing.T) {
 	ca := newTestCA(t)
 	dir := t.TempDir()
 	certFile, keyFile, der := ca.issue(t, dir, "client", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, nil)
-	addr, b := tlsBroker(t, ca, dir, certFingerprint(der))
+	addr, b := tlsBroker(t, ca, dir, keyFingerprintOf(t, der))
 	pool := x509.NewCertPool()
 	pool.AddCert(ca.cert)
 
@@ -201,4 +201,15 @@ func TestLoadTLSConfigRejectsBadMaterial(t *testing.T) {
 	if cfg.ClientAuth != tls.RequireAndVerifyClientCert || cfg.MinVersion != tls.VersionTLS13 {
 		t.Fatalf("server TLS config: client auth %v, min version %x", cfg.ClientAuth, cfg.MinVersion)
 	}
+}
+
+// keyFingerprintOf is the requester identity the listener derives from a
+// certificate: the fingerprint of its public key.
+func keyFingerprintOf(t *testing.T, der []byte) string {
+	t.Helper()
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return keyFingerprint(cert)
 }

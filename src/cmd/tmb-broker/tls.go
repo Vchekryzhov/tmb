@@ -37,11 +37,11 @@ func loadTLSConfig(caFile, certFile, keyFile string) (*tls.Config, error) {
 	}, nil
 }
 
-// certFingerprint is the requester identity of a client certificate:
-// lowercase hex SHA-256 over the DER encoding, matching
-// `openssl x509 -fingerprint -sha256` with the colons stripped.
-func certFingerprint(der []byte) string {
-	sum := sha256.Sum256(der)
+// keyFingerprint is the requester identity of a client certificate:
+// lowercase hex SHA-256 over its DER SubjectPublicKeyInfo. Every
+// certificate issued on the same key has the same fingerprint (ADR 0005).
+func keyFingerprint(cert *x509.Certificate) string {
+	sum := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
 	return hex.EncodeToString(sum[:])
 }
 
@@ -82,7 +82,7 @@ func (b *Broker) handleTLSConn(conn *tls.Conn) {
 		})
 		return
 	}
-	id := CertRequester(certFingerprint(st.PeerCertificates[0].Raw))
+	id := KeyRequester(keyFingerprint(st.PeerCertificates[0]))
 
 	if !b.allowedRequester(id) {
 		b.denyRequesterNotAllowed(conn, id)

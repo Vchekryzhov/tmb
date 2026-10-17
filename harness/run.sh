@@ -359,10 +359,12 @@ assert_rc "N11: approve phase ok" 0
 T11=$(token_of)
 if [ -n "$T11" ]; then ok "N11: got one-shot token $T11"; else bad "N11: no token parsed"; fi
 echo "-- arming in-window swapper (SIGSTOP broker at claim-file creation)"
+docker exec "$HOST" rm -f /tmp/n11/armed
 docker exec "$HOST" sh -c '
   BEFORE=0
   for f in /var/lib/tmb-proto/claims/*; do [ -e "$f" ] && BEFORE=$((BEFORE+1)); done
   BPID=$(pgrep -x tmb-broker)
+  touch /tmp/n11/armed
   I=0
   while [ "$I" -lt 400000 ]; do
     N=0
@@ -379,6 +381,8 @@ docker exec "$HOST" sh -c '
   exit 3
 ' &
 N11_WATCH=$!
+# the watcher must count the store before the claim adds its file
+for _ in $(seq 1 100); do docker exec "$HOST" test -e /tmp/n11/armed && break; sleep 0.1; done
 run_client_json tmb debug claim --token "$T11" "$TD/n11.json"
 assert_rc "N11: claim exit 0 (a program ran)" 0
 wait "$N11_WATCH"; N11_WRC=$?
@@ -732,6 +736,22 @@ if docker exec "$HOST" sh -c 'grep "\"event\":\"claim_gc\"" /var/log/tmb/broker.
 run_client_json tmb debug raw "$TD/n21.json"
 assert_rc      "N21: replay of the redeemed token after restart -> exit 125" 125
 assert_err_has "N21: deny reason token_consumed_replay" "token_consumed_replay"
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N24: the old certificate allowlist and the -tls-* flags are gone"
+# Both failures happen before any socket is touched, so the running broker
+# is left alone.
+docker exec "$HOST" sh -c 'sed "s#\"allowed_requester_uids\": \[4242, 4343\],#\"allowed_requester_uids\": [4242, 4343], \"allowed_requester_fps\": [\"aa\"],#" /etc/tmb/config.json >/tmp/n24.json'
+OUT_FILE=$TD/n24a.out; ERR_FILE=$TD/n24a.err
+docker exec "$HOST" timeout 10 tmb-broker -config /tmp/n24.json -approval mock-approve >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc      "N24: allowed_requester_fps in the config -> broker exits 1" 1
+assert_err_has "N24: stderr names the old field" "allowed_requester_fps"
+assert_err_has "N24: stderr names the replacement" "allowed_requester_keys"
+OUT_FILE=$TD/n24b.out; ERR_FILE=$TD/n24b.err
+docker exec "$HOST" timeout 10 tmb-broker -tls-ca /etc/tmb/certs/ca.crt >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc      "N24: -tls-ca -> usage error, exit 2" 2
+assert_err_has "N24: -tls-ca is an unknown flag" "flag provided but not defined: -tls-ca"
 state_dump
 
 # -----------------------------------------------------------------------------

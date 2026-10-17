@@ -36,10 +36,6 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 	cfgPath := fs.String("config", "/etc/tmb/config.json", "config file path")
 	approval := fs.String("approval", "", "approval mode override: manual|mock-approve|mock-deny|mock-timeout")
 	ttlSec := fs.Int("ttl", 0, "token TTL seconds override (PoC: sign short TTLs, e.g. 2-3; production default 60)")
-	tlsAddrFlag := fs.String("tls-addr", "", "TLS listener addr override (host:port or :port; empty = config value/off)")
-	tlsCAFlag := fs.String("tls-ca", "", "TLS client CA file override")
-	tlsCertFlag := fs.String("tls-cert", "", "TLS server cert file override")
-	tlsKeyFlag := fs.String("tls-key", "", "TLS server key file override")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -111,18 +107,6 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 	}
 
 	tlsAddr, tlsCA, tlsCert, tlsKey := cfg.TLSAddr, cfg.TLSCAFile, cfg.TLSCertFile, cfg.TLSKeyFile
-	if *tlsAddrFlag != "" {
-		tlsAddr = *tlsAddrFlag
-	}
-	if *tlsCAFlag != "" {
-		tlsCA = *tlsCAFlag
-	}
-	if *tlsCertFlag != "" {
-		tlsCert = *tlsCertFlag
-	}
-	if *tlsKeyFlag != "" {
-		tlsKey = *tlsKeyFlag
-	}
 
 	var tlsCfg *tls.Config
 	var tlsLn net.Listener
@@ -149,7 +133,7 @@ func run(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) int {
 	startEv := map[string]any{
 		"pid": os.Getpid(), "socket": cfg.SocketPath, "mode": mode,
 		"ttl_seconds": int(ttl.Seconds()), "allowed_requester_uids": cfg.AllowedRequesterUIDs,
-		"allowed_requester_fps": cfg.AllowedRequesterFPs,
+		"allowed_requester_keys": cfg.AllowedRequesterKeys,
 	}
 	if tlsLn != nil {
 		startEv["tls_addr"] = tlsAddr

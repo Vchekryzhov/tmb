@@ -146,7 +146,7 @@ func TestApproverMessagesRejected(t *testing.T) {
 		reason string
 	}{
 		{"requester uid on the approver socket", UIDRequester(4242, 3), &proto.Request{Type: "list"}, "approver_not_allowed"},
-		{"cert identity", CertRequester(strings.Repeat("aa", 32)), &proto.Request{Type: "list"}, "approver_not_allowed"},
+		{"cert identity", KeyRequester(strings.Repeat("aa", 32)), &proto.Request{Type: "list"}, "approver_not_allowed"},
 		{"hash mismatch", human, &proto.Request{Type: "decide", ItemID: item.ID, ItemHash: strings.Repeat("0", 64), Decision: "approve"}, "decision_mismatch"},
 		{"unknown item", human, &proto.Request{Type: "decide", ItemID: "0123456789abcdef", ItemHash: "x", Decision: "approve"}, "no_such_item"},
 		{"bad decision", human, &proto.Request{Type: "decide", ItemID: item.ID, ItemHash: item.Hash, Decision: "maybe"}, "bad_request"},

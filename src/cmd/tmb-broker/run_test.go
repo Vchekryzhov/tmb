@@ -79,7 +79,9 @@ func TestBrokerRunSetupFailures(t *testing.T) {
 		{"state dir", func(c *Config) { c.StateDir = file }, nil, 1, "tmb-broker: claim store:"},
 		{"socket dir", func(c *Config) { c.SocketPath = filepath.Join(file, "b.sock") }, nil, 1, "tmb-broker: socket dir:"},
 		{"tls without files", func(c *Config) { c.TLSAddr = "127.0.0.1:0" }, nil, 1, "requires tls_ca_file"},
-		{"tls bad files", nil, []string{"-tls-addr", "127.0.0.1:0", "-tls-ca", file, "-tls-cert", file, "-tls-key", file}, 1, "tls ca"},
+		{"tls bad files", func(c *Config) {
+			c.TLSAddr, c.TLSCAFile, c.TLSCertFile, c.TLSKeyFile = "127.0.0.1:0", file, file, file
+		}, nil, 1, "tls ca"},
 		{"pidfile", func(c *Config) { c.PidFile = filepath.Join(file, "pid") }, nil, 1, "tmb-broker: pidfile:"},
 		{"approver socket", func(c *Config) { c.ApproverSocketPath = filepath.Join(file, "approve.sock") }, nil, 1, "tmb-broker: approver socket:"},
 	}

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"math/big"
 	"net"
@@ -110,11 +113,31 @@ func (ca *testCA) issueWith(t *testing.T, dir, name string, edit func(*x509.Cert
 
 // --- fingerprint --------------------------------------------------------------
 
-func TestCertFingerprintVector(t *testing.T) {
-	// sha256("") known-good vector: the fingerprint is sha256 over the DER.
-	if got, want := certFingerprint(nil),
-		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"; got != want {
-		t.Errorf("certFingerprint(empty) = %s, want %s", got, want)
+// The broker's identity of a certificate is the fingerprint the CA prints
+// for its key, and it is the same for every certificate on that key.
+func TestKeyFingerprintSurvivesReissue(t *testing.T) {
+	dir := t.TempDir()
+	if err := caInit(dir, caNow); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	_, pubPEM := newSandboxKey(t)
+	fpA, err := issueSandbox(dir, filepath.Join(dir, "a.crt"), pubPEM, "sbx", caNow)
+	if err != nil {
+		t.Fatalf("issue a: %v", err)
+	}
+	if _, err := issueSandbox(dir, filepath.Join(dir, "b.crt"), pubPEM, "sbx", caNow.Add(time.Hour)); err != nil {
+		t.Fatalf("issue b: %v", err)
+	}
+	a, b := readCert(t, filepath.Join(dir, "a.crt")), readCert(t, filepath.Join(dir, "b.crt"))
+	if bytes.Equal(a.Raw, b.Raw) {
+		t.Fatal("the two certificates are identical")
+	}
+	if keyFingerprint(a) != fpA || keyFingerprint(b) != fpA {
+		t.Errorf("fingerprints %s / %s, want the CA's %s for both", keyFingerprint(a), keyFingerprint(b), fpA)
+	}
+	sum := sha256.Sum256(a.RawSubjectPublicKeyInfo)
+	if keyFingerprint(a) != hex.EncodeToString(sum[:]) {
+		t.Errorf("fingerprint is not SHA-256 of the SPKI")
 	}
 }
 
@@ -130,12 +153,16 @@ func TestTLSListenerCertIdentity(t *testing.T) {
 		[]x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, nil)
 
 	// client1's fingerprint is the only allowlisted identity.
-	fp1 := certFingerprint(c1DER)
+	c1, err := x509.ParseCertificate(c1DER)
+	if err != nil {
+		t.Fatalf("parse client1: %v", err)
+	}
+	fp1 := keyFingerprint(c1)
 	cfg := &Config{
-		AllowedRequesterFPs: []string{fp1},
-		AllowedEnvKeys:      []string{"LANG"},
-		FixedEnv:            map[string]string{"PATH": "/usr/bin:/bin"},
-		AllowedCwdRoots:     []string{"/"},
+		AllowedRequesterKeys: []string{fp1},
+		AllowedEnvKeys:       []string{"LANG"},
+		FixedEnv:             map[string]string{"PATH": "/usr/bin:/bin"},
+		AllowedCwdRoots:      []string{"/"},
 	}
 	log, err := NewLogger(filepath.Join(dir, "broker.log"))
 	if err != nil {
