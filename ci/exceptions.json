@@ -234,7 +234,7 @@
       "scanner": "staticcheck",
       "rule": "SA4023",
       "location": "src/cmd/tmb-broker/main.go",
-      "match": "if err := b.ServeTLS(tls.NewListener(tlsLn, tlsCfg)); err != nil {",
+      "match": "if err := b.ServeTLS(tls.NewListener(tlsLn, b.listenerTLSConfig())); err != nil {",
       "reason": "dead nil check (ServeTLS only returns on listener failure); harmless, product fix belongs to the product owner (#15)",
       "owner": "Vchekryzhov",
       "issue": "https://github.com/Vchekryzhov/tmb/issues/15",

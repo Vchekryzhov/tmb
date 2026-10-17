@@ -68,6 +68,7 @@ usage:
   tmb debug approve --json FILE|-                                            debug: approval phase only
   tmb debug claim --token TOKEN --json FILE|-                                debug: claim phase only
   tmb debug raw --json FILE|-                                                debug: raw request verbatim
+  TMB_DEBUG=1 (any exec or debug over TLS): print the broker certificate serial to stderr
 endpoint selection (exec and debug):
   unix socket (default): --socket PATH (default %[1]s, env TMB_SOCK)
   TLS (mTLS endpoint):   --addr HOST:PORT (env TMB_ADDR) plus --ca/--cert/--key
@@ -210,7 +211,21 @@ func dialTLS(addr, caPath, certPath, keyPath string) (net.Conn, error) {
 			"TLS handshake with %s failed: %v - FAIL CLOSED, nothing executed", addr, err)}
 	}
 	_ = raw.SetDeadline(time.Time{})
+	if os.Getenv("TMB_DEBUG") != "" {
+		debugBrokerCert(os.Stderr, tc.ConnectionState())
+	}
 	return tc, nil
+}
+
+// debugBrokerCert prints the serial number of the broker certificate this
+// connection was handshaken with (TMB_DEBUG set): an operator, or the
+// harness, sees which certificate a reloaded broker served.
+func debugBrokerCert(w io.Writer, st tls.ConnectionState) {
+	if len(st.PeerCertificates) == 0 {
+		return
+	}
+	c := st.PeerCertificates[0]
+	fmt.Fprintf(w, "tmb: debug: broker certificate serial=%X subject=%s\n", c.SerialNumber, c.Subject.CommonName)
 }
 
 func isRetryable(err error) bool {
