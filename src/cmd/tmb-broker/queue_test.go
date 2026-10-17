@@ -73,7 +73,7 @@ func queueRequest(t *testing.T, b *Broker, req *proto.Request, id RequesterID) (
 
 func logText(t *testing.T, b *Broker) string {
 	t.Helper()
-	raw, err := os.ReadFile(b.log.f.Name())
+	raw, err := os.ReadFile(b.log.Path())
 	if err != nil {
 		t.Fatalf("read log: %v", err)
 	}

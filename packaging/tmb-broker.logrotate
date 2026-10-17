@@ -1,0 +1,15 @@
+# tmb-broker journal (log_path in /etc/tmb/config.json). The broker reopens
+# log_path on SIGHUP (systemctl reload), so no copytruncate.
+/var/log/tmb/*.jsonl {
+	daily
+	rotate 14
+	compress
+	delaycompress
+	missingok
+	notifempty
+	create 0600 root root
+	sharedscripts
+	postrotate
+		systemctl reload tmb-broker.service >/dev/null 2>&1 || true
+	endscript
+}

@@ -12,9 +12,14 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"tmb-poc/internal/buildinfo"
 )
 
 func main() {
+	if buildinfo.HandleVersion("tmb-broker", os.Args[1:], os.Stdout) {
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "ca" {
 		os.Exit(runCA(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}

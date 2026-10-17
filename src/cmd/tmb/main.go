@@ -25,12 +25,16 @@ import (
 	"syscall"
 	"time"
 
+	"tmb-poc/internal/buildinfo"
 	"tmb-poc/internal/proto"
 )
 
 const defaultSocket = "/run/tmb/tmb.sock"
 
 func main() {
+	if buildinfo.HandleVersion("tmb", os.Args[1:], os.Stdout) {
+		return
+	}
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
@@ -101,6 +105,7 @@ usage:
   tmb approve [--list | --yes ID | --no ID] [--socket PATH]                   approver: decide queued requests
                         (socket env TMB_APPROVE_SOCK, default %[2]s)
   tmb keygen --out FILE                                                      sandbox key (P-256, 0600); prints public key + fingerprint
+  tmb version                                                                print the release version (also -version)
   tmb fingerprint FILE                                                       key fingerprint of a PEM key, certificate or CSR
   tmb debug approve --json FILE|-                                            debug: approval phase only
   tmb debug claim --token TOKEN --json FILE|-                                debug: claim phase only

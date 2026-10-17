@@ -102,7 +102,7 @@ func TestClaimAfterTTLIsDenied(t *testing.T) {
 // approvalEvents returns every "approval" JSONL event the broker logged.
 func approvalEvents(t *testing.T, b *Broker) []map[string]any {
 	t.Helper()
-	raw, err := os.ReadFile(b.log.f.Name())
+	raw, err := os.ReadFile(b.log.Path())
 	if err != nil {
 		t.Fatalf("read log: %v", err)
 	}

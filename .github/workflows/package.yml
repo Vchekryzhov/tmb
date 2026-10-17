@@ -1,0 +1,61 @@
+# Packages (issue #44): ci/run.sh package builds the release files, builds
+# them a second time for a byte comparison and installs the deb in Ubuntu and
+# the rpm in Fedora. Called by ci.yml on every PR and push (the release build
+# is proven before any tag) and by release.yml on a v* tag; it never
+# publishes anything.
+name: package
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Release tag (vMAJOR.MINOR.PATCH); empty builds v0.0.0-dev+<sha>
+        type: string
+        required: false
+        default: ""
+
+permissions: {}
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      # a called workflow does not inherit the caller's env
+      TMB_CI_SHA: ${{ github.sha }}
+      TMB_CI_RUN_ID: ${{ github.run_id }}
+      TMB_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+        with:
+          tools: "false"
+      - run: ci/run.sh package
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-package
+          path: out/ci/results
+          retention-days: 14
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-package
+          path: |
+            out/ci/reports/dist
+            out/ci/reports/package
+          retention-days: 14
+          overwrite: true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: out/dist
+          retention-days: 14
+          overwrite: true
+          if-no-files-found: error

@@ -19,6 +19,8 @@
 #   ci/run.sh links-external        external documentation links
 #   ci/run.sh gate <event>          ci-gate over every result
 #   ci/run.sh openshell             full acceptance (phase B): run-all.sh on the dedicated Mac, all three logs verified
+#   ci/run.sh dist                  release files in out/dist: deb/rpm, tmb tar.gz, SHA256SUMS (version: TMB_VERSION or git)
+#   ci/run.sh package               dist + a second build compared byte for byte + deb/rpm install tests in containers
 #   ci/run.sh local                 lint + test + ci-selftest + coverage + security + build + fuzz short
 #
 # Every check writes out/ci/results/<check>.json (see tmbci). A check that
@@ -31,6 +33,7 @@ RESULTS=$OUT/results
 REPORTS=$OUT/reports
 BIN=$OUT/bin
 SRC=$ROOT/src
+DIST=${TMB_DIST:-$ROOT/out/dist}
 mkdir -p "$RESULTS" "$REPORTS"
 export PATH="$BIN:$PATH"
 export TMB_CI_SHA=${TMB_CI_SHA:-$(git -C "$ROOT" rev-parse HEAD)}
@@ -148,7 +151,7 @@ cmd_lint() {
   by_rc lint/zizmor $rc "$L/zizmor.txt" "1"
 
   log "Hadolint"
-  while IFS= read -r l; do dockerfiles+=("$l"); done < <(cd "$ROOT" && git ls-files 'harness/images/Dockerfile.*')
+  while IFS= read -r l; do dockerfiles+=("$l"); done < <(cd "$ROOT" && git ls-files 'harness/images/Dockerfile.*' 'packaging/test/Dockerfile.*')
   (cd "$ROOT" && hadolint --no-color "${dockerfiles[@]}") >"$L/hadolint.txt" 2>&1
   by_rc lint/hadolint $? "$L/hadolint.txt" "1"
 
@@ -319,6 +322,151 @@ cmd_build() {
 }
 
 sha256sum_all() { for f in *; do if command -v sha256sum >/dev/null; then sha256sum "$f"; else shasum -a 256 "$f"; fi; done; }
+
+# dist_version: TMB_VERSION (the release tag), else the v* tag on HEAD, else
+# v0.0.0-dev+<sha12>. Same commit, same version: the build stays reproducible.
+dist_version() {
+  local v=${TMB_VERSION:-}
+  [ -n "$v" ] || v=$(git -C "$ROOT" describe --tags --exact-match --match 'v*' HEAD 2>/dev/null) \
+    || v="v0.0.0-dev+$(git -C "$ROOT" rev-parse --short=12 HEAD)"
+  if ! [[ $v =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?(\+[0-9A-Za-z.]+)?$ ]]; then
+    echo "version $v is not vMAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]" >&2
+    return 1
+  fi
+  echo "$v"
+}
+
+DIST_TARGETS=("tmb linux amd64" "tmb linux arm64" "tmb darwin arm64" "tmb-broker linux amd64" "tmb-broker linux arm64")
+
+# dist_build OUTDIR VERSION LOG: binaries (version in buildinfo), deb and rpm
+# of tmb-broker and tmb for amd64/arm64, tmb tar.gz for linux/amd64,
+# linux/arm64, darwin/arm64, SHA256SUMS. File mtimes in packages and
+# archives are the commit time (SOURCE_DATE_EPOCH).
+dist_build() {
+  local out=$1 ver=$2 logf=$3 stage epoch t name os arch p
+  stage=$(mktemp -d)
+  epoch=$(git -C "$ROOT" log -1 --format=%ct HEAD)
+  rm -rf "$out"; mkdir -p "$out" "$stage/bin" "$stage/build"
+  cp -R "$ROOT/packaging" "$stage/packaging"
+  for t in "${DIST_TARGETS[@]}"; do
+    read -r name os arch <<<"$t"
+    (cd "$SRC" && GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -trimpath -buildvcs=false \
+      -ldflags="-buildid= -X tmb-poc/internal/buildinfo.Version=$ver" -o "$stage/build/$name-$os-$arch" "./cmd/$name") >>"$logf" 2>&1 \
+      || { rm -rf "$stage"; return 1; }
+  done
+  for arch in amd64 arm64; do
+    for name in tmb-broker tmb; do
+      cp "$stage/build/$name-linux-$arch" "$stage/bin/$name"
+      for p in deb rpm; do
+        (cd "$stage" && TMB_VERSION=$ver TMB_ARCH=$arch SOURCE_DATE_EPOCH=$epoch \
+          nfpm package -f "packaging/$name.nfpm.yaml" -p "$p" -t "$out/") >>"$logf" 2>&1 \
+          || { rm -rf "$stage"; return 1; }
+      done
+    done
+  done
+  for t in "linux amd64" "linux arm64" "darwin arm64"; do
+    read -r os arch <<<"$t"
+    "$BIN/tmbci" archive -file-out "$out/tmb_${ver#v}_${os}_${arch}.tar.gz" -mtime "$epoch" \
+      -file "tmb=$stage/build/tmb-$os-$arch" >>"$logf" 2>&1 || { rm -rf "$stage"; return 1; }
+  done
+  (cd "$out" && sha256sum_all) >"$stage/SHA256SUMS" && mv "$stage/SHA256SUMS" "$out/SHA256SUMS"
+  rm -rf "$stage"
+}
+
+# dist_tools: tmbci from this tree and nfpm at the ci/tools.lock version
+# (installed and checksum-verified when missing or different), so a clean
+# checkout needs only Go, git and curl for `ci/run.sh dist`.
+dist_tools() {
+  local want
+  want=$(awk '$1 == "nfpm" {print $2; exit}' "$ROOT/ci/tools.lock")
+  if [ -x "$BIN/nfpm" ] && "$BIN/nfpm" --version 2>&1 | grep -qE "^GitVersion:[[:space:]]+v?$want\$"; then
+    (cd "$ROOT/ci" && GOFLAGS=-mod=readonly CGO_ENABLED=0 go build -trimpath -o "$BIN/tmbci" ./cmd/tmbci)
+  else
+    "$ROOT/ci/install-tools.sh" "$BIN" nfpm
+  fi
+}
+
+cmd_dist() {
+  dist_tools || { echo "installing tmbci/nfpm failed" >&2; exit 2; }
+  local D=$REPORTS/dist ver
+  mkdir -p "$D"; : >"$D/dist.log"; rm -f "$D/version.txt"
+  ver=$(dist_version 2>>"$D/dist.log") || { result package/dist ERROR "bad version" "$D/dist.log"; return; }
+  log "dist $ver into $DIST"
+  if dist_build "$DIST" "$ver" "$D/dist.log"; then
+    echo "$ver" >"$D/version.txt"
+    result package/dist PASS "$ver: $(grep -c . "$DIST/SHA256SUMS") files (deb, rpm, tar.gz) in ${DIST#"$ROOT"/}" "$DIST/SHA256SUMS"
+  else
+    result package/dist FAIL "build failed" "$D/dist.log"
+  fi
+}
+
+# install_test KIND DISTRO VERSION ARCH: build the install-test image of
+# packaging/test/Dockerfile.DISTRO. The packages are copied in (no mounts),
+# installed and checked during the build; nothing runs privileged.
+install_test() {
+  local kind=$1 distro=$2 ver=$3 arch=$4 ctx tag rc
+  ctx=$(mktemp -d)
+  mkdir -p "$ctx/dist"
+  cp "$DIST"/*."$kind" "$ctx/dist/"
+  cp "$ROOT/packaging/test/check-install.sh" "$ctx/"
+  tag="tmb-pkg-test/$distro:${TMB_CI_RUN_ID}-${TMB_CI_SHA:0:12}"
+  docker build --no-cache --progress=plain -f "$ROOT/packaging/test/Dockerfile.$distro" \
+    --build-arg "TMB_VERSION=$ver" --build-arg "TMB_ARCH=$arch" -t "$tag" "$ctx" >"$REPORTS/package/$distro.log" 2>&1
+  rc=$?
+  docker image rm -f "$tag" >/dev/null 2>&1
+  rm -rf "$ctx"
+  grep -oE '(CHECK (PASS|FAIL)|RESULT:) .*' "$REPORTS/package/$distro.log" >"$REPORTS/package/$distro.checks"
+  # 0 green, 1 a check failed, 2 the image did not get as far as the checks
+  if grep -q '^RESULT: GREEN' "$REPORTS/package/$distro.checks" && [ $rc -eq 0 ]; then return 0; fi
+  grep -q '^RESULT: RED' "$REPORTS/package/$distro.checks" && return 1
+  return 2
+}
+
+# install_result CHECK RC LABEL SUMMARY
+install_result() {
+  case $2 in
+    0) result "$1" PASS "$3" "$4" ;;
+    1) result "$1" FAIL "failed checks in $3" "$4" ;;
+    *) result "$1" ERROR "test image did not reach the checks (base image, package mirror or docker)" "${4%.checks}.log" ;;
+  esac
+}
+
+cmd_package() {
+  local P=$REPORTS/package ver arch
+  rm -rf "$P"; mkdir -p "$P"
+  cmd_dist
+  [ -s "$REPORTS/dist/version.txt" ] || {
+    for c in package/reproducible package/deb-ubuntu package/rpm-fedora; do result $c NOT_RUN "dist failed"; done
+    return
+  }
+  ver=$(cat "$REPORTS/dist/version.txt")
+  log "second clean dist build (fresh GOCACHE) for byte comparison"
+  local gocache rc2=0
+  gocache=$(mktemp -d)
+  GOCACHE=$gocache dist_build "$P/second" "$ver" "$P/second.log" || rc2=$?
+  rm -rf "$gocache"
+  if [ $rc2 -eq 0 ]; then
+    if diff -u "$DIST/SHA256SUMS" "$P/second/SHA256SUMS" >"$P/repro.diff"; then
+      result package/reproducible PASS "two clean builds give byte-identical binaries, packages and archives" "$DIST/SHA256SUMS"
+    else
+      result package/reproducible FAIL "builds differ" "$P/repro.diff"
+    fi
+  else
+    result package/reproducible ERROR "second build failed" "$P/second.log"
+  fi
+  rm -rf "$P/second"
+  case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; *) arch=arm64 ;; esac
+  if ! docker info >/dev/null 2>&1; then
+    result package/deb-ubuntu ERROR "docker unavailable"; result package/rpm-fedora ERROR "docker unavailable"; return
+  fi
+  local rc
+  log "deb install test in Ubuntu ($arch)"
+  install_test deb ubuntu "$ver" "$arch"; rc=$?
+  install_result package/deb-ubuntu $rc "Ubuntu 24.04: deb installed and checked on $arch, metadata of both arches" "$P/ubuntu.checks"
+  log "rpm install test in Fedora ($arch)"
+  install_test rpm fedora "$ver" "$arch"; rc=$?
+  install_result package/rpm-fedora $rc "Fedora 44: rpm installed and checked on $arch, metadata of both arches" "$P/fedora.checks"
+}
 
 cmd_fuzz() {
   need_tmbci
@@ -591,6 +739,8 @@ case "$cmd" in
   coverage) cmd_coverage "$@" ;;
   security) cmd_security ;;
   build) cmd_build ;;
+  dist) cmd_dist ;;
+  package) cmd_package ;;
   fuzz) cmd_fuzz "$@" ;;
   secrets) cmd_secrets "$@" ;;
   harness) cmd_harness ;;
@@ -604,6 +754,6 @@ case "$cmd" in
   gate) rm -f "$MARK"; cmd_gate "$@"; exit $? ;;
   openshell) cmd_openshell ;;
   local) cmd_local ;;
-  *) rm -f "$MARK"; sed -n '2,26p' "$0"; exit 2 ;;
+  *) rm -f "$MARK"; sed -n '2,28p' "$0"; exit 2 ;;
 esac
 worst_of_run

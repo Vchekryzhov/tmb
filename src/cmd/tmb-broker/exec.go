@@ -95,7 +95,11 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 	evStart["exe_ino"] = p.ExeIno
 	evStart["cwd_verified"] = p.CwdPinned
 	evStart["cwd_via_fd"] = cwdViaFd
-	b.log.Event("exec_start", evStart)
+	// no execution without its record: exec_start must reach the disk
+	if b.log.Event("exec_start", evStart) != nil {
+		b.deny(req, id, "audit_unavailable", auditUnavailableDetail, conn)
+		return
+	}
 
 	if err := cmd.Start(); err != nil {
 		b.log.Event("exec_fail", map[string]any{"token": tokenID, "error": err.Error()})

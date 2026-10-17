@@ -1,0 +1,13 @@
+# Install test of the rpm packages (ci/run.sh package). Build context: a temp
+# dir with dist/ and check-install.sh. systemd is installed for its tools
+# (systemd-analyze, systemd-tmpfiles), never started: the container runs no init.
+FROM fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# hadolint ignore=DL3041 # disposable test image: distro package versions roll; only the TMB packages are under test
+RUN dnf -y install --setopt=install_weak_deps=False systemd logrotate \
+ && dnf clean all
+COPY dist/ /dist/
+COPY check-install.sh /check-install.sh
+ARG TMB_VERSION
+ARG TMB_ARCH
+RUN bash /check-install.sh rpm "$TMB_VERSION" "$TMB_ARCH" | tee /check-install.log

@@ -1,0 +1,55 @@
+# tmb-broker deb and rpm from one description (nfpm, pinned in ci/tools.lock).
+# ci/run.sh dist runs nfpm in a staging directory that holds bin/<binary>
+# and a copy of packaging/, and sets TMB_VERSION (git tag) and TMB_ARCH.
+# Every mode is explicit, so the package does not depend on the umask.
+name: tmb-broker
+arch: ${TMB_ARCH}
+platform: linux
+version: ${TMB_VERSION}
+version_schema: semver
+release: "1"
+section: admin
+priority: optional
+maintainer: Viktor Chekryzhov <Vchekryzhov@users.noreply.github.com>
+homepage: https://github.com/Vchekryzhov/tmb
+# nfpm writes os.Hostname() into the rpm header by default: a fixed build
+# host keeps the rpm byte-identical across builders (Fedora uses the same name)
+rpm:
+  buildhost: reproducible
+description: |-
+  TMB privileged execution broker.
+  Runs commands that a human approved for a sandboxed agent, as root,
+  over a unix socket and an mTLS listener. Ships the systemd unit, an
+  example config, logrotate and tmpfiles.d configs; the operator writes
+  /etc/tmb/config.json and starts tmb-broker.service.
+contents:
+  - src: bin/tmb-broker
+    dst: /usr/bin/tmb-broker
+    file_info: {mode: 0755}
+  - src: packaging/tmb-broker.service
+    dst: /usr/lib/systemd/system/tmb-broker.service
+    file_info: {mode: 0644}
+  - src: packaging/config.json.example
+    dst: /etc/tmb/config.json.example
+    type: config|noreplace
+    file_info: {mode: 0644}
+  - src: packaging/tmb-broker.logrotate
+    dst: /etc/logrotate.d/tmb-broker
+    type: config|noreplace
+    file_info: {mode: 0644}
+  - src: packaging/tmb.tmpfiles
+    dst: /usr/lib/tmpfiles.d/tmb.conf
+    file_info: {mode: 0644}
+  - dst: /etc/tmb
+    type: dir
+    file_info: {mode: 0755}
+  - dst: /var/lib/tmb
+    type: dir
+    file_info: {mode: 0700}
+  - dst: /var/log/tmb
+    type: dir
+    file_info: {mode: 0750}
+scripts:
+  postinstall: packaging/scripts/postinstall.sh
+  preremove: packaging/scripts/preremove.sh
+  postremove: packaging/scripts/postremove.sh

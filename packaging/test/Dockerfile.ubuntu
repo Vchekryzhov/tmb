@@ -1,0 +1,14 @@
+# Install test of the deb packages (ci/run.sh package). Build context: a temp
+# dir with dist/ and check-install.sh. systemd is installed for its tools
+# (systemd-analyze, systemd-tmpfiles), never started: the container runs no init.
+FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# hadolint ignore=DL3008 # disposable test image: distro package versions roll; only the TMB packages are under test
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends systemd logrotate \
+ && rm -rf /var/lib/apt/lists/*
+COPY dist/ /dist/
+COPY check-install.sh /check-install.sh
+ARG TMB_VERSION
+ARG TMB_ARCH
+RUN bash /check-install.sh deb "$TMB_VERSION" "$TMB_ARCH" | tee /check-install.log

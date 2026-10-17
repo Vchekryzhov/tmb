@@ -116,7 +116,7 @@ func tlsMaterialChanged(cur, next *tls.Config) bool {
 	return false
 }
 
-// Reload re-reads the config at path (SIGHUP). An invalid config, or TLS
+// Reload re-reads the config at path (SIGHUP) and reopens the journal. An invalid config, or TLS
 // files that do not load, change nothing: reload_failed with the reason, in
 // the log and on stderr. Otherwise the reloadable fields and the TLS
 // material are swapped in at once; changed startup-only fields are reported
@@ -125,17 +125,23 @@ func tlsMaterialChanged(cur, next *tls.Config) bool {
 // identity, the expiry and the wait they were given.
 func (b *Broker) Reload(path string) {
 	next, err := loadConfig(path)
+	// reopen the journal at its path (logrotate moved it away) whatever the
+	// config says, and before this reload's events, so they land in the new
+	// file; a failed reopen makes the journal unavailable (log.go)
+	_ = b.log.Reopen()
 	if err != nil {
 		b.reloadFailed(err)
 		return
 	}
 	cur := b.pol.Load()
 	changed, ignored := configDiff(cur.cfg, next)
-	ignoredEvents := make([]map[string]any, 0, len(ignored))
+	type ignoredField struct {
+		field           string
+		running, config any
+	}
+	ignoredFields := make([]ignoredField, 0, len(ignored))
 	for _, f := range ignored {
-		ignoredEvents = append(ignoredEvents, map[string]any{
-			"field": f, "running": fieldValue(cur.cfg, f), "config": fieldValue(next, f),
-		})
+		ignoredFields = append(ignoredFields, ignoredField{f, fieldValue(cur.cfg, f), fieldValue(next, f)})
 	}
 	keepStartupFields(next, cur.cfg)
 
@@ -162,9 +168,9 @@ func (b *Broker) Reload(path string) {
 	if b.claims != nil {
 		b.claims.ExtendRetention(ttl)
 	}
-	for _, ev := range ignoredEvents {
-		fmt.Fprintf(os.Stderr, "tmb-broker: reload: %s changed, ignored until restart\n", ev["field"])
-		b.log.Event("reload_ignored_field", ev)
+	for _, f := range ignoredFields {
+		fmt.Fprintf(os.Stderr, "tmb-broker: reload: %s changed, ignored until restart\n", f.field)
+		b.log.Event("reload_ignored_field", map[string]any{"field": f.field, "running": f.running, "config": f.config})
 	}
 	b.pol.Store(newPolicy(next, ttl))
 	if nextTLS != nil {

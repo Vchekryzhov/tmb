@@ -1,0 +1,27 @@
+# tmb-broker: privileged execution broker (https://github.com/Vchekryzhov/tmb).
+# No systemd sandboxing (ProtectSystem, PrivateTmp, ProtectHome, ...): the
+# broker runs arbitrary approved commands as root, and they must see the real
+# host. KillMode=process: stop and restart end the broker only, approved
+# commands that are already running finish.
+[Unit]
+Description=TMB privileged execution broker
+Documentation=https://github.com/Vchekryzhov/tmb
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStartPre=/bin/sh -c 'test -f /etc/tmb/config.json || { echo "tmb-broker: /etc/tmb/config.json not found: copy /etc/tmb/config.json.example to /etc/tmb/config.json and edit it" >&2; exit 1; }'
+ExecStart=/usr/bin/tmb-broker -config /etc/tmb/config.json
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+KillMode=process
+RuntimeDirectory=tmb
+RuntimeDirectoryMode=0755
+StateDirectory=tmb
+StateDirectoryMode=0700
+LogsDirectory=tmb
+LogsDirectoryMode=0750
+
+[Install]
+WantedBy=multi-user.target

@@ -45,7 +45,7 @@
       "scanner": "gosec",
       "rule": "G304",
       "location": "src/cmd/tmb-broker/log.go",
-      "match": "os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600",
+      "match": "os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o600",
       "reason": "log path comes from the root-owned broker config",
       "owner": "Vchekryzhov",
       "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
@@ -117,6 +117,26 @@
       "location": "src/cmd/tmb/main.go",
       "match": "cand := filepath.Join(dir, arg0)",
       "reason": "client-side PATH resolution inside the unprivileged sandbox; the broker requires an absolute path and re-validates it",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/journal_test.go",
+      "match": "raw, err := os.ReadFile(path)",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/audit_test.go",
+      "match": "f, err := os.Open(path)",
+      "reason": "the schema document in the repository (docs/audit-schema.md), fixed by the test",
       "owner": "Vchekryzhov",
       "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
       "expires": "2027-04-14"
