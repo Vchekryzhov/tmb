@@ -428,7 +428,22 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 	}
 	b.pending[hash] = pend
 	b.mu.Unlock()
+	// an approval nobody claims must not hold its exe and cwd fds until the
+	// next request for the same hash: drop it when it expires
+	time.AfterFunc(time.Until(pend.Expiry), func() { b.dropIfExpired(hash, pend) })
 	return true
+}
+
+// dropIfExpired removes pend from the pending table and closes its pins if
+// it is still the live entry for hash. A claim that took it, or a
+// re-approve that replaced it, already owns or closed its pins.
+func (b *Broker) dropIfExpired(hash string, pend *pendingApproval) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.pending[hash] == pend {
+		delete(b.pending, hash)
+		pend.closePins()
+	}
 }
 
 // runApprovalInteraction performs the mode-specific approval. manual prints

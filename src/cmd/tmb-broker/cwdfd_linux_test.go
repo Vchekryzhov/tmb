@@ -113,12 +113,15 @@ func TestCwdPinClosedOnEveryOutcome(t *testing.T) {
 		}
 		req := cwdReq(exe, cwd, "cwd-fd-ttl", "x")
 		approveDo(t, b, req, UIDRequester(4242, 22))
-		time.Sleep(250 * time.Millisecond)
+		// nobody claims or touches the hash again: expiry alone closes the fds
+		if !waitDirPinsClosed(cwd, 2*time.Second) {
+			t.Errorf("after expiry: fds held on cwd = %d, want 0", dirPinFds(cwd))
+		}
+		if !waitPinsClosed(exe, time.Second) {
+			t.Errorf("after expiry: fds held on exe = %d, want 0", exePinFds(exe))
+		}
 		if _, has := b.takePending(req.Hash()); has {
 			t.Fatal("pending should be expired")
-		}
-		if got := dirPinFds(cwd); got != 0 {
-			t.Errorf("after expiry: fds held on cwd = %d, want 0", got)
 		}
 	})
 	t.Run("exec_error", func(t *testing.T) {
