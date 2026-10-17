@@ -176,6 +176,10 @@ func TestDecodeRequest(t *testing.T) {
 			t.Errorf("DecodeRequest accepted %q", bad)
 		}
 	}
+	// null decodes to a zero Request; the broker denies its empty type
+	if req, err := DecodeRequest([]byte(`null`)); err != nil || req.Type != "" {
+		t.Errorf("DecodeRequest(null) = %+v, %v; want a zero Request", req, err)
+	}
 }
 
 func TestDecodeRequestRejectsTrailingData(t *testing.T) {

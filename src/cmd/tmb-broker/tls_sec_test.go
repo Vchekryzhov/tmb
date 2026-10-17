@@ -33,12 +33,15 @@ func tlsBroker(t *testing.T, ca *testCA, dir string, fps ...string) (addr string
 	if err != nil {
 		t.Fatal(err)
 	}
+	b.tlsCfg.Store(tlsCfg)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { ln.Close() })
-	go b.ServeTLS(tls.NewListener(ln, tlsCfg))
+	// the production listener config, which takes the material from the
+	// reloadable snapshot
+	go b.ServeTLS(tls.NewListener(ln, b.listenerTLSConfig()))
 	return ln.Addr().String(), b
 }
 

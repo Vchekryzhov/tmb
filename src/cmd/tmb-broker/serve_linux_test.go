@@ -55,16 +55,40 @@ func send(t *testing.T, sock string, req *proto.Request) net.Conn {
 
 func terminal(t *testing.T, conn net.Conn) *proto.Frame {
 	t.Helper()
+	f, err := readTerminal(conn)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	return f
+}
+
+// readTerminal reads frames until exit or denied and closes conn.
+func readTerminal(conn net.Conn) (*proto.Frame, error) {
 	defer conn.Close()
 	for {
 		f, err := proto.ReadFrame(conn)
 		if err != nil {
-			t.Fatalf("read: %v", err)
+			return nil, err
 		}
 		if f.Type == "exit" || f.Type == "denied" {
-			return f
+			return f, nil
 		}
 	}
+}
+
+// exchange sends req on a new connection and returns its terminal frame.
+// It does not touch t, so goroutines can call it.
+func exchange(sock string, req *proto.Request) (*proto.Frame, error) {
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		return nil, err
+	}
+	if err := proto.WriteFrame(conn, req); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+	return readTerminal(conn)
 }
 
 func TestServeUnixDeniesNonAllowlistedUID(t *testing.T) {
@@ -97,7 +121,12 @@ func TestServeUnixConcurrentConnectionsRunAtMostOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if f := terminal(t, send(t, sock, req)); f.Type == "exit" {
+			f, err := exchange(sock, req)
+			if err != nil {
+				t.Errorf("concurrent claim: %v", err)
+				return
+			}
+			if f.Type == "exit" {
 				mu.Lock()
 				exits++
 				mu.Unlock()
@@ -171,7 +200,12 @@ func TestServeUnixConcurrentForeignClaimsKeepIdentityBinding(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			frames <- terminal(t, send(t, sock, req))
+			f, err := exchange(sock, req)
+			if err != nil {
+				t.Errorf("foreign claim: %v", err)
+				return
+			}
+			frames <- f
 		}()
 	}
 	wg.Wait()

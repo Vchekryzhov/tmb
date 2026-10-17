@@ -46,7 +46,7 @@ func TestClaimDeniedWhenRequestMutatedAfterApproval(t *testing.T) {
 	}{
 		{"argv", func(r *proto.Request) { r.Argv = append(r.Argv, "--extra") }, "token_binding_mismatch"},
 		{"env value", func(r *proto.Request) { r.Env["LANG"] = "POSIX" }, "token_binding_mismatch"},
-		{"env key added", func(r *proto.Request) { r.Env = map[string]string{} }, "token_binding_mismatch"},
+		{"env key removed", func(r *proto.Request) { r.Env = map[string]string{} }, "token_binding_mismatch"},
 		{"nonce", func(r *proto.Request) { r.Nonce += "-other" }, "token_binding_mismatch"},
 		{"cwd", func(r *proto.Request) { r.Cwd = "/" }, "token_binding_mismatch"},
 		// the broker accepts only uid 0, so a changed uid is refused before

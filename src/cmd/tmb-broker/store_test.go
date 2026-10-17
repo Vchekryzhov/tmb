@@ -81,9 +81,23 @@ func (f faultyFile) Close() error {
 	return err
 }
 
+// secondOpen opens the first claim file normally and every later one
+// through next.
+func secondOpen(next func(string) (claimFile, error)) func(string) (claimFile, error) {
+	calls := 0
+	return func(p string) (claimFile, error) {
+		calls++
+		if calls == 1 {
+			return openClaimFile(p)
+		}
+		return next(p)
+	}
+}
+
 // SEC-09: a create, write, fsync or close failure of the claim store
 // denies the claim with claim_store_error and runs nothing, and the
-// half-written claim still blocks a retry.
+// half-written claim still blocks a retry. This holds for the nonce claim
+// too, which comes after the token is already spent.
 func TestClaimStoreFailureFailsClosed(t *testing.T) {
 	wrap := func(ff faultyFile) func(string) (claimFile, error) {
 		return func(p string) (claimFile, error) {
@@ -103,6 +117,8 @@ func TestClaimStoreFailureFailsClosed(t *testing.T) {
 		"write":  {wrap(faultyFile{failWrite: true}), false},
 		"fsync":  {wrap(faultyFile{failSync: true}), false},
 		"close":  {wrap(faultyFile{failClose: true}), false},
+		// the token claim succeeds and the nonce claim after it fails
+		"nonce write": {secondOpen(wrap(faultyFile{failWrite: true})), false},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

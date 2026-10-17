@@ -65,9 +65,10 @@ type canonicalRequest struct {
 	Nonce      string            `json:"nonce"`
 }
 
-// DecodeRequest parses one request frame body. Anything but exactly one
-// JSON object with correctly typed fields is an error; unknown fields are
-// ignored and the request type is checked by the broker.
+// DecodeRequest parses one request frame body with json.Unmarshal
+// semantics: invalid JSON or a wrongly typed field is an error, unknown
+// fields are ignored, and a JSON null decodes to a zero Request. The
+// request type, and so a zero Request, is checked by the broker.
 func DecodeRequest(raw []byte) (*Request, error) {
 	var req Request
 	if err := json.Unmarshal(raw, &req); err != nil {
