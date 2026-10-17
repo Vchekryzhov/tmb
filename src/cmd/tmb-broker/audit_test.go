@@ -546,3 +546,90 @@ func f(l *Logger, name string, m map[string]any) {
 		t.Error("an event name that is not a literal must fail the extraction")
 	}
 }
+
+// frozenSchemas holds, per schema version, the field set of every event as
+// formatSchemaLines renders it. A released version does not change:
+// TestAuditSchemaVersion fails when an event's fields or types differ from
+// the frozen set of auditSchemaVersion (raise the version and freeze the new
+// set) and when an event is missing from it (a new event keeps the version:
+// add its line).
+var frozenSchemas = map[int]string{
+	1: `
+* event:string schema:integer ts:string
+approval approver:string argv:array_of_string decision:string executable:string mode:string nonce:string reason:string requester_fp:string requester_pid:integer requester_uid:integer result:string
+approval_timeout item:string requester_fp:string requester_pid:integer requester_uid:integer wait_seconds:integer
+approver_denied reason:string requester_fp:string requester_pid:integer requester_uid:integer
+audit_unavailable error:string path:string pid:integer
+bad_frame error:string requester_fp:string requester_pid:integer requester_uid:integer
+bad_request error:string requester_fp:string requester_pid:integer requester_uid:integer
+broker_start allowed_requester_keys:array_of_string allowed_requester_uids:array_of_integer mode:string pid:integer socket:string tls_addr:string ttl_seconds:integer
+broker_stop pid:integer
+claim executable:string hash:string nonce:string requester_fp:string requester_pid:integer requester_uid:integer result:string token:string
+claim_gc error:string removed:integer skipped:integer
+claim_gc_skipped error:string file:string
+decision_rejected item:string reason:string requester_fp:string requester_pid:integer requester_uid:integer
+deny argv:array_of_string detail:string executable:string nonce:string reason:string requester_fp:string requester_pid:integer requester_uid:integer
+exec_exit duration_ms:integer executable:string exit_status:integer requester_fp:string requester_pid:integer requester_uid:integer token:string
+exec_fail error:string token:string
+exec_start argv:array_of_string cwd:string cwd_verified:boolean cwd_via_fd:boolean env_count:integer exe_dev:integer exe_ino:integer exe_via_fd:boolean executable:string requester_fp:string requester_pid:integer requester_uid:integer token:string uid:integer
+peercred_error error:string socket:string
+queued argv:array_of_string cwd:string executable:string hash:string item:string nonce:string requester_fp:string requester_pid:integer requester_uid:integer
+reload changed:array_of_string ignored:array_of_string pid:integer
+reload_failed error:string pid:integer
+reload_ignored_field config:any field:string running:any
+request argv:array_of_string claim_token:string cwd:string env:object_of_string executable:string nonce:string requester_fp:string requester_pid:integer requester_uid:integer transport:string type:string uid:integer
+request_abandoned item:string requester_fp:string requester_pid:integer requester_uid:integer wait_seconds:integer
+requester_denied reason:string requester_fp:string requester_pid:integer requester_uid:integer
+tls_handshake_failed error:string remote:string
+tls_listen addr:string
+tls_no_client_cert remote:string
+`,
+}
+
+// formatSchemaLines renders a schema as one line per event, "event
+// field:type ...", fields sorted; "*" stands for the common fields.
+func formatSchemaLines(s schema) map[string]string {
+	out := map[string]string{}
+	for ev, fields := range s {
+		var fs []string
+		for f, typ := range fields {
+			fs = append(fs, f+":"+strings.ReplaceAll(typ, " ", "_"))
+		}
+		sort.Strings(fs)
+		name := ev
+		if name == "" {
+			name = "*"
+		}
+		out[name] = name + " " + strings.Join(fs, " ")
+	}
+	return out
+}
+
+// Changing the fields of an existing event raises the schema version.
+func TestAuditSchemaVersion(t *testing.T) {
+	cur := formatSchemaLines(registerSchema())
+	frozen := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(frozenSchemas[auditSchemaVersion]), "\n") {
+		if ev, _, ok := strings.Cut(line, " "); ok {
+			frozen[ev] = line
+		}
+	}
+	if len(frozen) == 0 {
+		all := make([]string, 0, len(cur))
+		for _, line := range cur {
+			all = append(all, line)
+		}
+		sort.Strings(all)
+		t.Fatalf("no frozen field set for schema %d; freeze this one:\n%s", auditSchemaVersion, strings.Join(all, "\n"))
+	}
+	for ev, line := range frozen {
+		if cur[ev] != line {
+			t.Errorf("event %q changed under schema %d: raise auditSchemaVersion and freeze the new set\n frozen: %s\n now:    %s", ev, auditSchemaVersion, line, cur[ev])
+		}
+	}
+	for ev, line := range cur {
+		if _, ok := frozen[ev]; !ok {
+			t.Errorf("new event %q: add its line to frozenSchemas[%d] (a new event keeps the version):\n%s", ev, auditSchemaVersion, line)
+		}
+	}
+}

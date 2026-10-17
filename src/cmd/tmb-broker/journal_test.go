@@ -187,6 +187,54 @@ func TestJournalReopenFailureAndRecovery(t *testing.T) {
 	}
 }
 
+// A write that fails halfway leaves a fragment without its newline. The
+// reopen ends that line, so the next event is a whole line of its own; a
+// journal opened at startup over such a tail does the same.
+func TestJournalPartialLineEndsOnReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "broker.log")
+	l, err := NewLogger(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	l.stderr = &lockedBuffer{}
+	l.Event("broker_stop", map[string]any{"pid": 1})
+	l.write = func(f *os.File, p []byte) (int, error) {
+		n, _ := f.Write(p[:len(p)/2])
+		return n, errors.New("injected ENOSPC")
+	}
+	if err := l.Event("exec_exit", map[string]any{"token": "t1"}); !errors.Is(err, errAuditUnavailable) {
+		t.Fatalf("event with a half write: %v", err)
+	}
+	l.write = nil
+	if err := l.Reopen(); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if err := l.Event("tls_listen", map[string]any{"addr": "x"}); err != nil {
+		t.Fatalf("event after reopen: %v", err)
+	}
+	lines := strings.Split(strings.TrimSuffix(readFile(t, path), "\n"), "\n")
+	if len(lines) != 3 || json.Valid([]byte(lines[1])) || !json.Valid([]byte(lines[2])) || !strings.Contains(lines[2], `"event":"tls_listen"`) {
+		t.Fatalf("journal lines = %q, want a whole event, the fragment, a whole tls_listen", lines)
+	}
+
+	// startup over a fragment: the first event is still a line of its own
+	if err := os.WriteFile(path, []byte(`{"event":"exec_st`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l2, err := NewLogger(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l2.Close()
+	if err := l2.Event("broker_stop", map[string]any{"pid": 1}); err != nil {
+		t.Fatal(err)
+	}
+	if lines := strings.Split(readFile(t, path), "\n"); len(lines) != 3 || !json.Valid([]byte(lines[1])) {
+		t.Fatalf("journal after startup = %q, want the fragment, then a whole event", lines)
+	}
+}
+
 // A closed journal sends events to stderr only.
 func TestJournalClosed(t *testing.T) {
 	l, err := NewLogger(filepath.Join(t.TempDir(), "broker.log"))

@@ -55,7 +55,36 @@ func openJournal(path string) (*os.File, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	return os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := endPartialLine(f); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
+// endPartialLine closes a line a failed write (or a crash) left without its
+// newline, so the next event starts a line of its own and stays parseable:
+// the fragment is one bad line, not glued to the next event.
+func endPartialLine(f *os.File) error {
+	st, err := f.Stat()
+	if err != nil || st.Size() == 0 {
+		return err
+	}
+	last := make([]byte, 1)
+	if _, err := f.ReadAt(last, st.Size()-1); err != nil {
+		return fmt.Errorf("journal tail: %w", err)
+	}
+	if last[0] == '\n' {
+		return nil
+	}
+	if _, err := f.Write([]byte{'\n'}); err != nil {
+		return fmt.Errorf("journal tail: %w", err)
+	}
+	return f.Sync()
 }
 
 // Event writes one JSONL line and fsyncs it. Map keys are marshaled

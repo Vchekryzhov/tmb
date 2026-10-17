@@ -44,7 +44,7 @@ func withRequester(own map[string]string) map[string]string {
 // docs/audit-schema.md documents exactly this set; TestAuditSchemaDoc and
 // TestAuditSchemaCode hold the document, this register and the code
 // together. Changing the fields of an existing event raises
-// auditSchemaVersion.
+// auditSchemaVersion (TestAuditSchemaVersion holds the frozen sets).
 var auditEvents = map[string]map[string]string{
 	"broker_start": {
 		"pid": tInt, "socket": tString, "mode": tString, "ttl_seconds": tInt,
