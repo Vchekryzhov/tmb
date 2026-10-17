@@ -55,7 +55,7 @@ ci/run.sh local
 | secrets | Gitleaks: диапазон коммитов PR и дерево; nightly: вся история | 10 мин |
 | harness | `run-pair.sh`, который заново запускает `run.sh`, на одноразовом Linux runner; логи сверяются с [ci/scenarios](../ci/scenarios) | 25 мин |
 | images | сборка host/sandbox-образов, Trivy (уязвимости, misconfiguration), SBOM CycloneDX, лицензии | 20 мин |
-| manifest | матрица SEC-01…SEC-26 против реально выполненных тестов и сценариев | 5 мин |
+| manifest | матрица SEC-01…SEC-28 против реально выполненных тестов и сценариев | 5 мин |
 | nightly | повторные перемешанные тесты под race, mutation checks, benchmarks, внешние ссылки | 55 мин |
 
 Mac-брокер собирается только как часть тестов: привилегированный брокер на Mac не заявлен и не публикуется. Диагностические артефакты хранятся 14 дней, отчёты плановых security-аудитов 30 дней. Репозиторий public, поэтому артефакты Actions может скачать любой авторизованный пользователь GitHub. В них нет секретов: Gitleaks редактирует значения, PEM-ключи блокируют загрузку. Но логи стендов, SBOM и fuzz-входы публичны. В registry ничего не публикуется; в GitHub Releases публикует только release.yml по тегу `v*` (см. «Пакеты и релиз»).
@@ -128,7 +128,7 @@ ci/run.sh dist
 
 Результат в `out/dist` (каталог меняется через `TMB_DIST`):
 
-- `tmb-broker` deb и rpm для amd64 и arm64: `/usr/bin/tmb-broker`, unit `/usr/lib/systemd/system/tmb-broker.service`, `/etc/tmb/config.json.example` (`allowed_cwd_roots: ["/tmp"]`, `approval_default: queue`, пустые allowlist и `approver_uids`), `/etc/logrotate.d/tmb-broker` (`postrotate` делает `systemctl reload`), `/usr/lib/tmpfiles.d/tmb.conf` для `/run/tmb`, каталоги `/var/lib/tmb` 0700 и `/var/log/tmb` 0750. `/etc/tmb/config.json` пакет не создаёт: `ExecStartPre` без него завершает старт с сообщением в журнале systemd, `Restart=on-failure` повторяет старт до лимита systemd (`StartLimitBurst`, по умолчанию 5 за 10 секунд), после чего unit остаётся failed (под настоящим systemd это проверит [#45](https://github.com/Vchekryzhov/tmb/issues/45)). Пакет не включает и не запускает сервис; обновление делает `try-restart`, удаление останавливает сервис и оставляет конфиг, `/var/lib/tmb` и `/var/log/tmb`.
+- `tmb-broker` deb и rpm для amd64 и arm64: `/usr/bin/tmb-broker`, unit `/usr/lib/systemd/system/tmb-broker.service`, `/etc/tmb/config.json.example` (`allowed_cwd_roots: ["/tmp"]`, `approval_default: queue`, пустые allowlist и `approver_uids`), `/etc/logrotate.d/tmb-broker` (`postrotate` делает `systemctl reload`), `/usr/lib/tmpfiles.d/tmb.conf` для `/run/tmb`, каталоги `/var/lib/tmb` 0700 и `/var/log/tmb` 0750. `/etc/tmb/config.json` пакет не создаёт: `ExecStartPre` без него завершает старт с сообщением в журнале systemd, `Restart=on-failure` повторяет старт до лимита systemd (`StartLimitBurst`, по умолчанию 5 за 10 секунд), после чего unit остаётся failed (под настоящим systemd это проверяет VM-пруф [#45](https://github.com/Vchekryzhov/tmb/issues/45)). Пакет не включает и не запускает сервис; обновление делает `try-restart`, удаление останавливает сервис и оставляет конфиг, `/var/lib/tmb` и `/var/log/tmb`.
 - `tmb` deb и rpm для amd64 и arm64: `/usr/bin/tmb`.
 - `tmb_<версия>_<os>_<arch>.tar.gz` для linux/amd64, linux/arm64 и darwin/arm64 и `SHA256SUMS` по всем файлам.
 
