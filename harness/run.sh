@@ -813,6 +813,76 @@ start_broker mock-approve 10
 state_dump
 
 # -----------------------------------------------------------------------------
+log "SCENARIO N29: the journal reopens on SIGHUP, an unwritable journal closes the agent path, schema 1 on every line"
+# logrotate renames the file and sends SIGHUP: the broker opens a new file
+# at log_path. Then the log directory becomes unwritable and the file is
+# gone: the reopen fails, new requests get audit_unavailable and nothing
+# runs, the reason is on the broker's stderr. Write access back, SIGHUP:
+# requests pass again. The broker runs here without CAP_DAC_OVERRIDE (and
+# CAP_DAC_READ_SEARCH), so mode 0500 on its root-owned log directory binds
+# it the way it binds any owner; its stderr goes to /tmp/n29-broker.err.
+JLOG=/var/log/tmb/broker.log
+JERR=/tmp/n29-broker.err
+n29_wait() { # n29_wait FILE STRING -> 0 once FILE in host-sim contains STRING
+  local _
+  for _ in $(seq 1 150); do
+    docker exec "$HOST" grep -qF -- "$2" "$1" 2>/dev/null && return 0
+    sleep 0.1
+  done
+  return 1
+}
+n29_unschema() { # n29_unschema FILE -> JSON lines of FILE without "schema":1
+  docker exec "$HOST" sh -c "grep '^{' $1 | grep -vc '\"schema\":1'" | tr -d '[:space:]'
+}
+stop_broker
+docker exec "$HOST" rm -f "$JERR"
+docker exec -d "$HOST" sh -c "exec setpriv --bounding-set=-dac_override,-dac_read_search --inh-caps=-dac_override,-dac_read_search tmb-broker -approval mock-approve -ttl 10 2>$JERR"
+wait_socket
+CAPEFF=$(docker exec "$HOST" sh -c 'sed -n "s/^CapEff:[[:space:]]*//p" /proc/$(pgrep -x tmb-broker)/status' | tr -d '[:space:]')
+echo "-- broker CapEff=$CAPEFF"
+if [ -n "$CAPEFF" ] && [ $((0x$CAPEFF & 0x6)) -eq 0 ]; then ok "N29: broker runs without CAP_DAC_OVERRIDE and CAP_DAC_READ_SEARCH"; else bad "N29: broker still has DAC override caps (CapEff=$CAPEFF)"; fi
+run_client "$SBX" tmb exec --root -- /usr/bin/id -u
+assert_rc     "N29: request before the rotation -> exit 0" 0
+if [ "$(n29_unschema "$JLOG")" = "0" ]; then ok "N29: every journal line carries \"schema\":1"; else bad "N29: journal lines without \"schema\":1"; fi
+
+echo "-- rotation: rename the journal, SIGHUP"
+docker exec "$HOST" mv "$JLOG" "$JLOG.1"
+OLD29=$(docker exec "$HOST" stat -c %s "$JLOG.1" | tr -d '[:space:]')
+docker exec "$HOST" pkill -HUP -x tmb-broker
+if n29_wait "$JLOG" '"event":"reload"'; then ok "N29: SIGHUP after the rename -> new $JLOG with the reload event"; else bad "N29: no new journal file after SIGHUP"; fi
+run_client "$SBX" tmb exec --root -- /usr/bin/id -u
+assert_rc     "N29: request after the rotation -> exit 0" 0
+assert_out_eq "N29: stdout '0'" "0"
+if n29_wait "$JLOG" '"event":"exec_exit"'; then ok "N29: the request's events are in the new file"; else bad "N29: the request's events are not in the new file"; fi
+if [ "$(docker exec "$HOST" stat -c %s "$JLOG.1" | tr -d '[:space:]')" = "$OLD29" ]; then ok "N29: the renamed file did not grow ($OLD29 bytes)"; else bad "N29: the renamed file grew after the reopen"; fi
+
+echo "-- the log directory becomes unwritable and the journal is gone, SIGHUP"
+docker exec "$HOST" sh -c "rm -f $JLOG && chmod 0500 /var/log/tmb"
+docker exec "$HOST" pkill -HUP -x tmb-broker
+if n29_wait "$JERR" '"event":"audit_unavailable"'; then ok "N29: failed reopen -> audit_unavailable on the broker's stderr"; else bad "N29: no audit_unavailable on the broker's stderr"; fi
+docker exec "$HOST" rm -f /tmp/n29-marker
+run_client "$SBX" tmb exec --root -- /usr/bin/touch /tmp/n29-marker
+assert_rc      "N29: request while the journal is unavailable -> exit 125" 125
+assert_err_has "N29: deny reason audit_unavailable" "audit_unavailable"
+host_absent    "N29: the command did not run" /tmp/n29-marker
+host_absent    "N29: no journal file appeared" "$JLOG"
+echo "-- broker stderr --"; docker exec "$HOST" cat "$JERR" | sed 's/^/  | /'
+if docker exec "$HOST" grep -q 'journal unavailable.*permission denied' "$JERR"; then ok "N29: broker stderr names the reason (permission denied)"; else bad "N29: broker stderr lacks the reason"; fi
+
+echo "-- write access back, SIGHUP"
+docker exec "$HOST" chmod 0755 /var/log/tmb
+docker exec "$HOST" pkill -HUP -x tmb-broker
+if n29_wait "$JLOG" '"event":"reload"'; then ok "N29: SIGHUP with write access -> journal reopened"; else bad "N29: journal not reopened after write access came back"; fi
+if docker exec "$HOST" grep -q 'accepting requests again' "$JERR"; then ok "N29: broker stderr says it accepts requests again"; else bad "N29: no recovery line on the broker's stderr"; fi
+run_client "$SBX" tmb exec --root -- /usr/bin/id -u
+assert_rc     "N29: request after the recovery -> exit 0" 0
+assert_out_eq "N29: stdout '0'" "0"
+if [ "$(n29_unschema "$JLOG")" = "0" ] && [ "$(n29_unschema "$JLOG.1")" = "0" ] && [ "$(n29_unschema "$JERR")" = "0" ]; then ok "N29: every line in both journal files and the stderr reserve carries \"schema\":1"; else bad "N29: a line without \"schema\":1"; fi
+stop_broker
+start_broker mock-approve 10
+state_dump
+
+# -----------------------------------------------------------------------------
 log "SCENARIO N3a: mock-deny -> deny, nothing runs"
 stop_broker
 start_broker mock-deny "$TTL"

@@ -77,6 +77,9 @@ const tlsHandshakeTimeout = 10 * time.Second
 
 func (b *Broker) handleTLSConn(conn *tls.Conn) {
 	defer conn.Close()
+	// read before the handshake: a journal that fails meanwhile still
+	// refuses this connection at the request event
+	down := b.log.Unavailable() != nil
 	_ = conn.SetDeadline(time.Now().Add(tlsHandshakeTimeout))
 	if err := conn.Handshake(); err != nil {
 		// No client certificate was verified -> no fingerprint exists yet.
@@ -86,6 +89,11 @@ func (b *Broker) handleTLSConn(conn *tls.Conn) {
 		return
 	}
 	_ = conn.SetDeadline(time.Time{})
+	if down {
+		// the denial needs a handshaken channel; nothing else is done
+		b.refuseAuditDown(conn)
+		return
+	}
 
 	st := conn.ConnectionState()
 	if len(st.PeerCertificates) == 0 {

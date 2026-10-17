@@ -261,6 +261,9 @@ func (b *Broker) ServeApprover(ln net.Listener) error {
 
 func (b *Broker) handleApproverConn(conn *net.UnixConn) {
 	defer conn.Close()
+	if b.refuseIfAuditDown(conn) {
+		return
+	}
 	id, err := peerCred(conn)
 	if err != nil {
 		b.log.Event("peercred_error", map[string]any{"error": err.Error(), "socket": "approver"})

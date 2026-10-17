@@ -204,6 +204,9 @@ func (b *Broker) Serve(ln net.Listener) error {
 
 func (b *Broker) handleConn(conn *net.UnixConn) {
 	defer conn.Close()
+	if b.refuseIfAuditDown(conn) {
+		return
+	}
 
 	// SO_PEERCRED on EVERY connection, before reading anything.
 	id, err := peerCred(conn)
@@ -247,7 +250,10 @@ func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
 	ev["env"] = req.Env
 	ev["nonce"] = short(req.Nonce, 12)
 	ev["claim_token"] = req.ClaimToken
-	b.log.Event("request", ev)
+	if b.log.Event("request", ev) != nil {
+		b.writeAuditUnavailable(conn)
+		return
+	}
 
 	switch req.Type {
 	case "approve":
@@ -301,6 +307,34 @@ func (b *Broker) denyRequesterNotAllowed(conn net.Conn, id RequesterID) {
 	_ = conn.SetReadDeadline(time.Time{})
 	proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "requester_not_allowed",
 		Detail: id.NotAllowedDetail()})
+}
+
+// auditUnavailableDetail is the detail of every audit_unavailable denial.
+const auditUnavailableDetail = "the broker journal is unavailable, nothing was executed"
+
+// refuseIfAuditDown answers a new connection with audit_unavailable, before
+// anything else is done with it, while the journal is unavailable: no
+// request is served that could not be recorded. The caller closes conn.
+func (b *Broker) refuseIfAuditDown(conn net.Conn) bool {
+	if b.log.Unavailable() == nil {
+		return false
+	}
+	b.refuseAuditDown(conn)
+	return true
+}
+
+// refuseAuditDown answers conn with audit_unavailable.
+func (b *Broker) refuseAuditDown(conn net.Conn) {
+	// consume the request frame first (as denyRequesterNotAllowed does), so
+	// the client sees the denial and not a reset
+	_ = conn.SetReadDeadline(time.Now().Add(denyDrainTimeout))
+	_, _ = proto.ReadRawFrame(conn)
+	_ = conn.SetReadDeadline(time.Time{})
+	b.writeAuditUnavailable(conn)
+}
+
+func (b *Broker) writeAuditUnavailable(conn net.Conn) {
+	proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "audit_unavailable", Detail: auditUnavailableDetail})
 }
 
 // --- validation -----------------------------------------------------------
@@ -402,7 +436,10 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 	aev["executable"] = req.Executable
 	aev["argv"] = req.Argv
 	aev["nonce"] = short(req.Nonce, 12)
-	b.log.Event("approval", aev)
+	if b.log.Event("approval", aev) != nil {
+		b.deny(req, id, "audit_unavailable", auditUnavailableDetail, conn)
+		return false
+	}
 	if !granted {
 		b.deny(req, id, reason, "nothing was executed", conn)
 		return false
