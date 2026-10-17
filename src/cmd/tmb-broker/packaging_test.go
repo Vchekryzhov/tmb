@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -58,7 +59,7 @@ func TestPackagedConfigExampleLoads(t *testing.T) {
 // unitDirectives parses key=value lines of a systemd unit (no sections kept).
 func unitDirectives(t *testing.T, path string) map[string][]string {
 	t.Helper()
-	b, err := os.ReadFile(path)
+	b, err := fs.ReadFile(os.DirFS(filepath.Dir(path)), filepath.Base(path))
 	if err != nil {
 		t.Fatal(err)
 	}

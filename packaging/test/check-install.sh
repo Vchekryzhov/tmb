@@ -84,7 +84,7 @@ check "example sets approval_default queue" grep -q '"approval_default": "queue"
 echo "== systemd unit (static)"
 unit=/usr/lib/systemd/system/tmb-broker.service
 for d in 'Type=simple' 'User=root' 'RuntimeDirectory=tmb' 'StateDirectory=tmb' 'LogsDirectory=tmb' \
-         'Restart=on-failure' 'KillMode=process' 'ExecReload=/bin/kill -HUP $MAINPID' \
+         'Restart=on-failure' 'KillMode=process' "ExecReload=/bin/kill -HUP \$MAINPID" \
          'ExecStart=/usr/bin/tmb-broker -config /etc/tmb/config.json'; do
   if grep -qxF "$d" "$unit"; then pass "unit has $d"; else fail "unit has $d"; fi
 done
