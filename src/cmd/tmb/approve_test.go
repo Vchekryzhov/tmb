@@ -242,3 +242,33 @@ func TestApproveBrokerMisbehaves(t *testing.T) {
 		t.Errorf("Error() = %q", got)
 	}
 }
+
+// tmb exec reports the broker's waiting frame once on stderr and keeps
+// reading until the exit frame.
+func TestExecPrintsWaitingOnce(t *testing.T) {
+	server, client := net.Pipe()
+	go func() {
+		defer server.Close()
+		code := 0
+		proto.WriteFrame(server, &proto.Frame{Type: "waiting", Token: "aaaaaaaaaaaaaaaa", Detail: "at most 5m0s"})
+		proto.WriteFrame(server, &proto.Frame{Type: "approved", Token: "aaaaaaaaaaaaaaaa"})
+		proto.WriteFrame(server, &proto.Frame{Type: "exit", Code: &code})
+	}()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	got, serr := streamFrames(client, true)
+	os.Stderr = orig
+	w.Close()
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if serr != nil || got != 0 {
+		t.Fatalf("streamFrames = %d %v", got, serr)
+	}
+	if n := strings.Count(buf.String(), "waiting for approval"); n != 1 {
+		t.Fatalf("stderr says waiting %d times:\n%s", n, buf.String())
+	}
+}

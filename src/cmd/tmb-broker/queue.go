@@ -80,6 +80,18 @@ func (q *approvalQueue) list() []proto.QueueItem {
 	return out
 }
 
+// withdraw removes a still undecided item (timeout or abandonment). False
+// means a decision got there first and is waiting in the entry's channel.
+func (q *approvalQueue) withdraw(id string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if _, ok := q.items[id]; !ok {
+		return false
+	}
+	delete(q.items, id)
+	return true
+}
+
 // decide delivers a verdict once. The item leaves the queue on the first
 // decision; the hash must match what the approver was shown.
 func (q *approvalQueue) decide(id, hash string, d queueDecision) (deny, detail string) {
@@ -108,8 +120,10 @@ func (q *approvalQueue) decide(id, hash string, d queueDecision) (deny, detail s
 }
 
 // queueApproval puts the request in the queue and blocks until an approver
-// decides. It returns the verdict, the deny reason and the approver.
-func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdReal string) (bool, string, string) {
+// decides, approval_wait_seconds pass (approval_timeout) or the requester
+// hangs up (request_abandoned). It tells the requester once that it waits,
+// and returns the verdict, the deny reason and the approver.
+func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdReal string, conn net.Conn) (bool, string, string) {
 	hash := req.Hash()
 	item := proto.QueueItem{
 		ID:         proto.TokenID(hash),
@@ -135,12 +149,63 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 	ev["cwd"] = cwdReal
 	ev["nonce"] = short(req.Nonce, 12)
 	b.log.Event("queued", ev)
+	proto.WriteFrame(conn, &proto.Frame{Type: "waiting", Token: item.ID,
+		Detail: fmt.Sprintf("at most %s", b.wait)})
 
-	d := <-e.result
+	hangup := watchHangup(conn)
+	timer := time.NewTimer(b.wait)
+	defer timer.Stop()
+	var d queueDecision
+	select {
+	case d = <-e.result:
+	case <-timer.C:
+		if b.queue.withdraw(item.ID) {
+			stopWatch(conn, hangup)
+			b.log.Event("approval_timeout", queueEvent(id, item.ID, b.wait))
+			return false, "approval_timeout", "mode:" + ModeQueue
+		}
+		d = <-e.result // decided at the last moment
+	case <-hangup:
+		if b.queue.withdraw(item.ID) {
+			b.log.Event("request_abandoned", queueEvent(id, item.ID, b.wait))
+			return false, "request_abandoned", "mode:" + ModeQueue
+		}
+		d = <-e.result
+	}
+	stopWatch(conn, hangup)
 	if !d.granted {
 		return false, "approval_denied_by_human", d.approver.Key()
 	}
 	return true, "", d.approver.Key()
+}
+
+func queueEvent(id RequesterID, item string, wait time.Duration) map[string]any {
+	ev := id.LogFields()
+	ev["item"] = item
+	ev["wait_seconds"] = int(wait.Seconds())
+	return ev
+}
+
+// watchHangup reads the requester connection while its request waits: the
+// client sends nothing more, so a read that returns means it hung up. The
+// channel closes on that; stopWatch ends the watch otherwise.
+func watchHangup(conn net.Conn) <-chan struct{} {
+	gone := make(chan struct{})
+	go func() {
+		defer close(gone)
+		var buf [1]byte
+		_, _ = conn.Read(buf[:])
+	}()
+	return gone
+}
+
+// stopWatch unblocks the hangup reader with a past read deadline and waits
+// for it, so nothing else reads the connection concurrently; the deadline
+// is then cleared.
+func stopWatch(conn net.Conn, gone <-chan struct{}) {
+	_ = conn.SetReadDeadline(time.Unix(1, 0))
+	<-gone
+	_ = conn.SetReadDeadline(time.Time{})
 }
 
 // --- approver socket ----------------------------------------------------------

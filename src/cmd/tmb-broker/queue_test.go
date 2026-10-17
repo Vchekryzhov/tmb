@@ -46,11 +46,17 @@ func queueRequest(t *testing.T, b *Broker, req *proto.Request, id RequesterID) (
 	out := make(chan *proto.Frame, 1)
 	go func() {
 		defer client.Close()
-		f, err := proto.ReadFrame(client)
-		if err != nil {
-			f = &proto.Frame{Type: "error", Detail: err.Error()}
+		for {
+			f, err := proto.ReadFrame(client)
+			if err != nil {
+				f = &proto.Frame{Type: "error", Detail: err.Error()}
+			}
+			if f.Type == "waiting" {
+				continue
+			}
+			out <- f
+			return
 		}
-		out <- f
 	}()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {

@@ -520,6 +520,69 @@ start_broker mock-approve 10
 state_dump
 
 # -----------------------------------------------------------------------------
+log "SCENARIO N15: a request nobody decides times out after approval_wait_seconds"
+stop_broker
+docker exec "$HOST" sh -c 'sed "s#\"approval_wait_seconds\": 300#\"approval_wait_seconds\": 2#" /etc/tmb/config.json >/tmp/n15.json'
+docker exec -d "$HOST" tmb-broker -config /tmp/n15.json -approval queue -ttl 10
+wait_socket
+docker exec "$HOST" rm -f /tmp/n15-marker
+T15=$(date +%s)
+run_client "$SBX" tmb exec --root -- /usr/bin/touch /tmp/n15-marker
+E15=$(( $(date +%s) - T15 ))
+assert_rc      "N15: undecided request -> exit 125" 125
+assert_err_has "N15: deny reason approval_timeout" "approval_timeout"
+if [ "$E15" -ge 2 ] && [ "$E15" -le 10 ]; then ok "N15: timed out after ${E15}s (2..10s)"; else bad "N15: timed out after ${E15}s, want 2..10s"; fi
+W15=$(grep -c "waiting for approval" "$ERR_FILE")
+if [ "$W15" = 1 ]; then ok "N15: client said 'waiting for approval' exactly once"; else bad "N15: 'waiting for approval' printed $W15 times"; fi
+host_absent "N15: marker never created" /tmp/n15-marker
+approve_as human --list >"$TD/n15q.out" 2>&1
+if grep -q "queue is empty" "$TD/n15q.out"; then ok "N15: queue is empty after the timeout"; else bad "N15: queue not empty after the timeout"; fi
+if docker exec "$HOST" grep -q '"event":"approval_timeout"' /var/log/tmb/broker.log; then ok "N15: JSONL approval_timeout"; else bad "N15: JSONL approval_timeout missing"; fi
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N17: the queue is not a mutex; a client that hangs up leaves the queue"
+stop_broker
+start_broker queue 10
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/n17a.out" 2>"$TD/n17a.err" &
+CLI17A=$!
+wait_queue 1 || bad "N17: first request never queued"
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -G >"$TD/n17b.out" 2>"$TD/n17b.err" &
+CLI17B=$!
+if wait_queue 2; then ok "N17: both requests wait in the queue"; else bad "N17: the queue never listed two requests"; fi
+ID17B=$(awk '/^=== /{id=$2} /argv      : \["\/usr\/bin\/id","-G"\]/{print id; exit}' "$TD/queue.out")
+ID17A=$(awk '/^=== /{id=$2} /argv      : \["\/usr\/bin\/id","-u"\]/{print id; exit}' "$TD/queue.out")
+approve_as human --yes "$ID17B" >/dev/null 2>&1
+wait $CLI17B; RUNC=$?
+OUT_FILE=$TD/n17b.out; ERR_FILE=$TD/n17b.err; show_io
+assert_rc "N17: second request approved and finished while the first waits" 0
+approve_as human --list >"$TD/queue.out" 2>&1
+if [ "$(grep -c '^=== ' "$TD/queue.out")" = 1 ] && grep -q "^=== $ID17A ===" "$TD/queue.out"; then ok "N17: only the first request is still waiting"; else bad "N17: queue after the second decision is wrong"; fi
+approve_as human --yes "$ID17A" >/dev/null 2>&1
+wait $CLI17A; RUNC=$?
+OUT_FILE=$TD/n17a.out; ERR_FILE=$TD/n17a.err; show_io
+assert_rc     "N17: first request approved afterwards -> exit 0" 0
+assert_out_eq "N17: first request stdout '0'" "0"
+
+echo "-- round 2: the waiting client is killed with SIGKILL"
+docker exec "$SBX" sh -c 'echo $$ >/tmp/n17.pid; exec tmb exec --root -- /usr/bin/id -n' >/dev/null 2>&1 &
+CLI17C=$!
+wait_queue 1 || bad "N17: third request never queued"
+docker exec "$SBX" sh -c 'kill -9 "$(cat /tmp/n17.pid)"'
+wait $CLI17C 2>/dev/null
+GONE=0
+for _ in $(seq 1 50); do
+  approve_as human --list >"$TD/queue.out" 2>&1
+  grep -q "queue is empty" "$TD/queue.out" && { GONE=1; break; }
+  sleep 0.1
+done
+if [ "$GONE" = 1 ]; then ok "N17: killed client's request left the queue"; else bad "N17: killed client's request still queued"; fi
+if docker exec "$HOST" grep -q '"event":"request_abandoned"' /var/log/tmb/broker.log; then ok "N17: JSONL request_abandoned"; else bad "N17: JSONL request_abandoned missing"; fi
+stop_broker
+start_broker mock-approve 10
+state_dump
+
+# -----------------------------------------------------------------------------
 log "SCENARIO N18: cwd outside allowed_cwd_roots -> deny cwd_not_allowed before approval"
 # The bench config allows only /tmp. The check runs on the realpath, so a
 # symlink inside /tmp that points at /etc is denied too, and the denial comes

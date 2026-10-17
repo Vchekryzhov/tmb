@@ -63,7 +63,8 @@ func (p *pendingApproval) closePins() {
 type Broker struct {
 	cfg    *Config
 	mode   string
-	ttl    time.Duration
+	ttl    time.Duration // token: approval -> claim
+	wait   time.Duration // queue: enqueue -> decision (approval_wait_seconds)
 	log    *Logger
 	claims *ClaimStore
 
@@ -76,7 +77,7 @@ type Broker struct {
 }
 
 func NewBroker(cfg *Config, log *Logger, claims *ClaimStore, mode string, ttl time.Duration) *Broker {
-	return &Broker{
+	b := &Broker{
 		cfg:     cfg,
 		mode:    mode,
 		ttl:     ttl,
@@ -85,7 +86,12 @@ func NewBroker(cfg *Config, log *Logger, claims *ClaimStore, mode string, ttl ti
 		pending: map[string]*pendingApproval{},
 		stdin:   bufio.NewReader(os.Stdin),
 		queue:   newApprovalQueue(),
+		wait:    time.Duration(cfg.ApprovalWaitSeconds) * time.Second,
 	}
+	if b.wait <= 0 {
+		b.wait = 300 * time.Second
+	}
+	return b
 }
 
 // allowedRequester checks the identity against the broker allowlist. The
@@ -382,7 +388,7 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 		return false
 	}
 
-	granted, reason, approver := b.runApprovalInteraction(req, id, exeReal, cwdReal, dev, ino)
+	granted, reason, approver := b.runApprovalInteraction(req, id, exeReal, cwdReal, dev, ino, conn)
 	aev := id.LogFields()
 	aev["mode"] = b.mode
 	// the approver's identity in queue mode, mode:<mode> for bench modes
@@ -425,9 +431,9 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 // runApprovalInteraction performs the mode-specific approval. manual prints
 // the exact request to the broker console and reads y/n from stdin; mock
 // modes are deterministic stand-ins for tests.
-func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64) (bool, string, string) {
+func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64, conn net.Conn) (bool, string, string) {
 	if b.mode == ModeQueue {
-		return b.queueApproval(req, id, exeReal, cwdReal)
+		return b.queueApproval(req, id, exeReal, cwdReal, conn)
 	}
 	granted, reason := b.benchApproval(req, id, exeReal, dev, ino)
 	return granted, reason, "mode:" + b.mode

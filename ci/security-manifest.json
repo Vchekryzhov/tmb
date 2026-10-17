@@ -56,6 +56,9 @@
      "scenarios": ["N21", "N8"]},
     {"id": "SEC-21", "title": "approval comes only from approver_uids over the host approver socket: requesters and TLS peers cannot list or decide; the first decision wins; a decision binds to the shown request hash",
      "tests": ["tmb-poc/cmd/tmb-broker.TestQueueApprovalByApprover", "tmb-poc/cmd/tmb-broker.TestApproverMessagesRejected", "tmb-poc/cmd/tmb-broker.TestRequesterSocketRefusesApproverTypes", "tmb-poc/cmd/tmb.TestApproveYesNoAndAlreadyDecided"],
-     "scenarios": ["N13", "N14", "N16", "PAIR-APPROVE"]}
+     "scenarios": ["N13", "N14", "N16", "PAIR-APPROVE"]},
+    {"id": "SEC-22", "title": "a queued request is denied approval_timeout after approval_wait_seconds and nothing runs; a requester that hangs up leaves the queue; waiting does not block other requests",
+     "tests": ["tmb-poc/cmd/tmb-broker.TestQueueWaitTimesOut", "tmb-poc/cmd/tmb-broker.TestQueueRequesterHangupWithdraws", "tmb-poc/cmd/tmb-broker.TestQueueIsNotAMutex", "tmb-poc/cmd/tmb-broker.TestQueueWithdrawLosesToDecision"],
+     "scenarios": ["N15", "N17"]}
   ]
 }
