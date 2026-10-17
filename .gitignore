@@ -1,5 +1,7 @@
 .DS_Store
 *.log
+# harness evidence: the last runs are the source of README and verdict numbers
+!harness/last-*.log
 out/
 .omo/
 .githooks/
