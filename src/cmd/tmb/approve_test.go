@@ -243,6 +243,64 @@ func TestApproveBrokerMisbehaves(t *testing.T) {
 	}
 }
 
+// The requester picks the nonce, argv, env and paths: a control sequence in
+// any of them reaches the approver's screen only as an escape.
+func TestApproveListEscapesControlSequences(t *testing.T) {
+	it := sampleItem("aaaaaaaaaaaaaaaa")
+	it.Nonce = "n\x1b[2A\x1b[2K  argv      : [\"/usr/bin/true\"]"
+	it.Cwd = "/tmp/\u202ecod"
+	it.Argv = []string{"/usr/bin/id", "\u009b2A", "x\x7f"}
+	it.Env = []string{"A=\U000e0041"}
+	f := startFakeApprover(t, it)
+	code, out, _ := runApprove(t, "", "--list", "--socket", f.path)
+	if code != 0 {
+		t.Fatalf("--list exit %d", code)
+	}
+	if strings.ContainsAny(out, "\x1b\u202e\u009b\x7f\U000e0041") {
+		t.Fatalf("--list passes raw control characters through:\n%q", out)
+	}
+	for _, want := range []string{
+		`nonce     : "n\x1b[2A\x1b[2K  argv      : [\"/usr/bin/true\"]"`,
+		`cwd       : "/tmp/\u202ecod"`,
+		`argv      : ["/usr/bin/id","\u009b2A","x\u007f"]`,
+		`env       : ["A=\udb40\udc41"]`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("--list lacks %s:\n%s", want, out)
+		}
+	}
+}
+
+func TestSafeTextQuotesInvalidUTF8(t *testing.T) {
+	if got := safeText("/tmp/\xffexe"); got != `"/tmp/\xffexe"` {
+		t.Errorf("safeText = %s", got)
+	}
+	if got := safeText("/usr/bin/id"); got != "/usr/bin/id" {
+		t.Errorf("safeText changed a plain path: %s", got)
+	}
+}
+
+// End of input is no answer: the item it stops at stays queued for another
+// approver instead of being denied.
+func TestApproveInteractiveEndOfInputLeavesItemsQueued(t *testing.T) {
+	f := startFakeApprover(t, sampleItem("aaaaaaaaaaaaaaaa"), sampleItem("bbbbbbbbbbbbbbbb"))
+	code, out, errs := runApprove(t, "y\n", "--socket", f.path)
+	if code != 0 {
+		t.Fatalf("interactive: exit %d %s", code, errs)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.decided["aaaaaaaaaaaaaaaa"] != "approve" {
+		t.Fatalf("first item not approved: %v", f.decided)
+	}
+	if d, ok := f.decided["bbbbbbbbbbbbbbbb"]; ok {
+		t.Fatalf("end of input decided the second item: %s", d)
+	}
+	if !strings.Contains(out, "no answer, bbbbbbbbbbbbbbbb and later items left in the queue") {
+		t.Errorf("no end-of-input notice:\n%s", out)
+	}
+}
+
 // tmb exec reports the broker's waiting frame once on stderr and keeps
 // reading until the exit frame.
 func TestExecPrintsWaitingOnce(t *testing.T) {
