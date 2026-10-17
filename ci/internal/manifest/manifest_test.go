@@ -120,3 +120,24 @@ func TestVerifyDefersOpenShellOnlyEvidence(t *testing.T) {
 		t.Fatalf("deferred %v", r.Deferred)
 	}
 }
+
+func TestVerifyDefersVMOnlyEvidence(t *testing.T) {
+	m := full()
+	set(&m, "SEC-27", manifest.Case{Level: manifest.VM, Scenarios: []string{"V6"}})
+	r := verify(m, evidence{}, evidence{})
+	if r.Status != result.Pass {
+		t.Fatalf("portable verify must not demand VM evidence: %v", r.Problems)
+	}
+	if len(r.Deferred) != 1 || !strings.Contains(r.Deferred[0], "SEC-27") || !strings.Contains(r.Deferred[0], "run-vm.sh") {
+		t.Fatalf("deferred %v", r.Deferred)
+	}
+}
+
+func TestVerifyRejectsUnknownLevel(t *testing.T) {
+	m := full()
+	set(&m, "SEC-27", manifest.Case{Level: "bare-metal", Scenarios: []string{"V6"}})
+	r := verify(m, evidence{}, evidence{})
+	if r.Status != result.Fail || !strings.Contains(strings.Join(r.Problems, "\n"), "unknown level") {
+		t.Fatalf("unknown level accepted: %s %v", r.Status, r.Problems)
+	}
+}

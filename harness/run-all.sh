@@ -8,6 +8,8 @@
 #   2. harness/run-pair.sh       docker-pair mTLS (O7/O8/O9; also re-runs
 #                                run.sh internally as its regression stage)
 #   3. harness/run-openshell.sh  full OpenShell rig (O0-O6)
+#   4. harness/run-vm.sh         VM proof on Lima (V0-V9), only with --vm:
+#                                it needs Lima and takes minutes (spec #39)
 #
 # Exits 0 only if EVERY part is green. Everything is tee'd to
 # last-full-run.log; each part also keeps its own last-*-run.log with the
@@ -17,6 +19,14 @@
 
 set -u
 cd "$(dirname "$0")" || exit 1
+
+WITH_VM=0
+for a in "$@"; do
+  case $a in
+    --vm) WITH_VM=1 ;;
+    *) echo "usage: run-all.sh [--vm]" >&2; exit 2 ;;
+  esac
+done
 
 LOG=last-full-run.log
 
@@ -45,8 +55,9 @@ run_part() {
 
 OVERALL=0
 
-log "TMB FULL RUN: N-series + docker-pair + OpenShell rig ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
-echo "-- each part tees its own detailed log: last-run.log, last-pair-run.log, last-openshell-run.log"
+VM_PART=""; [ "$WITH_VM" = 1 ] && VM_PART=" + VM proof"
+log "TMB FULL RUN: N-series + docker-pair + OpenShell rig$VM_PART ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+echo "-- each part tees its own detailed log: last-run.log, last-pair-run.log, last-openshell-run.log$( [ "$WITH_VM" = 1 ] && echo ', last-vm-run.log')"
 
 run_part "N-series (run.sh)" run.sh last-run.log
 N_RC=$PART_RC; N_PASS=$PART_PASS; N_FAIL=$PART_FAIL
@@ -60,19 +71,31 @@ run_part "OpenShell rig (run-openshell.sh)" run-openshell.sh last-openshell-run.
 O_RC=$PART_RC; O_PASS=$PART_PASS; O_FAIL=$PART_FAIL
 [ "$O_RC" = 0 ] && [ "$O_FAIL" = 0 ] || OVERALL=1
 
+V_SUM=""
+if [ "$WITH_VM" = 1 ]; then
+  run_part "VM proof (run-vm.sh)" run-vm.sh last-vm-run.log
+  V_RC=$PART_RC; V_PASS=$PART_PASS; V_FAIL=$PART_FAIL
+  [ "$V_RC" = 0 ] && [ "$V_FAIL" = 0 ] || OVERALL=1
+fi
+
 # =============================================================================
 log "FULL-RUN SUMMARY"
 printf '%s\n' "------------------------------------------------------------------"
 printf 'N-series   (run.sh):          rc=%s  PASS=%s  FAIL=%s\n' "$N_RC" "$N_PASS" "$N_FAIL"
 printf 'docker-pair(run-pair.sh):     rc=%s  PASS=%s  FAIL=%s\n' "$P_RC" "$P_PASS" "$P_FAIL"
 printf 'OpenShell  (run-openshell.sh): rc=%s  PASS=%s  FAIL=%s\n' "$O_RC" "$O_PASS" "$O_FAIL"
+if [ "$WITH_VM" = 1 ]; then
+  printf 'VM proof   (run-vm.sh):       rc=%s  PASS=%s  FAIL=%s\n' "$V_RC" "$V_PASS" "$V_FAIL"
+fi
 printf '%s\n' "------------------------------------------------------------------"
 if [ "$OVERALL" = 0 ]; then
-  echo "FULL-RUN VERDICT: GREEN - N=$N_PASS/$N_PASS, pair=$P_PASS/$P_PASS, openshell=$O_PASS/$O_PASS, all parts green"
+  [ "$WITH_VM" = 1 ] && V_SUM=", vm=$V_PASS/$V_PASS"
+  echo "FULL-RUN VERDICT: GREEN - N=$N_PASS/$N_PASS, pair=$P_PASS/$P_PASS, openshell=$O_PASS/$O_PASS$V_SUM, all parts green"
   echo "(combined log: $LOG; per-part logs: last-run.log, last-pair-run.log, last-openshell-run.log)"
   sleep 1
   exit 0
 fi
-echo "FULL-RUN VERDICT: RED - N=$N_PASS/$N_FAIL, pair=$P_PASS/$P_FAIL, openshell=$O_PASS/$O_FAIL failed (see $LOG)"
+[ "$WITH_VM" = 1 ] && V_SUM=", vm=$V_PASS/$V_FAIL"
+echo "FULL-RUN VERDICT: RED - N=$N_PASS/$N_FAIL, pair=$P_PASS/$P_FAIL, openshell=$O_PASS/$O_FAIL$V_SUM failed (see $LOG)"
 sleep 1
 exit 1

@@ -6,7 +6,7 @@ TMB: брокер привилегированного выполнения дл
 
 - `src/`: Go-модуль продукта, stdlib-only. `cmd/tmb` клиент, `cmd/tmb-broker` брокер, `internal/proto` протокол. Брокер поддерживается только на Linux: на macOS он компилируется для тестов, но не публикуется; релизный macOS-бинарник только у клиента.
 - `ci/`: `run.sh` и отдельный Go-модуль `tmbci`; те же команды идут локально и в Actions. Политики в JSON рядом (`coverage-policy`, `exceptions`, `fuzz-targets`, `security-manifest`, `required-checks`).
-- `harness/`: сценарные стенды. `run.sh` N-серия, `run-pair.sh` docker-pair, `run-openshell.sh` OpenShell-риг, `run-all.sh` все три. Реестры ожидаемых проверок в `ci/scenarios/`. Логи последних прогонов `harness/last-*.log` лежат в репозитории: это источник цифр для README и VERDICT.
+- `harness/`: сценарные стенды. `run.sh` N-серия, `run-pair.sh` docker-pair, `run-openshell.sh` OpenShell-риг, `run-vm.sh` VM-пруф на Lima (V-серия, только локально), `run-all.sh` первые три, с `--vm` и VM-пруф. Реестры ожидаемых проверок в `ci/scenarios/`. Логи последних прогонов `harness/last-*.log` лежат в репозитории: это источник цифр для README и VERDICT.
 - `prototype/`: сохранённые эксперименты, не продукт.
 
 ## Проверки
