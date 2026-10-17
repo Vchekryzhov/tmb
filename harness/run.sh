@@ -735,6 +735,22 @@ assert_err_has "N21: deny reason token_consumed_replay" "token_consumed_replay"
 state_dump
 
 # -----------------------------------------------------------------------------
+log "SCENARIO N24: the old certificate allowlist and the -tls-* flags are gone"
+# Both failures happen before any socket is touched, so the running broker
+# is left alone.
+docker exec "$HOST" sh -c 'sed "s#\"allowed_requester_uids\": \[4242, 4343\],#\"allowed_requester_uids\": [4242, 4343], \"allowed_requester_fps\": [\"aa\"],#" /etc/tmb/config.json >/tmp/n24.json'
+OUT_FILE=$TD/n24a.out; ERR_FILE=$TD/n24a.err
+docker exec "$HOST" timeout 10 tmb-broker -config /tmp/n24.json -approval mock-approve >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc      "N24: allowed_requester_fps in the config -> broker exits 1" 1
+assert_err_has "N24: stderr names the old field" "allowed_requester_fps"
+assert_err_has "N24: stderr names the replacement" "allowed_requester_keys"
+OUT_FILE=$TD/n24b.out; ERR_FILE=$TD/n24b.err
+docker exec "$HOST" timeout 10 tmb-broker -tls-ca /etc/tmb/certs/ca.crt >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc      "N24: -tls-ca -> usage error, exit 2" 2
+assert_err_has "N24: -tls-ca is an unknown flag" "flag provided but not defined: -tls-ca"
+state_dump
+
+# -----------------------------------------------------------------------------
 log "SCENARIO N3a: mock-deny -> deny, nothing runs"
 stop_broker
 start_broker mock-deny "$TTL"

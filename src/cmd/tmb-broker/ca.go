@@ -61,7 +61,7 @@ func runCA(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 const caUsage = `usage:
   tmb-broker ca init          [--dir DIR]
   tmb-broker ca issue-server  [--dir DIR] --dns NAME [--dns NAME]... [--ip IP]... [--out DIR]
-  tmb-broker ca issue-sandbox [--dir DIR] --in FILE|- --name NAME [--out FILE]
+  tmb-broker ca issue-sandbox [--dir DIR] --in FILE|- --name NAME [--out FILE] [--not-before RFC3339]
 --dir defaults to <directory of --config>/ca (/etc/tmb/ca); --in takes a PEM
 public key or a PEM CSR.
 `
@@ -75,7 +75,7 @@ func caCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, now tim
 	config := fs.String("config", "/etc/tmb/config.json", "broker config; the CA dir defaults to <its dir>/ca")
 	dir := fs.String("dir", "", "CA directory")
 	var dns, ips multiFlag
-	var in, name, out *string
+	var in, name, out, notBefore *string
 	switch args[0] {
 	case "init":
 	case "issue-server":
@@ -86,6 +86,7 @@ func caCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, now tim
 		in = fs.String("in", "", "PEM public key or CSR of the sandbox ('-' = stdin)")
 		name = fs.String("name", "", "sandbox name, Subject only (not an identity)")
 		out = fs.String("out", "", "certificate file (default: <CA dir>/sandbox-<name>.crt)")
+		notBefore = fs.String("not-before", "", "start of validity, RFC 3339 (default now); a date in the past makes an expired certificate for drills")
 	default:
 		return fmt.Errorf("%w: unknown ca command %q", errUsage, args[0])
 	}
@@ -144,7 +145,13 @@ func caCommand(args []string, stdin io.Reader, stdout, stderr io.Writer, now tim
 		if *out == "" {
 			*out = filepath.Join(*dir, "sandbox-"+*name+".crt")
 		}
-		fp, err := issueSandbox(*dir, *out, pemBytes, *name, now)
+		from := now
+		if *notBefore != "" {
+			if from, err = time.Parse(time.RFC3339, *notBefore); err != nil {
+				return fmt.Errorf("%w: --not-before: %v", errUsage, err)
+			}
+		}
+		fp, err := issueSandbox(*dir, *out, pemBytes, *name, from)
 		if err != nil {
 			return err
 		}

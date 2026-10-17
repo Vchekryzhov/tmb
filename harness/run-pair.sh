@@ -170,23 +170,33 @@ CA_BIN=$TD/tmb-broker-ca
 "$CA_BIN" ca issue-server --dir "$TD" --dns "$SERVER_NAME" >/dev/null \
   || { echo "FATAL: server certificate failed"; exit 1; }
 
-for n in 1 2 3; do
+# client4 has its own key but the same Subject as client1 (N23)
+for n in 1 2 3 4; do
+  name="tmb-pair-client$n"; [ "$n" = 4 ] && name=tmb-pair-client1
   if ! { openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$TD/client$n.key" 2>/dev/null \
       && openssl pkey -in "$TD/client$n.key" -pubout -out "$TD/client$n.pub" 2>/dev/null \
-      && "$CA_BIN" ca issue-sandbox --dir "$TD" --in "$TD/client$n.pub" --name "tmb-pair-client$n" \
-        --out "$TD/client$n.crt" >/dev/null; }; then
+      && "$CA_BIN" ca issue-sandbox --dir "$TD" --in "$TD/client$n.pub" --name "$name" \
+        --out "$TD/client$n.crt" >"$TD/client$n.fp.out"; }; then
     echo "FATAL: client$n certificate failed"; exit 1
   fi
 done
+# N23: a second certificate on client1's key, issued after the first; N30:
+# one on the same key whose 7-day validity ended long ago
+cp "$TD/client1.key" "$TD/client1b.key"
+cp "$TD/client1.key" "$TD/client1x.key"
+"$CA_BIN" ca issue-sandbox --dir "$TD" --in "$TD/client1.pub" --name tmb-pair-client1 \
+  --out "$TD/client1b.crt" >"$TD/client1b.fp.out" || { echo "FATAL: client1b certificate failed"; exit 1; }
+"$CA_BIN" ca issue-sandbox --dir "$TD" --in "$TD/client1.pub" --name tmb-pair-client1 \
+  --not-before "$(date -u -v-30d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)" \
+  --out "$TD/client1x.crt" >/dev/null || { echo "FATAL: expired client1x certificate failed"; exit 1; }
 
-# lower-case hex SHA-256 of the DER, no colons - the broker's identity form
-fp_of() {
-  openssl x509 -in "$1" -noout -fingerprint -sha256 \
-    | sed -n 's/^.*Fingerprint=//p' | tr -d ':' | tr 'A-F' 'a-f'
-}
-FP1=$(fp_of "$TD/client1.crt")
-FP2=$(fp_of "$TD/client2.crt")
-FP3=$(fp_of "$TD/client3.crt")
+# the key fingerprint (SHA-256 of the public key, hex) as the CA printed it:
+# the broker's identity form
+fp_of() { sed -n 's/^fingerprint: //p' "$TD/$1.fp.out"; }
+FP1=$(fp_of client1)
+FP2=$(fp_of client2)
+FP3=$(fp_of client3)
+FP4=$(fp_of client4)
 FP1_16=${FP1:0:16}
 echo "-- fp1=$FP1"
 echo "-- fp2=$FP2 (NOT in allowlist; exercised by ticket #7)"
@@ -206,7 +216,7 @@ cat > "$TD/config-pair.json" <<EOF
   "allowed_requester_uids": [4242],
   "approver_uids": [1500],
   "approver_socket_path": "/run/tmb-approver/approve.sock",
-  "allowed_requester_fps": ["$FP1", "$FP3"],
+  "allowed_requester_keys": ["$FP1", "$FP3"],
   "socket_gid": 4242,
   "allowed_cwd_roots": ["/tmp"],
   "allowed_env_keys": ["LANG"],
@@ -233,8 +243,7 @@ EOF
 # must be able to read the client material. ca.key stays 0600 on the host
 # and is never mounted anywhere.
 chmod 644 "$TD/ca.crt" "$TD/server.crt" "$TD/server.key" \
-  "$TD/client1.crt" "$TD/client1.key" "$TD/client2.crt" "$TD/client2.key" \
-  "$TD/client3.crt" "$TD/client3.key" "$TD/config-pair.json"
+  "$TD"/client*.crt "$TD"/client*.key "$TD/config-pair.json"
 chmod 600 "$TD/ca.key"
 
 # -----------------------------------------------------------------------------
@@ -278,6 +287,9 @@ docker run -d --name "$SBX" \
   -v "$TD/client1.crt":/certs/client1.crt:ro -v "$TD/client1.key":/certs/client1.key:ro \
   -v "$TD/client2.crt":/certs/client2.crt:ro -v "$TD/client2.key":/certs/client2.key:ro \
   -v "$TD/client3.crt":/certs/client3.crt:ro -v "$TD/client3.key":/certs/client3.key:ro \
+  -v "$TD/client4.crt":/certs/client4.crt:ro -v "$TD/client4.key":/certs/client4.key:ro \
+  -v "$TD/client1b.crt":/certs/client1b.crt:ro -v "$TD/client1b.key":/certs/client1b.key:ro \
+  -v "$TD/client1x.crt":/certs/client1x.crt:ro -v "$TD/client1x.key":/certs/client1x.key:ro \
   "$IMG_SBX" >/dev/null || { echo "FATAL: sandbox-sim run failed"; exit 1; }
 sleep 0.5
 
@@ -379,7 +391,7 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-log "SCENARIO PAIR-MANUAL: manual console shows 'requester : cert fp=<16 hex>', y then n"
+log "SCENARIO PAIR-MANUAL: manual console shows 'requester : key fp=<16 hex>', y then n"
 stop_broker
 FIFO=$TD/broker-console.in
 MANLOG=$TD/manual-console.log
@@ -407,10 +419,10 @@ docker exec \
   "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/man1.out" 2>"$TD/man1.err" &
 CLI1=$!
 wait_prompt 1
-if grep -qF "requester : cert fp=$FP1_16" "$MANLOG"; then
-  ok "PAIR-MANUAL: console line 'requester : cert fp=$FP1_16'"
+if grep -qF "requester : key fp=$FP1_16" "$MANLOG"; then
+  ok "PAIR-MANUAL: console line 'requester : key fp=$FP1_16'"
 else
-  bad "PAIR-MANUAL: console lacks 'requester : cert fp=$FP1_16'"
+  bad "PAIR-MANUAL: console lacks 'requester : key fp=$FP1_16'"
 fi
 echo "---- manual approval console ----"
 sed -n '1,12p' "$MANLOG" | sed 's/^/  | /'
@@ -473,10 +485,10 @@ if docker exec "$HOST" grep -q 'TMB APPROVAL REQUIRED' /tmp/o7-console.log 2>/de
 else
   ok "O7-A: approval console NOT bothered (denied before approval display)"
 fi
-if docker exec "$HOST" grep -q 'cert fp=' /tmp/o7-console.log 2>/dev/null; then
+if docker exec "$HOST" grep -q 'key fp=' /tmp/o7-console.log 2>/dev/null; then
   bad "O7-A: console showed a requester line"
 else
-  ok "O7-A: console shows no 'requester : cert fp=' line"
+  ok "O7-A: console shows no 'requester : key fp=' line"
 fi
 echo "-- manual broker console so far --"
 docker exec "$HOST" cat /tmp/o7-console.log 2>/dev/null | sed 's/^/  | /'
@@ -674,6 +686,91 @@ docker exec -u human -e TMB_APPROVE_SOCK="$APPROVE_SOCK" "$HOST" tmb approve --n
 wait $CLIPA; RUNC=$?
 OUT_FILE=$TD/pa.out; ERR_FILE=$TD/pa.err; show_io
 assert_rc "PAIR-APPROVE: the waiting request is denied by the host approver -> exit 125" 125
+stop_broker
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N23: identity is the key: a reissued certificate keeps the fingerprint"
+# client1b is a second certificate on client1's key, issued after the first;
+# client4 has the same Subject as client1 but its own key. The allowlist
+# lists keys and is not touched.
+CFG_SUM=$(shasum -a 256 "$TD/config-pair.json" | cut -d' ' -f1)
+if [ "$(fp_of client1b)" = "$FP1" ]; then ok "N23: ca issue-sandbox printed the same fingerprint for the reissued certificate"; else bad "N23: reissue changed the fingerprint"; fi
+TLN=$(broker_log_count '"event":"tls_listen"'); TLN=${TLN:-0}
+start_broker queue 30
+wait_broker_log_count '"event":"tls_listen"' $((TLN+1))
+QUEUED_FP1_BEFORE=$(docker exec "$HOST" grep '"event":"queued"' /var/log/tmb/broker.log | grep -c "\"requester_fp\":\"$FP1\"")
+for cl in client1 client1b; do
+  docker exec \
+    -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" -e TMB_CA=/certs/ca.crt \
+    -e TMB_CERT="/certs/$cl.crt" -e TMB_KEY="/certs/$cl.key" \
+    "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/n23-$cl.out" 2>"$TD/n23-$cl.err" &
+  CLI23=$!
+  QUEUED=0
+  for _ in $(seq 1 150); do
+    docker exec -u human -e TMB_APPROVE_SOCK="$APPROVE_SOCK" "$HOST" tmb approve --list >"$TD/n23-q.out" 2>&1
+    grep -q '^=== ' "$TD/n23-q.out" && { QUEUED=1; break; }
+    sleep 0.1
+  done
+  [ "$QUEUED" = 1 ] || bad "N23: $cl request never queued"
+  if grep -qF "requester : key fp=$FP1_16" "$TD/n23-q.out"; then ok "N23: approval display shows key fp=$FP1_16 for $cl"; else bad "N23: approval display for $cl lacks key fp=$FP1_16"; fi
+  ID23=$(sed -n 's/^=== \([0-9a-f]\{16\}\) ===$/\1/p' "$TD/n23-q.out" | head -1)
+  docker exec -u human -e TMB_APPROVE_SOCK="$APPROVE_SOCK" "$HOST" tmb approve --yes "$ID23" >/dev/null 2>&1
+  wait $CLI23; RUNC=$?
+  OUT_FILE=$TD/n23-$cl.out; ERR_FILE=$TD/n23-$cl.err; show_io
+  assert_rc "N23: request with $cl -> exit 0" 0
+done
+QUEUED_FP1_AFTER=$(docker exec "$HOST" grep '"event":"queued"' /var/log/tmb/broker.log | grep -c "\"requester_fp\":\"$FP1\"")
+if [ $((QUEUED_FP1_AFTER - QUEUED_FP1_BEFORE)) = 2 ]; then ok "N23: both certificates logged as requester_fp=fp1"; else bad "N23: JSONL requester_fp differs between the certificates ($QUEUED_FP1_BEFORE -> $QUEUED_FP1_AFTER)"; fi
+run_tls_client client4 tmb exec --root -- /usr/bin/id -u
+assert_rc      "N23: other key, same Subject -> exit 125" 125
+assert_err_has "N23: deny reason requester_not_allowed" "requester_not_allowed"
+if docker exec "$HOST" grep '"event":"requester_denied"' /var/log/tmb/broker.log | grep -q "\"requester_fp\":\"$FP4\""; then ok "N23: requester_denied carries the other key's fingerprint"; else bad "N23: requester_denied for the other key missing"; fi
+if [ "$(shasum -a 256 "$TD/config-pair.json" | cut -d' ' -f1)" = "$CFG_SUM" ]; then ok "N23: allowlist (config) unchanged"; else bad "N23: config changed"; fi
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N30: an expired sandbox certificate fails the handshake, no deny, no request"
+HSF_BEFORE=$(broker_log_count '"event":"tls_handshake_failed"')
+REQ_BEFORE=$(broker_log_count '"event":"request"')
+DENY_BEFORE=$(broker_log_count '"event":"deny"')
+run_tls_client client1x tmb exec --root -- /usr/bin/id -u
+assert_rc "N30: expired certificate -> client exit 3 (fail closed)" 3
+sleep 0.5
+HSF_AFTER=$(broker_log_count '"event":"tls_handshake_failed"')
+if [ "$HSF_AFTER" -gt "$HSF_BEFORE" ]; then ok "N30: tls_handshake_failed logged"; docker exec "$HOST" grep '"event":"tls_handshake_failed"' /var/log/tmb/broker.log | tail -1 | sed 's/^/  | /'; else bad "N30: no tls_handshake_failed event"; fi
+if [ "$(broker_log_count '"event":"request"')" = "$REQ_BEFORE" ] && [ "$(broker_log_count '"event":"deny"')" = "$DENY_BEFORE" ]; then ok "N30: no request and no deny event"; else bad "N30: request or deny event logged for an expired certificate"; fi
+stop_broker
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO PAIR-KEY: the key is born in the sandbox (tmb keygen); only the public key leaves"
+docker exec "$SBX" tmb keygen --out /home/tmb/sbx.key >"$TD/pk.out" 2>"$TD/pk.err"; RUNC=$?
+assert_rc "PAIR-KEY: tmb keygen in sandbox-sim -> exit 0" 0
+if [ "$(docker exec "$SBX" stat -c %a /home/tmb/sbx.key)" = 600 ]; then ok "PAIR-KEY: private key file is 0600"; else bad "PAIR-KEY: private key file mode is not 0600"; fi
+if grep -q "PRIVATE KEY" "$TD/pk.out"; then bad "PAIR-KEY: keygen printed private key material"; else ok "PAIR-KEY: keygen printed only the public key"; fi
+sed -n '/-----BEGIN PUBLIC KEY-----/,/-----END PUBLIC KEY-----/p' "$TD/pk.out" >"$TD/pk.pub"
+FPK=$(sed -n 's/^fingerprint: //p' "$TD/pk.out")
+"$CA_BIN" ca issue-sandbox --dir "$TD" --in "$TD/pk.pub" --name pair-key --out "$TD/pk.crt" >"$TD/pk.fp.out"
+if [ -n "$FPK" ] && [ "$(sed -n 's/^fingerprint: //p' "$TD/pk.fp.out")" = "$FPK" ]; then ok "PAIR-KEY: host CA prints the fingerprint keygen printed"; else bad "PAIR-KEY: fingerprints of keygen and the CA differ"; fi
+chmod 644 "$TD/pk.crt"
+docker cp "$TD/pk.crt" "$SBX":/home/tmb/pk.crt >/dev/null
+if [ "$(docker exec "$SBX" tmb fingerprint /home/tmb/pk.crt)" = "$FPK" ]; then ok "PAIR-KEY: tmb fingerprint of the certificate matches"; else bad "PAIR-KEY: tmb fingerprint of the certificate differs"; fi
+sed "s/\"allowed_requester_keys\": \[/\"allowed_requester_keys\": [\"$FPK\", /" "$TD/config-pair.json" >"$TD/config-pair.next"
+cat "$TD/config-pair.next" >"$TD/config-pair.json"
+TLN=$(broker_log_count '"event":"tls_listen"'); TLN=${TLN:-0}
+start_broker mock-approve 30
+wait_broker_log_count '"event":"tls_listen"' $((TLN+1))
+OUT_FILE=$TD/pk-exec.out; ERR_FILE=$TD/pk-exec.err
+docker exec \
+  -e TMB_ADDR="$SERVER_NAME:$TLS_PORT" -e TMB_CA=/certs/ca.crt \
+  -e TMB_CERT=/home/tmb/pk.crt -e TMB_KEY=/home/tmb/sbx.key \
+  "$SBX" tmb exec --root -- /usr/bin/id -u >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc     "PAIR-KEY: request with the sandbox-born key -> exit 0" 0
+assert_out_eq "PAIR-KEY: stdout '0'" "0"
+docker exec "$HOST" sh -c 'grep -rl "PRIVATE KEY" / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null' >"$TD/pk-host.out"
+sed 's/^/  | /' "$TD/pk-host.out"
+if [ "$(grep -cv '^/etc/tmb/certs/server.key$' "$TD/pk-host.out")" = 0 ]; then ok "PAIR-KEY: host-sim holds no private key but the broker's own"; else bad "PAIR-KEY: host-sim holds other private key files"; fi
 stop_broker
 state_dump
 

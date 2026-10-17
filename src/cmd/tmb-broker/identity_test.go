@@ -26,7 +26,7 @@ func newTestBroker(t *testing.T) *Broker {
 	}
 	cfg := &Config{
 		AllowedRequesterUIDs: []uint32{4242, 4343},
-		AllowedRequesterFPs:  []string{strings.Repeat("aa", 32), strings.Repeat("bb", 32)},
+		AllowedRequesterKeys: []string{strings.Repeat("aa", 32), strings.Repeat("bb", 32)},
 		AllowedEnvKeys:       []string{"LANG"},
 		FixedEnv:             map[string]string{"PATH": "/usr/bin:/bin"},
 		AllowedCwdRoots:      []string{"/"},
@@ -109,9 +109,11 @@ func TestRequesterIDRendering(t *testing.T) {
 		t.Errorf("uid key = %q, want %q", id.Key(), "uid:4242")
 	}
 
-	fp := "0123456789abcdef" + strings.Repeat("ab", 24) // 64 hex chars; console shows the first 16
-	cert := CertRequester(fp)
-	if got, want := cert.ConsoleLine(), "cert fp=0123456789abcdef"; got != want {
+	// 64 hex chars; console shows the first 16. Low entropy on purpose:
+	// gitleaks reads "key fp=<random hex>" as a credential.
+	fp := strings.Repeat("a", 8) + strings.Repeat("b", 8) + strings.Repeat("c", 48)
+	cert := KeyRequester(fp)
+	if got, want := cert.ConsoleLine(), "key fp=aaaaaaaabbbbbbbb"; got != want {
 		t.Errorf("cert console line = %q, want %q (first 16 hex)", got, want)
 	}
 	clf := cert.LogFields()
@@ -121,8 +123,8 @@ func TestRequesterIDRendering(t *testing.T) {
 	if _, has := clf["requester_uid"]; has {
 		t.Errorf("cert log fields must not carry requester_uid: %v", clf)
 	}
-	if cert.Key() != "certfp:"+fp {
-		t.Errorf("cert key = %q, want %q", cert.Key(), "certfp:"+fp)
+	if cert.Key() != "keyfp:"+fp {
+		t.Errorf("cert key = %q, want %q", cert.Key(), "keyfp:"+fp)
 	}
 }
 
@@ -135,13 +137,13 @@ func TestRequesterIDEquality(t *testing.T) {
 	if alice.Equal(UIDRequester(4343, 11)) {
 		t.Error("different uid must be a different requester")
 	}
-	if alice.Equal(CertRequester(strings.Repeat("aa", 32))) {
+	if alice.Equal(KeyRequester(strings.Repeat("aa", 32))) {
 		t.Error("uid and cert identities must never be equal")
 	}
-	if !CertRequester("aa").Equal(CertRequester("aa")) {
+	if !KeyRequester("aa").Equal(KeyRequester("aa")) {
 		t.Error("same fingerprint must be the same requester")
 	}
-	if CertRequester("aa").Equal(CertRequester("bb")) {
+	if KeyRequester("aa").Equal(KeyRequester("bb")) {
 		t.Error("different fingerprint must be a different requester")
 	}
 }
@@ -154,10 +156,10 @@ func TestAllowedRequesterPerKind(t *testing.T) {
 	if b.allowedRequester(UIDRequester(1000, 1)) {
 		t.Error("non-allowlisted uid must fail")
 	}
-	if !b.allowedRequester(CertRequester(strings.Repeat("aa", 32))) {
+	if !b.allowedRequester(KeyRequester(strings.Repeat("aa", 32))) {
 		t.Error("allowlisted fingerprint must pass")
 	}
-	if b.allowedRequester(CertRequester(strings.Repeat("cc", 32))) {
+	if b.allowedRequester(KeyRequester(strings.Repeat("cc", 32))) {
 		t.Error("non-allowlisted fingerprint must fail")
 	}
 }
@@ -185,7 +187,7 @@ func TestDenyRequesterNotAllowed(t *testing.T) {
 	}{
 		{UIDRequester(1000, 7), "uid 1000 is not in the broker allowlist",
 			`"requester_pid":7,"requester_uid":1000`},
-		{CertRequester(fp), "cert fp " + fp + " is not in the broker allowlist",
+		{KeyRequester(fp), "key fp " + fp + " is not in the broker allowlist",
 			`"requester_fp":"` + fp + `"`},
 	} {
 		server, client := net.Pipe()
@@ -277,7 +279,7 @@ func TestClaimRequesterMismatchUID(t *testing.T) {
 func TestClaimRequesterMismatchCert(t *testing.T) {
 	b := newTestBroker(t)
 	fpA, fpB := strings.Repeat("aa", 32), strings.Repeat("bb", 32)
-	alice, bob := CertRequester(fpA), CertRequester(fpB)
+	alice, bob := KeyRequester(fpA), KeyRequester(fpB)
 
 	req := testReq(t, "unit-mismatch-cert-1")
 	f := approveDo(t, b, req, alice)
