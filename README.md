@@ -31,7 +31,7 @@ TMB посредничает между агентом в песочнице NVI
 | OpenShell-майлстоун: реестр O0–O9 на живой связке | [#5](https://github.com/Vchekryzhov/tmb/issues/5), [вердикт](VERDICT-OPENSHELL.md) | доказан: N=77/77, pair=59/59, OpenShell=65/65 |
 | Майлстоун A «политика и харденинг»: очередь одобрений, корни cwd, политика окружения, fd каталога, сборщик claim-файлов | [#27](https://github.com/Vchekryzhov/tmb/issues/27), [вердикт](VERDICT-A.md) | доказан: N=159/159, pair=67/67, OpenShell=65/65 |
 | CI: переносимые проверки на каждый PR, единый статус `ci-gate` | [docs/ci.md](docs/ci.md) | фаза A действует, фазы B и C ждут |
-| Майлстоун B «эксплуатация»: идентичность по ключу, reload, журнал, пакеты, пруф на VM | [#39](https://github.com/Vchekryzhov/tmb/issues/39), зонтик [#4](https://github.com/Vchekryzhov/tmb/issues/4) | в работе: CA в `tmb-broker`, reload по SIGHUP и журнал с fsync и схемой готовы |
+| Майлстоун B «эксплуатация»: идентичность по ключу, reload, журнал, пакеты, пруф на VM | [#39](https://github.com/Vchekryzhov/tmb/issues/39), зонтик [#4](https://github.com/Vchekryzhov/tmb/issues/4) | в работе: CA в `tmb-broker`, reload по SIGHUP, журнал с fsync и схемой, пакеты deb/rpm и релиз по тегу готовы |
 
 ## Как это работает
 
@@ -167,6 +167,14 @@ ci/run.sh tools && ci/run.sh local
 ```
 
 Состав проверок, пороги и исключения описаны в [docs/ci.md](docs/ci.md).
+
+Пакеты deb и rpm (`tmb-broker`, `tmb`) и архивы клиента из чистого checkout собираются в `out/dist` одной командой; нужны Go, git и curl, nfpm ставится сам по пину:
+
+```bash
+ci/run.sh dist
+```
+
+Версия берётся из `TMB_VERSION` или тега `v*` на HEAD, иначе `v0.0.0-dev+<sha>`. После установки `tmb-broker` остаётся скопировать `/etc/tmb/config.json.example` в `/etc/tmb/config.json`, вписать запросчиков и одобряющих и запустить `systemctl start tmb-broker`. Состав пакетов, проверка установки и релиз по тегу: [docs/ci.md](docs/ci.md#пакеты-и-релиз).
 
 ## Документы
 
