@@ -151,9 +151,13 @@ func TestTrivyDBFreshness(t *testing.T) {
 	if err := scan.TrivyDBFresh(strings.NewReader(fresh), now); err != nil {
 		t.Fatalf("fresh DB rejected: %v", err)
 	}
-	stale := `{"Version":"0.75.0","VulnerabilityDB":{"Version":2,"UpdatedAt":"2026-10-14T06:10:00Z","DownloadedAt":"2026-10-16T11:58:00Z"}}`
+	stale := `{"Version":"0.75.0","VulnerabilityDB":{"Version":2,"UpdatedAt":"2026-10-13T06:10:00Z","DownloadedAt":"2026-10-16T11:58:00Z"}}`
+	dayOld := `{"Version":"0.75.0","VulnerabilityDB":{"Version":2,"UpdatedAt":"2026-10-15T06:10:00Z","DownloadedAt":"2026-10-16T11:58:00Z"}}`
+	if err := scan.TrivyDBFresh(strings.NewReader(dayOld), now); err != nil {
+		t.Fatalf("a DB built 30h ago must count as fresh under the 72h limit: %v", err)
+	}
 	if err := scan.TrivyDBFresh(strings.NewReader(stale), now); err == nil {
-		t.Fatal("a DB built 54h ago must not count as fresh")
+		t.Fatal("a DB built 78h ago must not count as fresh")
 	}
 	if err := scan.TrivyDBFresh(strings.NewReader(`{"Version":"0.75.0"}`), now); err == nil {
 		t.Fatal("missing DB metadata must not count as fresh")
