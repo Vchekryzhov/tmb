@@ -3,5 +3,6 @@
 # harness evidence: the last runs are the source of README and verdict numbers
 !harness/last-*.log
 out/
+/src/cmd/tmb-broker/tmb-broker
 .omo/
 .githooks/

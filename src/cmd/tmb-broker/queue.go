@@ -8,6 +8,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -203,7 +204,7 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 			return false, "approval_timeout", "mode:" + ModeQueue
 		}
 		d = <-e.result // decided at the last moment
-	case <-hangup:
+	case <-hangup.done:
 		// the requester is gone: nothing runs, even when a decision raced
 		// the hangup and is already waiting in the channel
 		approver := "mode:" + ModeQueue
@@ -213,7 +214,10 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 		b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))
 		return false, "request_abandoned", approver
 	}
-	stopWatch(conn, hangup)
+	if stopWatch(conn, hangup) {
+		b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))
+		return false, "request_abandoned", d.approver.Key()
+	}
 	if !d.granted {
 		return false, "approval_denied_by_human", d.approver.Key()
 	}
@@ -227,26 +231,40 @@ func queueEvent(id RequesterID, item string, wait time.Duration) map[string]any 
 	return ev
 }
 
+// hangupWatch keeps the read result even when a ready decision wins the
+// select. Receiving done synchronizes access to err.
+type hangupWatch struct {
+	done chan struct{}
+	err  error
+}
+
 // watchHangup reads the requester connection while its request waits: the
-// client sends nothing more, so a read that returns means it hung up. The
-// channel closes on that; stopWatch ends the watch otherwise.
-func watchHangup(conn net.Conn) <-chan struct{} {
-	gone := make(chan struct{})
+// client sends nothing more, so a read that returns means it hung up, unless
+// stopWatch interrupted the read with a deadline.
+func watchHangup(conn net.Conn) *hangupWatch {
+	w := &hangupWatch{done: make(chan struct{})}
 	go func() {
-		defer close(gone)
+		defer close(w.done)
 		var buf [1]byte
-		_, _ = conn.Read(buf[:])
+		_, w.err = conn.Read(buf[:])
 	}()
-	return gone
+	return w
 }
 
 // stopWatch unblocks the hangup reader with a past read deadline and waits
 // for it, so nothing else reads the connection concurrently; the deadline
-// is then cleared.
-func stopWatch(conn net.Conn, gone <-chan struct{}) {
+// is then cleared. True means the peer disconnected (or sent unexpected
+// data), rather than the read ending because we stopped the watch.
+func stopWatch(conn net.Conn, w *hangupWatch) bool {
 	_ = conn.SetReadDeadline(time.Unix(1, 0))
-	<-gone
+	<-w.done
 	_ = conn.SetReadDeadline(time.Time{})
+	if !errors.Is(w.err, os.ErrDeadlineExceeded) {
+		return true
+	}
+	// A past deadline can win over an EOF already waiting in a real
+	// socket. Inspect it without consuming bytes, after joining the reader.
+	return socketReadReady(conn)
 }
 
 // --- approver socket ----------------------------------------------------------

@@ -55,7 +55,7 @@
      "tests": ["tmb-poc/cmd/tmb-broker.TestQueueApprovalByApprover", "tmb-poc/cmd/tmb-broker.TestApproverMessagesRejected", "tmb-poc/cmd/tmb-broker.TestRequesterSocketRefusesApproverTypes", "tmb-poc/cmd/tmb.TestApproveYesNoAndAlreadyDecided"],
      "scenarios": ["N13", "N14", "N16", "PAIR-APPROVE"]},
     {"id": "SEC-22", "title": "a queued request is denied approval_timeout after approval_wait_seconds and nothing runs; a requester that hangs up leaves the queue; waiting does not block other requests",
-     "tests": ["tmb-poc/cmd/tmb-broker.TestQueueWaitTimesOut", "tmb-poc/cmd/tmb-broker.TestQueueRequesterHangupWithdraws", "tmb-poc/cmd/tmb-broker.TestQueueIsNotAMutex", "tmb-poc/cmd/tmb-broker.TestQueueWithdrawLosesToDecision"],
+     "tests": ["tmb-poc/cmd/tmb-broker.TestQueueWaitTimesOut", "tmb-poc/cmd/tmb-broker.TestQueueRequesterHangupWithdraws", "tmb-poc/cmd/tmb-broker.TestQueueIsNotAMutex", "tmb-poc/cmd/tmb-broker.TestQueueWithdrawLosesToDecision", "tmb-poc/cmd/tmb-broker.TestHangupWinsOverRacingDecision", "tmb-poc/cmd/tmb-broker.TestDisconnectedExecIsNotRunWhenDecisionIsReady", "tmb-poc/cmd/tmb-broker.TestUnixDisconnectedExecIsNotRunWhenDecisionIsReady", "tmb-poc/cmd/tmb-broker.TestTLSDisconnectedExecIsNotRunWhenDecisionIsReady"],
      "scenarios": ["N15", "N17"]},
     {"id": "SEC-23", "title": "the sandbox identity is its public key: a reissued certificate keeps it, another key with the same Subject is not allowed, the private key never leaves the sandbox",
      "tests": ["tmb-poc/cmd/tmb-broker.TestKeyFingerprintSurvivesReissue", "tmb-poc/cmd/tmb-broker.TestLoadConfigRejectsAllowedRequesterFPs", "tmb-poc/cmd/tmb.TestKeygenAndFingerprintAgree"],
