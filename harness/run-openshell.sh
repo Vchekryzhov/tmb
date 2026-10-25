@@ -217,7 +217,7 @@ docker image inspect "$OPENCODE_IMAGE_REF" --format 'base: {{.Os}}/{{.Architectu
 
 echo "-- O0: stdlib-only dependency surface (go list -m all in src/)"
 GOLIST=$(retry docker run --rm -e GOCACHE=/tmp/gocache \
-  -v "$(cd .. && pwd)/src":/src:ro -w /src golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d go list -m all 2>/dev/null)
+  -v "$(cd .. && pwd)/src":/src:ro -w /src golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c go list -m all 2>/dev/null)
 # shellcheck disable=SC2001 # prefixes every line of a multi-line value
 echo "$GOLIST" | sed 's/^/  | /'
 if [ "$(echo "$GOLIST" | tr -d '[:space:]')" = "tmb-poc" ]; then

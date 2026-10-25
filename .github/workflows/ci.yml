@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  GO_PRIMARY: "1.27.2"
+  GO_PRIMARY: "1.27.3"
   TMB_CI_SHA: ${{ github.sha }}
   TMB_CI_RUN_ID: ${{ github.run_id }}
   # base for coverage and secrets: the target branch for PRs, the previous main otherwise
@@ -65,7 +65,7 @@ jobs:
       max-parallel: 6
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
-        go: ["1.27.2", "1.26.9"]
+        go: ["1.27.3", "1.26.10"]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     permissions:

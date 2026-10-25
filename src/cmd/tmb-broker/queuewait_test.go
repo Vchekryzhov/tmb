@@ -127,7 +127,7 @@ func TestQueueIsNotAMutex(t *testing.T) {
 // A decision that lands before a timeout or hangup is honoured.
 func TestQueueWithdrawLosesToDecision(t *testing.T) {
 	q := newApprovalQueue()
-	e, _ := q.add(proto.QueueItem{ID: "x", Hash: "h"})
+	e, _ := q.add(proto.QueueItem{ID: "x", Hash: "h"}, RequesterID{})
 	if deny, _ := q.decide("x", "h", queueDecision{granted: true}); deny != "" {
 		t.Fatalf("decide: %s", deny)
 	}

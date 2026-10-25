@@ -14,7 +14,7 @@ import (
 
 // auditSchemaVersion is the "schema" field of every event. It goes up when
 // the fields of an existing event change (docs/audit-schema.md).
-const auditSchemaVersion = 1
+const auditSchemaVersion = 2
 
 // errAuditUnavailable is returned by Event while the journal is
 // unavailable: nothing that depends on the record may go ahead.

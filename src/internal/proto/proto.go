@@ -6,6 +6,7 @@
 package proto
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -65,14 +66,21 @@ type canonicalRequest struct {
 	Nonce      string            `json:"nonce"`
 }
 
-// DecodeRequest parses one request frame body with json.Unmarshal
-// semantics: invalid JSON or a wrongly typed field is an error, unknown
-// fields are ignored, and a JSON null decodes to a zero Request. The
+// DecodeRequest parses one request frame body strictly: invalid JSON, a
+// wrongly typed field, an unknown field or trailing data is an error, and a
+// JSON null decodes to a zero Request. The protocol carries no version, so
+// a field this side does not know (from a newer peer) is refused instead of
+// dropped: dropping it would run the request without what it asked for. The
 // request type, and so a zero Request, is checked by the broker.
 func DecodeRequest(raw []byte) (*Request, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
 	var req Request
-	if err := json.Unmarshal(raw, &req); err != nil {
+	if err := dec.Decode(&req); err != nil {
 		return nil, err
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, errors.New("proto: trailing data after the request")
 	}
 	return &req, nil
 }
@@ -180,11 +188,17 @@ func ReadRawFrame(r io.Reader) ([]byte, error) {
 	if n > MaxFrame {
 		return nil, ErrFrameTooLarge
 	}
-	buf := make([]byte, n)
-	if _, err := io.ReadFull(r, buf); err != nil {
+	// grow with the bytes that actually arrive: a peer that announces a
+	// large frame and then sends nothing holds no more than it sent
+	var buf bytes.Buffer
+	got, err := io.CopyN(&buf, r, int64(n))
+	if err != nil {
+		if err == io.EOF && got > 0 {
+			err = io.ErrUnexpectedEOF
+		}
 		return nil, err
 	}
-	return buf, nil
+	return buf.Bytes(), nil
 }
 
 // ReadFrame reads one frame into a *Frame.

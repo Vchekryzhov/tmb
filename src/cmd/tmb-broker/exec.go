@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -67,16 +68,12 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 		// ExtraFiles deliberately nil -> child sees ONLY fd 0,1,2
 		SysProcAttr: &syscall.SysProcAttr{},
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		b.deny(req, id, "exec_error", err.Error(), conn)
-		return
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		b.deny(req, id, "exec_error", err.Error(), conn)
-		return
-	}
+	// output goes to the client as chunk frames; os/exec copies the
+	// pipes itself, so WaitDelay can bound a descendant that keeps them open
+	out := &clientStream{conn: conn}
+	cmd.Stdout = out.writer("stdout")
+	cmd.Stderr = out.writer("stderr")
+	cmd.WaitDelay = execWaitDelay
 
 	if err := closeOnExecInherited(); err != nil {
 		b.deny(req, id, "exec_error", err.Error(), conn)
@@ -107,33 +104,15 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 		return
 	}
 
-	var wmu sync.Mutex // serialize frame writes to the client
-	writeFrame := func(f *proto.Frame) {
-		wmu.Lock()
-		defer wmu.Unlock()
-		proto.WriteFrame(conn, f)
-	}
-	pump := func(r io.Reader, kind string) func() {
-		return func() {
-			buf := make([]byte, 32*1024)
-			for {
-				n, err := r.Read(buf)
-				if n > 0 {
-					writeFrame(proto.Chunk(kind, buf[:n]))
-				}
-				if err != nil {
-					return
-				}
-			}
+	waitErr := cmd.Wait()
+	if errors.Is(waitErr, exec.ErrWaitDelay) {
+		// the command exited; a descendant held its output open past
+		// execWaitDelay and was cut off. The exit status is the command's.
+		waitErr = nil
+		if !cmd.ProcessState.Success() {
+			waitErr = &exec.ExitError{ProcessState: cmd.ProcessState}
 		}
 	}
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() { defer wg.Done(); pump(stdout, "stdout")() }()
-	go func() { defer wg.Done(); pump(stderr, "stderr")() }()
-	wg.Wait() // drain both pipes BEFORE Wait closes them
-
-	waitErr := cmd.Wait()
 	code := 0
 	if waitErr != nil {
 		if ee, ok := waitErr.(*exec.ExitError); ok {
@@ -151,8 +130,68 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 	evExit["executable"] = p.ExePath
 	evExit["exit_status"] = code
 	evExit["duration_ms"] = time.Since(start).Milliseconds()
+	evExit["client_gone"] = out.gone()
 	b.log.Event("exec_exit", evExit)
-	writeFrame(&proto.Frame{Type: "exit", Code: &code})
+	out.write(&proto.Frame{Type: "exit", Code: &code})
+}
+
+// execWaitDelay bounds how long the broker waits, after the command exits,
+// for a descendant that still holds its stdout or stderr open.
+var execWaitDelay = 5 * time.Second
+
+// clientWriteTimeout bounds one frame write to the client. A client that
+// stops reading is treated as gone: its output is discarded, so the
+// command is never blocked on a full pipe.
+var clientWriteTimeout = 30 * time.Second
+
+// clientStream serializes frame writes to the client and remembers when the
+// client stopped taking them.
+type clientStream struct {
+	conn   net.Conn
+	mu     sync.Mutex
+	failed bool
+}
+
+func (s *clientStream) write(f *proto.Frame) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failed {
+		return
+	}
+	_ = s.conn.SetWriteDeadline(time.Now().Add(clientWriteTimeout))
+	if err := proto.WriteFrame(s.conn, f); err != nil {
+		s.failed = true
+	}
+	_ = s.conn.SetWriteDeadline(time.Time{})
+}
+
+func (s *clientStream) gone() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.failed
+}
+
+// writer returns an io.Writer that sends each write as one chunk frame of
+// kind. It never fails: once the client is gone the bytes are dropped and
+// the command keeps running to its end.
+func (s *clientStream) writer(kind string) io.Writer {
+	return chunkWriter{s: s, kind: kind}
+}
+
+type chunkWriter struct {
+	s    *clientStream
+	kind string
+}
+
+// maxChunk keeps one chunk frame well under proto.MaxFrame after base64.
+const maxChunk = 32 * 1024
+
+func (w chunkWriter) Write(p []byte) (int, error) {
+	for off := 0; off < len(p); off += maxChunk {
+		end := min(off+maxChunk, len(p))
+		w.s.write(proto.Chunk(w.kind, p[off:end]))
+	}
+	return len(p), nil
 }
 
 // afterCwdCheck is a test seam: it runs between the last cwd identity check

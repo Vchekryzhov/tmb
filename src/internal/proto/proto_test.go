@@ -245,3 +245,18 @@ func TestNewNonceIsFreshHex(t *testing.T) {
 		t.Fatal("two nonces are equal")
 	}
 }
+
+func TestDecodeRequestRejectsUnknownFields(t *testing.T) {
+	if _, err := DecodeRequest([]byte(`{"type":"exec","timeout":5}`)); err == nil {
+		t.Fatal("DecodeRequest dropped an unknown field instead of refusing the request")
+	}
+}
+
+func TestReadRawFrameHoldsOnlyWhatArrived(t *testing.T) {
+	var hdr [4]byte
+	binary.BigEndian.PutUint32(hdr[:], MaxFrame)
+	r := io.MultiReader(bytes.NewReader(hdr[:]), bytes.NewReader([]byte("{}")))
+	if _, err := ReadRawFrame(r); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("short body = %v, want io.ErrUnexpectedEOF", err)
+	}
+}

@@ -100,8 +100,8 @@ func NewBroker(cfg *Config, log *Logger, claims *ClaimStore, mode string, ttl ti
 }
 
 // allowedRequester checks the identity against the broker allowlist. The
-// allowlist entries are per-kind: uids for SO_PEERCRED identities,
-// certificate fingerprints for TLS identities.
+// allowlist entries are per-kind: uids for SO_PEERCRED identities, public
+// key fingerprints for TLS identities (ADR 0005).
 func (b *Broker) allowedRequester(id RequesterID) bool {
 	switch id.Kind {
 	case KindUID:
@@ -193,15 +193,9 @@ func (b *Broker) shellDenied(rawPath, realPath string) bool {
 	return set[rawPath] || set[realPath]
 }
 
-// Serve runs the accept loop.
+// Serve runs the accept loop; it returns only when ln is closed.
 func (b *Broker) Serve(ln net.Listener) error {
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			return err
-		}
-		go b.handleConn(conn.(*net.UnixConn))
-	}
+	return serveConns(ln, func(c net.Conn) { b.handleConn(c.(*net.UnixConn)) })
 }
 
 func (b *Broker) handleConn(conn *net.UnixConn) {
@@ -225,7 +219,9 @@ func (b *Broker) handleConn(conn *net.UnixConn) {
 }
 
 func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
+	_ = conn.SetReadDeadline(time.Now().Add(requestReadTimeout))
 	raw, err := proto.ReadRawFrame(conn)
+	_ = conn.SetReadDeadline(time.Time{})
 	if err != nil {
 		ev := id.LogFields()
 		ev["error"] = err.Error()
@@ -250,7 +246,8 @@ func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
 	ev["cwd"] = req.Cwd
 	ev["uid"] = req.UID
 	ev["env"] = req.Env
-	ev["nonce"] = short(req.Nonce, 12)
+	ev["nonce"] = logNonce(req.Nonce)
+	ev["hash"] = req.Hash()
 	ev["claim_token"] = req.ClaimToken
 	if b.log.Event("request", ev) != nil {
 		b.writeAuditUnavailable(conn)
@@ -282,7 +279,8 @@ func (b *Broker) deny(req *proto.Request, id RequesterID, reason, detail string,
 	ev := id.LogFields()
 	ev["executable"] = req.Executable
 	ev["argv"] = req.Argv
-	ev["nonce"] = short(req.Nonce, 12)
+	ev["nonce"] = logNonce(req.Nonce)
+	ev["hash"] = req.Hash()
 	ev["reason"] = reason
 	ev["detail"] = detail
 	b.log.Event("deny", ev)
@@ -367,7 +365,7 @@ func (b *Broker) validateRequest(req *proto.Request) (exeReal, cwdReal string, d
 	if len(req.Env) > 32 {
 		return "", "", 0, 0, "env_too_many", ""
 	}
-	if req.Nonce == "" || len(req.Nonce) > 128 {
+	if req.Nonce == "" || len(req.Nonce) > maxNonceLen {
 		return "", "", 0, 0, "nonce_invalid", short(req.Nonce, 16)
 	}
 	if req.Cwd == "" {
@@ -427,7 +425,23 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 		return false
 	}
 
-	granted, reason, approver := b.runApprovalInteraction(req, id, exeReal, cwdReal, dev, ino, conn)
+	// pin the identities for exec time BEFORE the approver sees the request:
+	// an open fd on the exe inode (exec runs /proc/self/fd/N, never the
+	// mutable path) and the cwd directory dev/ino (re-verified at exec). A
+	// path swapped while the request waits for a decision then fails the
+	// claim with executable_changed or cwd_changed instead of running a file
+	// the approver never saw. Fail closed if either target changed between
+	// stat and pin.
+	pend := &pendingApproval{
+		ExePath: exeReal, ExeDev: dev, ExeIno: ino, CwdReal: cwdReal,
+		Requester: id,
+	}
+	if code, detail := pinApproval(pend, exeReal, cwdReal, dev, ino); code != "" {
+		b.deny(req, id, code, detail, conn)
+		return false
+	}
+
+	granted, reason, approver := b.runApprovalInteraction(req, id, exeReal, cwdReal, pend.ExeDev, pend.ExeIno, conn)
 	aev := id.LogFields()
 	aev["mode"] = b.mode
 	// the approver's identity in queue mode, mode:<mode> for bench modes
@@ -437,30 +451,22 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 	aev["reason"] = reason
 	aev["executable"] = req.Executable
 	aev["argv"] = req.Argv
-	aev["nonce"] = short(req.Nonce, 12)
+	aev["nonce"] = logNonce(req.Nonce)
+	aev["hash"] = req.Hash()
 	if b.log.Event("approval", aev) != nil {
+		pend.closePins()
 		b.deny(req, id, "audit_unavailable", auditUnavailableDetail, conn)
 		return false
 	}
 	if !granted {
+		pend.closePins()
 		b.deny(req, id, reason, "nothing was executed", conn)
 		return false
 	}
 
 	hash := req.Hash()
-	pend := &pendingApproval{
-		Hash: hash, Expiry: time.Now().Add(b.tokenTTL()),
-		ExePath: exeReal, ExeDev: dev, ExeIno: ino, CwdReal: cwdReal,
-		Requester: id,
-	}
-	// pin the approved identities for exec time: an open fd on the exe
-	// inode (exec runs /proc/self/fd/N, never the mutable path) and the
-	// cwd directory dev/ino (re-verified at exec). Fail closed if either
-	// target changed between stat and pin.
-	if code, detail := pinApproval(pend, exeReal, cwdReal, dev, ino); code != "" {
-		b.deny(req, id, code, detail, conn)
-		return false
-	}
+	pend.Hash = hash
+	pend.Expiry = time.Now().Add(b.tokenTTL())
 	b.mu.Lock()
 	if old, exists := b.pending[hash]; exists {
 		old.closePins() // re-approve replaces the pending: drop the old pin
@@ -650,7 +656,7 @@ func (b *Broker) claimStage(req *proto.Request, id RequesterID, conn net.Conn) {
 	ev := id.LogFields()
 	ev["token"] = tokenID
 	ev["hash"] = hash
-	ev["nonce"] = short(req.Nonce, 12)
+	ev["nonce"] = logNonce(req.Nonce)
 	ev["executable"] = exeReal
 	ev["result"] = "ok"
 	b.log.Event("claim", ev)
@@ -674,6 +680,15 @@ func decision(granted bool) string {
 	}
 	return "deny"
 }
+
+// maxNonceLen is the longest nonce a request may carry (nonce_invalid
+// beyond it); the journal records nonces up to this length whole, so a
+// replay can be proven from the log.
+const maxNonceLen = 128
+
+// logNonce is the nonce as the journal records it: whole for every valid
+// nonce, cut only when the request is already invalid for its length.
+func logNonce(s string) string { return short(s, maxNonceLen) }
 
 func short(s string, n int) string {
 	if len(s) <= n {
