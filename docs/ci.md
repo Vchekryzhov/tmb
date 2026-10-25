@@ -45,7 +45,7 @@ ci/run.sh local
 | Job | Проверки | Лимит |
 | --- | --- | --- |
 | lint | gofmt, go vet и Staticcheck (продукт под linux и darwin, находки через исключения), stdlib-only и `go mod tidy -diff`, согласованность pins, `bash -n`, ShellCheck, actionlint, zizmor, Hadolint, исключения, локальные ссылки | 15 мин |
-| test | Go 1.27.2 и 1.26.9 × Linux amd64/arm64 и macOS arm64; `-count=1`, timeout, JSON + JUnit; race detector на Linux | 20 мин |
+| test | Go 1.27.3 и 1.26.10 × Linux amd64/arm64 и macOS arm64; `-count=1`, timeout, JSON + JUnit; race detector на Linux | 20 мин |
 | ci-selftest | тесты `tmbci`, включая негативные и позитивные фикстуры gate | 10 мин |
 | coverage | профиль всего модуля, сравнение с merge-base, diff coverage, цели | 20 мин |
 | security | gosec (исходники и тесты, сборки linux и darwin, находки объединяются), govulncheck на уровне символов | 15 мин |
@@ -153,7 +153,7 @@ Job `package` в ci.yml вызывает [package.yml](../.github/workflows/pack
 1. Go: [.go-version](../.go-version), `GO_PRIMARY` и матрица в `ci.yml`, строка `go` в `ci/tools/*/go.mod`, `golang:<версия>-alpine@sha256:…` в `harness/images/Dockerfile.*` и в `harness/run-pair.sh`/`run-openshell.sh`. Рассогласование ловит `lint/pins`.
 2. Бинарные инструменты: версия, URL и SHA-256 в `ci/tools.lock`. SHA-256 сверяется с upstream checksum-файлом или digest ассета в GitHub. `latest` и `master` не допускаются. Каждый инструмент закреплён ровно одной строкой на linux/amd64, linux/arm64 и darwin/arm64, все три одной версии, и URL называет эту версию: иначе `lint/pins` красный.
    nfpm (сборка deb и rpm) обновляется так: выбрать релиз [goreleaser/nfpm](https://github.com/goreleaser/nfpm/releases) старше 14 дней; заменить версию в трёх строках `nfpm` в `ci/tools.lock` и в их URL (`nfpm_<версия>_Linux_x86_64.tar.gz`, `_Linux_arm64`, `_Darwin_arm64`); SHA-256 взять из `checksums.txt` релиза и сверить с digest ассета (`gh api repos/goreleaser/nfpm/releases/tags/v<версия> --jq '.assets[] | .name + " " + .digest'`); выполнить `ci/run.sh badges tools` и закоммитить `docs/badges/tool-nfpm.json`; прогнать `ci/run.sh package` (новый nfpm может поменять байты пакетов, но две сборки одного коммита обязаны совпасть). Рассогласование строк, версии в URL или бейджа ловит `lint/pins`.
-3. Выдержка 14 дней нарушается только ради совместимости, с причиной в коммите. Так сделано для Staticcheck 2026.2.2 (поддержка export data Go 1.27.2) и для `golang.org/x/tools` v0.51.0 в модуле gosec: gosec v2.29.0 со старым x/tools не загружал пакеты Go 1.27.2.
+3. Выдержка 14 дней нарушается только ради совместимости или исправления подтверждённой уязвимости, с причиной в коммите. Так сделано для Staticcheck 2026.2.2 (поддержка export data Go 1.27.2) и для `golang.org/x/tools` v0.51.0 в модуле gosec: gosec v2.29.0 со старым x/tools не загружал пакеты Go 1.27.2.
 
 ## Phase B
 

@@ -38,22 +38,22 @@
         "check": "lint/doc-links"
       },
       {
-        "check": "test/linux-amd64-go1.27.2"
+        "check": "test/linux-amd64-go1.27.3"
       },
       {
-        "check": "test/linux-amd64-go1.26.9"
+        "check": "test/linux-amd64-go1.26.10"
       },
       {
-        "check": "test/linux-arm64-go1.27.2"
+        "check": "test/linux-arm64-go1.27.3"
       },
       {
-        "check": "test/linux-arm64-go1.26.9"
+        "check": "test/linux-arm64-go1.26.10"
       },
       {
-        "check": "test/darwin-arm64-go1.27.2"
+        "check": "test/darwin-arm64-go1.27.3"
       },
       {
-        "check": "test/darwin-arm64-go1.26.9"
+        "check": "test/darwin-arm64-go1.26.10"
       },
       {
         "check": "ci/selftest"
@@ -193,22 +193,22 @@
         "check": "lint/doc-links"
       },
       {
-        "check": "test/linux-amd64-go1.27.2"
+        "check": "test/linux-amd64-go1.27.3"
       },
       {
-        "check": "test/linux-amd64-go1.26.9"
+        "check": "test/linux-amd64-go1.26.10"
       },
       {
-        "check": "test/linux-arm64-go1.27.2"
+        "check": "test/linux-arm64-go1.27.3"
       },
       {
-        "check": "test/linux-arm64-go1.26.9"
+        "check": "test/linux-arm64-go1.26.10"
       },
       {
-        "check": "test/darwin-arm64-go1.27.2"
+        "check": "test/darwin-arm64-go1.27.3"
       },
       {
-        "check": "test/darwin-arm64-go1.26.9"
+        "check": "test/darwin-arm64-go1.26.10"
       },
       {
         "check": "ci/selftest"
@@ -348,22 +348,22 @@
         "check": "lint/doc-links"
       },
       {
-        "check": "test/linux-amd64-go1.27.2"
+        "check": "test/linux-amd64-go1.27.3"
       },
       {
-        "check": "test/linux-amd64-go1.26.9"
+        "check": "test/linux-amd64-go1.26.10"
       },
       {
-        "check": "test/linux-arm64-go1.27.2"
+        "check": "test/linux-arm64-go1.27.3"
       },
       {
-        "check": "test/linux-arm64-go1.26.9"
+        "check": "test/linux-arm64-go1.26.10"
       },
       {
-        "check": "test/darwin-arm64-go1.27.2"
+        "check": "test/darwin-arm64-go1.27.3"
       },
       {
-        "check": "test/darwin-arm64-go1.26.9"
+        "check": "test/darwin-arm64-go1.26.10"
       },
       {
         "check": "ci/selftest"
@@ -503,22 +503,22 @@
         "check": "lint/doc-links"
       },
       {
-        "check": "test/linux-amd64-go1.27.2"
+        "check": "test/linux-amd64-go1.27.3"
       },
       {
-        "check": "test/linux-amd64-go1.26.9"
+        "check": "test/linux-amd64-go1.26.10"
       },
       {
-        "check": "test/linux-arm64-go1.27.2"
+        "check": "test/linux-arm64-go1.27.3"
       },
       {
-        "check": "test/linux-arm64-go1.26.9"
+        "check": "test/linux-arm64-go1.26.10"
       },
       {
-        "check": "test/darwin-arm64-go1.27.2"
+        "check": "test/darwin-arm64-go1.27.3"
       },
       {
-        "check": "test/darwin-arm64-go1.26.9"
+        "check": "test/darwin-arm64-go1.26.10"
       },
       {
         "check": "ci/selftest"
@@ -668,22 +668,22 @@
         "check": "lint/doc-links"
       },
       {
-        "check": "test/linux-amd64-go1.27.2"
+        "check": "test/linux-amd64-go1.27.3"
       },
       {
-        "check": "test/linux-amd64-go1.26.9"
+        "check": "test/linux-amd64-go1.26.10"
       },
       {
-        "check": "test/linux-arm64-go1.27.2"
+        "check": "test/linux-arm64-go1.27.3"
       },
       {
-        "check": "test/linux-arm64-go1.26.9"
+        "check": "test/linux-arm64-go1.26.10"
       },
       {
-        "check": "test/darwin-arm64-go1.27.2"
+        "check": "test/darwin-arm64-go1.27.3"
       },
       {
-        "check": "test/darwin-arm64-go1.26.9"
+        "check": "test/darwin-arm64-go1.26.10"
       },
       {
         "check": "ci/selftest"
