@@ -32,10 +32,39 @@ ROWS=()
 
 exec > >(tee "$LOG") 2>&1
 
+# Integration coverage (#83): with TMB_COVER_DIR set (ci/run.sh harness) the
+# images carry binaries built with -cover and the containers get GOCOVERDIR.
+# Before the containers go, the running broker is stopped with SIGTERM so it
+# writes its counters, then the coverage data and the broker journal are
+# copied out with docker cp (no host mounts). A broker killed with SIGKILL
+# writes no counters; tmbci covdata accounts for it from the journal.
+COVER_BUILD=()
+COVER_RUN=()
+if [ -n "${TMB_COVER_DIR:-}" ]; then
+  COVER_BUILD=(--build-arg TMB_COVER=1)
+  COVER_RUN=(-e GOCOVERDIR=/tmp/tmb-cover)
+fi
+# shellcheck disable=SC2329 # invoked from cleanup (EXIT trap)
+cover_collect() { # cover_collect <broker container> <other containers...>
+  [ -n "${TMB_COVER_DIR:-}" ] || return 0
+  local c _
+  docker exec "$1" pkill -TERM -x tmb-broker 2>/dev/null
+  for _ in $(seq 1 50); do
+    docker exec "$1" sh -c 'pgrep -x tmb-broker >/dev/null' 2>/dev/null || break
+    sleep 0.1
+  done
+  for c in "$@"; do
+    mkdir -p "$TMB_COVER_DIR/$c"
+    docker cp "$c:/tmp/tmb-cover/." "$TMB_COVER_DIR/$c/covdata" >/dev/null 2>&1 || echo "cover: no coverage data in $c"
+  done
+  docker cp "$1:/var/log/tmb/." "$TMB_COVER_DIR/$1/journal" >/dev/null 2>&1 || echo "cover: no journal in $1"
+}
+
 # shellcheck disable=SC2329 # invoked by the EXIT trap
 cleanup() {
   echo "=== cleanup ==="
   exec 9>&- 2>/dev/null
+  cover_collect "$HOST" "$SBX"
   docker rm -f "$HOST" "$SBX" >/dev/null 2>&1
   docker volume rm -f "$SOCK_VOL" "$STATE_VOL" >/dev/null 2>&1
   rm -rf "$TD"
@@ -126,17 +155,17 @@ cleanup_containers_only() {
 cleanup_containers_only
 
 echo "-- building $IMG_HOST (context: repo root, so Dockerfiles can COPY src/)"
-docker build -q -f images/Dockerfile.host -t "$IMG_HOST" .. || { echo "FATAL: host image build failed"; exit 1; }
+docker build -q ${COVER_BUILD[@]+"${COVER_BUILD[@]}"} -f images/Dockerfile.host -t "$IMG_HOST" .. || { echo "FATAL: host image build failed"; exit 1; }
 echo "-- building $IMG_SBX"
-docker build -q -f images/Dockerfile.sandbox -t "$IMG_SBX" .. || { echo "FATAL: sandbox image build failed"; exit 1; }
+docker build -q ${COVER_BUILD[@]+"${COVER_BUILD[@]}"} -f images/Dockerfile.sandbox -t "$IMG_SBX" .. || { echo "FATAL: sandbox image build failed"; exit 1; }
 
 echo "-- starting host-sim (root, broker host, normal human sudo present)"
-docker run -d --name "$HOST" \
+docker run -d --name "$HOST" ${COVER_RUN[@]+"${COVER_RUN[@]}"} \
   -v "$SOCK_VOL":/run/tmb \
   -v "$STATE_VOL":/var/lib/tmb-proto \
   "$IMG_HOST" >/dev/null || { echo "FATAL: host-sim run failed"; exit 1; }
 echo "-- starting sandbox-sim (uid 4242, --network none, no docker.sock, no host mounts)"
-docker run -d --name "$SBX" \
+docker run -d --name "$SBX" ${COVER_RUN[@]+"${COVER_RUN[@]}"} \
   --network none \
   -v "$SOCK_VOL":/run/tmb \
   "$IMG_SBX" >/dev/null || { echo "FATAL: sandbox run failed"; exit 1; }

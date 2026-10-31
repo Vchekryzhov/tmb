@@ -10,7 +10,8 @@
 #   ci/run.sh build                 cross-builds, reproducibility, checksums, build info, govulncheck on binaries
 #   ci/run.sh fuzz <short|long>     fuzz registry, corpus, bounded fuzzing per target
 #   ci/run.sh secrets <range|full> [base-ref]   gitleaks over a commit range + tree, or full history
-#   ci/run.sh harness               N-series + docker-pair on Linux, verified against ci/scenarios
+#   ci/run.sh harness               N-series + docker-pair on Linux (binaries built with -cover), verified against ci/scenarios
+#   ci/run.sh coverage-merge        Go-test profile + harness integration profile (after coverage and harness)
 #   ci/run.sh images                build harness images, Trivy vulns/misconfig, SBOM and licenses
 #   ci/run.sh images-opensbx        OpenShell sandbox image (arm64 Docker host only): Trivy vulns, SBOM, licenses
 #   ci/run.sh manifest              security manifest against executed tests and scenarios
@@ -574,6 +575,10 @@ cmd_harness() {
   local since; since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   # leftover logs from an earlier run must not be accepted
   rm -f "$ROOT/harness/last-run.log" "$ROOT/harness/last-pair-run.log"
+  # integration coverage: the stands build tmb and tmb-broker with -cover and
+  # copy GOCOVERDIR and the broker journal here (cover_collect in harness/run.sh)
+  export TMB_COVER_DIR=$H/cover
+  mkdir -p "$TMB_COVER_DIR"
   log "run-pair.sh (re-runs run.sh as its STAGE 4)"
   bash "$ROOT/harness/run-pair.sh" >"$H/pair.console" 2>&1
   local rc=$?
@@ -590,7 +595,26 @@ cmd_harness() {
   local leftovers; leftovers=$(docker ps -aq --filter name='^tmb-' | wc -l | tr -d ' ')
   if [ "$leftovers" = 0 ]; then result harness/cleanup PASS "no tmb-* containers left"
   else docker ps -a --filter name='^tmb-' >"$H/leftovers.txt"; result harness/cleanup FAIL "$leftovers tmb-* containers left after the run" "$H/leftovers.txt"; fi
+  log "integration coverage of the stand binaries"
+  "$BIN/tmbci" covdata -check harness/coverage-data -dir "$TMB_COVER_DIR" -out "$RESULTS"
+  local dirs; dirs=$(find "$TMB_COVER_DIR" -mindepth 2 -maxdepth 2 -type d -name covdata | sort | paste -sd, -)
+  if [ -n "$dirs" ]; then
+    (cd "$SRC" && go tool covdata textfmt -i="$dirs" -o "$H/integration.cov") >"$H/covdata.log" 2>&1 || rm -f "$H/integration.cov"
+  fi
   assert_no_keys "$H" harness/artifact-hygiene && result harness/artifact-hygiene PASS "no private key material in harness reports"
+}
+
+# coverage-merge: the Go-test profile of `coverage` plus the integration
+# profile of `harness` (both must have run, locally or as downloaded artifacts)
+cmd_coverage_merge() {
+  need_tmbci
+  local M=$REPORTS/coverage-merged
+  rm -rf "$M"; mkdir -p "$M"
+  "$BIN/tmbci" coverage-merge -check coverage/merged -unit "$REPORTS/coverage/head.cov" \
+    -integration "$REPORTS/harness/integration.cov" -file-out "$M/merged.cov" -out "$RESULTS"
+  [ -s "$M/merged.cov" ] || return
+  (cd "$SRC" && go tool cover -func="$M/merged.cov") >"$M/merged.func.txt" 2>&1
+  (cd "$SRC" && go tool cover -html="$M/merged.cov" -o "$M/merged.html") 2>/dev/null
 }
 
 cmd_images() {
@@ -822,6 +846,7 @@ case "$cmd" in
   test) cmd_test "$@" ;;
   ci-selftest) cmd_ci_selftest ;;
   coverage) cmd_coverage "$@" ;;
+  coverage-merge) cmd_coverage_merge ;;
   security) cmd_security ;;
   build) cmd_build ;;
   dist) cmd_dist ;;
@@ -841,6 +866,6 @@ case "$cmd" in
   openshell) cmd_openshell ;;
   vm) cmd_vm ;;
   local) cmd_local ;;
-  *) rm -f "$MARK"; sed -n '2,29p' "$0"; exit 2 ;;
+  *) rm -f "$MARK"; sed -n '2,30p' "$0"; exit 2 ;;
 esac
 worst_of_run

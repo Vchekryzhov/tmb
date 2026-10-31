@@ -23,7 +23,7 @@ ci/run.sh tools
 ci/run.sh local
 ```
 
-`tools` собирает `tmbci` и закреплённые инструменты в `out/ci/bin`. `local` прогоняет lint, тесты, самопроверку CI, покрытие, gosec/govulncheck, сборку и короткий fuzz. Отдельные проверки: `ci/run.sh lint`, `test <метка> [race]`, `coverage [base-ref]`, `security`, `build`, `dist`, `package`, `fuzz short|long`, `secrets range|full`, `harness`, `vm`, `images`, `images-opensbx`, `manifest`, `stress`, `mutation`, `bench`. Полный список выводит `ci/run.sh` без аргументов.
+`tools` собирает `tmbci` и закреплённые инструменты в `out/ci/bin`. `local` прогоняет lint, тесты, самопроверку CI, покрытие, gosec/govulncheck, сборку и короткий fuzz. Отдельные проверки: `ci/run.sh lint`, `test <метка> [race]`, `coverage [base-ref]`, `coverage-merge`, `security`, `build`, `dist`, `package`, `fuzz short|long`, `secrets range|full`, `harness`, `vm`, `images`, `images-opensbx`, `manifest`, `stress`, `mutation`, `bench`. Полный список выводит `ci/run.sh` без аргументов.
 
 Каждая проверка пишет `out/ci/results/<check>.json`. В файле есть статус (PASS, FAIL, ERROR, NOT_RUN, UNAVAILABLE или NOT_APPLICABLE), проверенный SHA, номер запуска, версии инструментов и сводка. Отчёты лежат в `out/ci/reports/`. Красная проверка воспроизводится той же командой, что указана в шаге workflow.
 
@@ -48,12 +48,13 @@ ci/run.sh local
 | test | Go 1.27.3 и 1.26.10 × Linux amd64/arm64 и macOS arm64; `-count=1`, timeout, JSON + JUnit; race detector на Linux | 20 мин |
 | ci-selftest | тесты `tmbci`, включая негативные и позитивные фикстуры gate | 10 мин |
 | coverage | профиль всего модуля, сравнение с merge-base, diff coverage, цели | 20 мин |
+| coverage-merged | объединение Go-test профиля из `coverage` с интеграционным профилем стендов из `harness` (см. «Интеграционное покрытие») | 5 мин |
 | security | gosec (исходники и тесты, сборки linux и darwin, находки объединяются), govulncheck на уровне символов | 15 мин |
 | build | `tmb` и `tmb-broker` для Linux amd64/arm64, `tmb` для macOS arm64; две чистые сборки с одинаковым SHA-256, build manifest, govulncheck по бинарникам | 15 мин |
 | package | `ci/run.sh package` из [package.yml](../.github/workflows/package.yml): deb и rpm `tmb-broker` и `tmb` (amd64, arm64), архивы `tmb`, SBOM CycloneDX к каждому файлу, SHA256SUMS; вторая чистая сборка побайтно совпадает; установка deb в Ubuntu 24.04 и rpm в Fedora 44 в контейнере; файлы релиза уходят в артефакт `dist` | 20 мин |
 | fuzz | реестр fuzz targets; PR: до 30 с на target и 3 мин всего; nightly: до 5 мин и 15 мин | 25 мин |
 | secrets | Gitleaks: диапазон коммитов PR и дерево; nightly: вся история | 10 мин |
-| harness | `run-pair.sh`, который заново запускает `run.sh`, на одноразовом Linux runner; логи сверяются с [ci/scenarios](../ci/scenarios) | 25 мин |
+| harness | `run-pair.sh`, который заново запускает `run.sh`, на одноразовом Linux runner; логи сверяются с [ci/scenarios](../ci/scenarios); бинарники собраны с `-cover`, данные покрытия учитываются по процессам | 25 мин |
 | images | сборка host/sandbox-образов, Trivy (уязвимости, misconfiguration), SBOM CycloneDX, лицензии | 20 мин |
 | images-opensbx | образ песочницы OpenShell `Dockerfile.opensbx` на arm64 runner (база только linux/arm64): сборка, Trivy (уязвимости), SBOM CycloneDX, лицензии | 20 мин |
 | manifest | матрица SEC-01…SEC-28 против реально выполненных тестов и сценариев | 5 мин |
@@ -71,11 +72,24 @@ Mac-брокер собирается только как часть тесто�
 - Mutation: мутант, который не компилируется, даёт ERROR, а не «убит». Перед мутантами тесты проходит немутированная копия `src/` и `docs/` (control); если она падает, прогон даёт ERROR: иначе любой мутант считался бы убитым. govulncheck: блокирует достижимый уязвимый символ. Trivy: HIGH/CRITICAL в образах и конфигурации блокируют, отсутствие исправления не даёт автоматического ignore. Gitleaks: блокирует любая находка, значения редактируются (`--redact`).
 - Свежесть: БД Trivy скачивается заново на каждый запуск и должна быть собрана не более 72 часов назад, иначе ERROR. Лимит был 24 часа; поднят 2026-10-17, когда сборка БД у Aqua пропустила больше суток и все PR встали: суточная база всё ещё сканирует, отсутствующий скан не защищает ни от чего. govulncheck каждый раз обращается к vuln.go.dev; при сбое сети результат ERROR, а не PASS.
 
-Известные ограничения фазы A (хвосты ведутся в [#83](https://github.com/Vchekryzhov/tmb/issues/83)):
+Известные ограничения фазы A (сверка критериев в [#83](https://github.com/Vchekryzhov/tmb/issues/83)):
 
-- интеграционное покрытие инструментированными бинарниками (`go build -cover`, GOCOVERDIR) не собирается, есть только Go-test профиль;
 - профиль покрытия снимается на linux/amd64, поэтому изменения в файлах только для darwin в diff coverage не видны;
 - харнессы используют фиксированные имена контейнеров. Конфликтов нет, потому что каждая job получает свою VM. Два одновременных локальных прогона на одной машине конфликтуют.
+
+## Интеграционное покрытие
+
+`ci/run.sh harness` экспортирует `TMB_COVER_DIR`. С ним `run.sh` и `run-pair.sh` собирают образы с `--build-arg TMB_COVER=1`: `tmb` и `tmb-broker` в [Dockerfile.host](../harness/images/Dockerfile.host) и [Dockerfile.sandbox](../harness/images/Dockerfile.sandbox) собираются с `-cover -covermode=atomic -coverpkg=./...`, контейнеры получают `GOCOVERDIR=/tmp/tmb-cover`. Без переменной (локальные прогоны, `run-all.sh`, OpenShell-риг, VM-пруф) бинарники обычные. Значит, стенды в CI проверяют инструментированные бинарники, а не побайтно релизные; релизные бинарники проверяют `package` и VM-пруф.
+
+Каждый процесс пишет счётчики при выходе (`covcounters.<хеш>.<pid>.<время>`), в том числе при `os.Exit` с ненулевым кодом. Перед удалением контейнеров `cover_collect` останавливает работающий брокер через SIGTERM и копирует `GOCOVERDIR` и журнал брокера через `docker cp` (без монтирования) в `out/ci/reports/harness/cover/<контейнер>/`. `go tool covdata textfmt` превращает их в `integration.cov`.
+
+SIGKILL учитывается явно. Процесс, убитый SIGKILL, счётчиков не пишет, и его покрытие теряется. Проверка `harness/coverage-data` (`tmbci covdata`) сверяет каждый `broker_start` в журнале со счётчиками того же pid: брокер со счётчиками учтён; брокер без `broker_stop` и без счётчиков (N9, запасной SIGKILL в `stop_broker`) перечисляется по pid как убитый; брокер с `broker_stop`, но без счётчиков, это FAIL. Контейнер без единого файла счётчиков тоже FAIL. Клиенты `tmb` в журнал не пишут, поэтому для них учитывается только число файлов: клиент, убитый SIGKILL во втором раунде N17, счётчиков не оставляет и по отдельности не перечисляется.
+
+Job `coverage-merged` (`ci/run.sh coverage-merge`) складывает `head.cov` из `coverage` и `integration.cov` из `harness` поблочно (`tmbci coverage-merge`): режимы должны совпадать, у общего блока одинаковое число операторов. Результат `coverage/merged` показывает Go-test, интеграционный и объединённый процент, число операторов, покрытых только стендами, и проценты пакетов; профиль, `-func` и HTML лежат в артефакте `reports-coverage-merged`. Порогов у объединённого покрытия нет: правила раздела «Пороги» применяются к Go-test профилю. Локально:
+
+```bash
+ci/run.sh harness && ci/run.sh coverage && ci/run.sh coverage-merge
+```
 
 GAP из [#15](https://github.com/Vchekryzhov/tmb/issues/15) закрыты: SEC-кейсы, fuzz targets и цели покрытия закреплены, все мутанты `ci/mutation.sh` убиваются продуктовыми тестами. Принятые исключения сканеров ведутся в [#29](https://github.com/Vchekryzhov/tmb/issues/29), см. раздел «Исключения».
 

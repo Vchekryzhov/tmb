@@ -250,3 +250,57 @@ func TestSBOM(t *testing.T) {
 		}
 	}
 }
+
+func TestCoverageMerge(t *testing.T) {
+	dir := t.TempDir()
+	unit, integ, out := filepath.Join(dir, "unit.cov"), filepath.Join(dir, "integ.cov"), filepath.Join(dir, "merged.cov")
+	if err := os.WriteFile(unit, []byte("mode: atomic\nm/a/a.go:1.1,2.2 3 1\nm/a/a.go:4.1,5.2 2 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(integ, []byte("mode: atomic\nm/a/a.go:4.1,5.2 2 7\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, msg, r := tmbci(t, "coverage/merged", "coverage-merge", "-check", "coverage/merged", "-unit", unit, "-integration", integ, "-file-out", out)
+	if code != 0 || r.Status != result.Pass || !strings.Contains(r.Reason, "= 100.0%") {
+		t.Fatalf("code %d %+v\n%s", code, r, msg)
+	}
+	if b, _ := os.ReadFile(out); string(b) != "mode: atomic\nm/a/a.go:1.1,2.2 3 1\nm/a/a.go:4.1,5.2 2 7\n" {
+		t.Fatalf("merged profile:\n%s", b)
+	}
+	if code, _, r := tmbci(t, "coverage/merged", "coverage-merge", "-check", "coverage/merged", "-unit", unit, "-integration", filepath.Join(dir, "none"), "-file-out", out); code != 2 || r.Status != result.Error {
+		t.Fatalf("missing integration profile: code %d %+v", code, r)
+	}
+}
+
+func TestCovdata(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"host/covdata/covcounters.a.10.1", "sbx/covdata/covcounters.b.4.1"} {
+		p := filepath.Join(dir, f)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	j := filepath.Join(dir, "host", "journal")
+	if err := os.MkdirAll(j, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(j, "broker.log"), []byte(`{"event":"broker_start","pid":10}`+"\n"+`{"event":"broker_start","pid":11}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, msg, r := tmbci(t, "harness/coverage-data", "covdata", "-check", "harness/coverage-data", "-dir", dir)
+	if code != 0 || !strings.Contains(r.Reason, "2 processes") || !strings.Contains(strings.Join(r.Summary, "\n"), "pids [11]") {
+		t.Fatalf("code %d %+v\n%s", code, r, msg)
+	}
+	if err := os.WriteFile(filepath.Join(j, "broker.log.1"), []byte(`{"event":"broker_start","pid":12}`+"\n"+`{"event":"broker_stop","pid":12}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, r := tmbci(t, "harness/coverage-data", "covdata", "-check", "harness/coverage-data", "-dir", dir); code != 1 || r.Status != result.Fail {
+		t.Fatalf("stopped broker without counters: code %d %+v", code, r)
+	}
+	if code, _, _ := tmbci(t, "harness/coverage-data", "covdata", "-check", "harness/coverage-data", "-dir", filepath.Join(dir, "none")); code != 2 {
+		t.Fatalf("missing dir: code %d", code)
+	}
+}
