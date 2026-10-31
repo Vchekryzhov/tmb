@@ -18,6 +18,26 @@ TMB посредничает между агентом в песочнице NVI
 Агент просит, человек одобряет точный запрос, брокер запускает одобренную команду не более одного раза.
 Пароль sudo агенту не передаётся, а сам sudo, sudoers и PAM не меняются.
 
+```mermaid
+%%{init: {"c4": {"c4ShapeMargin": 100, "messageFontSize": 14}}}%%
+C4Context
+    title TMB: контекст системы
+
+    System_Ext(agent, "OpenShell", "Изолированная среда для агента")
+    System(tmb, "TMB", "Проверяет запрос, получает одобрение и допускает одну попытку запуска")
+    Person(approver, "Одобряющий", "Одобряет выполнение команды")
+
+    Rel(agent, tmb, "Запрос выполнения привилегированной команды")
+    Rel(approver, tmb, "Одобрение или отказ")
+
+    UpdateLayoutConfig($c4ShapeInRow="2")
+    UpdateElementStyle(approver, $fontColor="white")
+    UpdateElementStyle(agent, $fontColor="white")
+    UpdateElementStyle(tmb, $fontColor="white")
+    UpdateRelStyle(agent, tmb, $textColor="currentColor", $lineColor="currentColor", $offsetX="-45", $offsetY="-20")
+    UpdateRelStyle(approver, tmb, $textColor="currentColor", $lineColor="currentColor", $offsetY="-5")
+```
+
 ## Статус
 
 Проект на стадии прототипа: архитектура принята, связка доказана на стенде, пакеты deb и rpm собираются релизом по тегу и проверены на VM с systemd; в эксплуатации на реальных машинах брокер ещё не был.
