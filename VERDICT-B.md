@@ -10,8 +10,8 @@
 
 Доказано на стенде:
 
-- идентичность песочницы это отпечаток её открытого ключа: два сертификата на один ключ дают один `requester_fp` в журнале и на консоли одобрения, allowlist не трогается; другой ключ с тем же Subject получает `requester_not_allowed`;
-- приватный ключ рождается в песочнице командой `tmb keygen` и наружу уходит только открытый ключ: на хосте нет ни одного приватного ключа, кроме серверного ключа брокера;
+- идентичность песочницы это отпечаток её открытого ключа: два сертификата на один ключ дают один `requester_fp` в журнале и на показе одобрения, allowlist не трогается; другой ключ с тем же Subject получает `requester_not_allowed`;
+- приватный ключ рождается в песочнице командой `tmb keygen` и наружу уходит только открытый ключ: PAIR-KEY и V3 не находят приватного ключа песочницы на хосте (там лежат только ключи самого хоста: серверный ключ брокера и ключ CA);
 - сертификаты выпускает CA внутри `tmb-broker`: CA на 10 лет с ключом 0600 под root, серверный на 1 год с нужным SAN, песочницы на 7 дней; истёкший сертификат песочницы даёт `tls_handshake_failed` без `deny` и без `request`;
 - SIGHUP (на хосте `systemctl reload`) перечитывает allowlist и TLS-материал из одного снимка, сокеты и pid остаются, очередь и pending-одобрение переживают reload, невалидный конфиг оставляет старый, поле `tls_addr` не перезагружается и объявляется событием `reload_ignored_field`;
 - журнал открывается заново по SIGHUP, недоступный журнал закрывает агентный путь отказом `audit_unavailable` и ничего не запускает, каждая строка несёт `schema`, пакетный logrotate с `postrotate` работает под настоящим systemd и `tail -F` видит события после ротации;
@@ -22,12 +22,12 @@
 | Тикет | PR | Что |
 |-------|----|-----|
 | [#40](https://github.com/Vchekryzhov/tmb/issues/40) | [#53](https://github.com/Vchekryzhov/tmb/pull/53), [#61](https://github.com/Vchekryzhov/tmb/pull/61) | `tmb-broker ca init \| issue-server \| issue-sandbox`, stdlib, PEM; ключ CA создаётся эксклюзивно и удаляется при неудачном `init` |
-| [#41](https://github.com/Vchekryzhov/tmb/issues/41) | [#57](https://github.com/Vchekryzhov/tmb/pull/57) | `allowed_requester_keys` вместо `allowed_requester_fps`, отпечаток SPKI, `tmb keygen` и `tmb fingerprint`, консоль печатает `requester : key fp=…` |
+| [#41](https://github.com/Vchekryzhov/tmb/issues/41) | [#57](https://github.com/Vchekryzhov/tmb/pull/57) | `allowed_requester_keys` вместо `allowed_requester_fps`, отпечаток SPKI, `tmb keygen` и `tmb fingerprint`, показ одобрения печатает `requester : key fp=…` |
 | [#42](https://github.com/Vchekryzhov/tmb/issues/42) | [#60](https://github.com/Vchekryzhov/tmb/pull/60) | reload по SIGHUP из атомарного снимка, события `reload`, `reload_failed`, `reload_ignored_field`, TLS через `GetCertificate` |
 | [#43](https://github.com/Vchekryzhov/tmb/issues/43) | [#65](https://github.com/Vchekryzhov/tmb/pull/65), [#73](https://github.com/Vchekryzhov/tmb/pull/73) | fsync на событие, `audit_unavailable`, reopen по SIGHUP, поле `schema` и [docs/audit-schema.md](docs/audit-schema.md) с тестом против кода; схема поднята до `2` |
 | [#44](https://github.com/Vchekryzhov/tmb/issues/44) | [#66](https://github.com/Vchekryzhov/tmb/pull/66) | nfpm: deb и rpm `tmb-broker` и `tmb` для amd64 и arm64, unit, `config.json.example`, logrotate, tmpfiles, релиз по тегу |
 | [#45](https://github.com/Vchekryzhov/tmb/issues/45) | [#67](https://github.com/Vchekryzhov/tmb/pull/67) | `harness/run-vm.sh`, V-серия V0–V9 на Lima, реестр `ci/scenarios/v-series.txt`, `run-all.sh --vm` |
-| [#68](https://github.com/Vchekryzhov/tmb/issues/68) | [#80](https://github.com/Vchekryzhov/tmb/pull/80) | скрипт с `#!` отклоняется кодом `executable_script` до показа одобрения и повторно при claim: иначе интерпретатор получал бы уже закрытый `/proc/self/fd/N` |
+| [#68](https://github.com/Vchekryzhov/tmb/issues/68) | [#80](https://github.com/Vchekryzhov/tmb/pull/80) | скрипт с `#!` отклоняется кодом `executable_script` до показа одобрения и повторно при предъявлении токена (claim): иначе интерпретатор получал бы уже закрытый `/proc/self/fd/N` |
 | [#69](https://github.com/Vchekryzhov/tmb/issues/69) | [#80](https://github.com/Vchekryzhov/tmb/pull/80) | digest образа opencode берётся только из `FROM` в `Dockerfile.opensbx`, риг и VM-пруф сверяются с ним |
 
 ## Реестр новых сценариев
@@ -37,12 +37,12 @@ N24, N28 и N29 идут в `harness/run.sh`; N23, N30, PAIR-KEY, N25, N26 и N2
 
 | # | Сценарий | Ожидание | Наблюдение | Результат |
 |---|----------|----------|------------|-----------|
-| N23 | идентичность по ключу | два сертификата на один ключ → один `requester_fp` в JSONL и на консоли, allowlist не менялся; другой ключ с тем же Subject → 125 `requester_not_allowed` | `ca issue-sandbox` напечатал тот же отпечаток; консоль показала `key fp=adfff17ad6d663fa` для обоих сертификатов, оба запроса exit 0, оба `queued` с `requester_fp=fp1`; client4 → 125, `requester_denied` с его отпечатком; хэш конфига не изменился | PASS |
+| N23 | идентичность по ключу | два сертификата на один ключ → один `requester_fp` в JSONL и на показе одобрения (`tmb approve --list`), allowlist не менялся; другой ключ с тем же Subject → 125 `requester_not_allowed` | `ca issue-sandbox` напечатал тот же отпечаток; показ одобрения дал `key fp=adfff17ad6d663fa` для обоих сертификатов, оба запроса exit 0, оба `queued` с `requester_fp=fp1`; client4 → 125, `requester_denied` с его отпечатком; хэш конфига не изменился | PASS |
 | N24 | старый конфиг и флаги | `allowed_requester_fps` → брокер не стартует, stderr называет поле и замену; `-tls-ca` → неизвестный флаг | exit 1, stderr содержит `allowed_requester_fps` и `allowed_requester_keys`; `-tls-ca` → exit 2, `flag provided but not defined` | PASS |
 | N25 | reload allowlist | отпечаток удалён, SIGHUP → `reload`, следующий запрос 125 `requester_not_allowed`; возвращён, SIGHUP → проходит; pid и иноды сокетов те же | `reload` с `changed:["allowed_requester_keys"]`; 125 и затем exit 0 со stdout `0`; pid 742 и иноды сокетов не изменились | PASS |
 | N26 | reload невалидный | синтаксическая ошибка → `reload_failed`, старый allowlist действует; смена `tls_addr` → `reload_ignored_field`, старый порт слушает | `reload_failed`, stderr `reload failed, keeping the running config`, события `reload` нет; fp1 → 0, fp2 → 125; один `reload_ignored_field` с `field=tls_addr`; порт 17600 отвечает, 17601 → exit 3 | PASS |
 | N27 | reload сертификата | после SIGHUP новое соединение видит новый серийный номер, открытое до reload соединение дорабатывает на старом | до reload серийный `89F0…476A`; `reload` с `tls_material`; новое соединение видит `CC3C…8E32`; `sleep 4`, запущенный до reload, завершился с exit 0 на старом серийном | PASS |
-| N28 | reload с очередью | запрос в очереди переживает SIGHUP и одобряется после; одобрение до SIGHUP выкупается после | тот же элемент `b09b96d0af62cb57` в очереди после reload, `approve --yes` → exit 0, запрос exit 0 со stdout `0`; токен `1f5590127cecf71b` получен до второго SIGHUP и выкуплен после; pid 1559 тот же | PASS |
+| N28 | reload с очередью | запрос в очереди переживает SIGHUP и одобряется после; токен одобрения, полученный до SIGHUP, предъявляется после | тот же элемент `b09b96d0af62cb57` в очереди после reload, `approve --yes` → exit 0, запрос exit 0 со stdout `0`; токен `1f5590127cecf71b` получен до второго SIGHUP и предъявлен после; pid 1559 тот же | PASS |
 | N29 | журнал | переименование плюс SIGHUP → новый файл, старый не растёт; каталог 0500 и файл удалён, SIGHUP → `audit_unavailable`, команда не выполнена, причина в stderr; права назад, SIGHUP → запросы проходят; `schema` в каждой строке | брокер без `CAP_DAC_OVERRIDE` (CapEff `a80425f9`); новый файл с `reload`, старый остался 73833 байта; запрос → 125 `audit_unavailable`, маркер не создан, файл журнала не появился, stderr `journal unavailable … permission denied`; после chmod и SIGHUP `accepting requests again`, exit 0; каждая строка обоих файлов и stderr-резерва несёт `"schema":2` | PASS |
 | N30 | истёкший сертификат | `tls_handshake_failed`, в JSONL нет `deny` и `request` | клиент exit 3; `tls_handshake_failed` с `certificate has expired or is not yet valid`; счётчики `request` и `deny` не изменились | PASS |
 | PAIR-KEY | ключ рождается в песочнице | `tmb keygen` в sandbox-sim, наружу только открытый ключ, host выпускает сертификат, приватного ключа на хосте нет, запрос проходит | ключ 0600, в выводе keygen нет `PRIVATE KEY`; отпечатки keygen, CA и `tmb fingerprint` совпали; запрос exit 0 со stdout `0`; `grep -rlI` по host-sim нашёл только `/etc/tmb/certs/server.key` | PASS |
@@ -64,7 +64,7 @@ N24, N28 и N29 идут в `harness/run.sh`; N23, N30, PAIR-KEY, N25, N26 и N2
 - OpenShell-риг: **65/65** (O0–O6), прогон владельца 2026-10-31 на digest opencode `f4cfe16…`.
 - VM-пруф: **114/114** (V0–V9) на Lima с настоящим systemd.
 
-Реестры `ci/scenarios/n-series.txt`, `pair.txt` и `v-series.txt` содержат все секции скриптов (тест `TestRegistriesMatchRunners`); `ci/security-manifest.json` покрывает идентичность по ключу (SEC-23: N23, N24, PAIR-KEY; SEC-06 расширен N30), reload (SEC-24: N25–N28), журнал (SEC-26: N29) и уровень `vm` (SEC-27: V6, SEC-28: V7).
+Каждый id реестров `ci/scenarios/n-series.txt`, `pair.txt` и `v-series.txt` объявлен секцией своего скрипта (тест `TestRegistriesMatchRunners` проверяет только это включение). Обратное, что у скрипта нет секций вне реестра, проверяет сверка лога с реестром при прогоне (`Verify` в `ci/internal/harness`), а для `run-vm.sh` ещё и статический тест `TestVSeriesRegistryIsComplete`. `ci/security-manifest.json` покрывает идентичность по ключу (SEC-23: N23, N24, PAIR-KEY; SEC-06 расширен N30), reload (SEC-24: N25–N28), журнал (SEC-26: N29) и уровень `vm` (SEC-27: V6, SEC-28: V7).
 
 ## Отклонения от спеки
 
@@ -81,13 +81,22 @@ N24, N28 и N29 идут в `harness/run.sh`; N23, N30, PAIR-KEY, N25, N26 и N2
 
 ## Остаточные риски
 
-- **Ключ песочницы читается любым процессом песочницы.** Он рождается внутри и не покидает её, но лежит файлом 0600 под пользователем песочницы, под которым работает и агент. Ущерб ограничен сроком сертификата: 7 дней, затем нужен новый выпуск хостом. Секрет-стор или аппаратный ключ в скоуп не входят.
-- **Удалённая из allowlist песочница выкупает уже показанное одобрение внутри TTL.** Элемент очереди и pending-одобрение хранят идентичность и при reload не перепроверяются (решение спеки): следующий запрос получит `requester_not_allowed`, но одобрение, которое человек уже дал, выкупается до истечения `token_ttl_seconds`.
-- **Запись в ту же иноду исполняемого файла** между одобрением и exec: fd-пиннинг держит иноду, а её содержимое остаётся изменяемым. С [#68](https://github.com/Vchekryzhov/tmb/issues/68) переписывание в скрипт обнаруживается при claim; переписывание в другой ELF проходит незамеченным. Нужен immutable-носитель или подпись.
+- **Ключ песочницы читается любым процессом песочницы.** Он рождается внутри и не покидает её, но лежит файлом 0600 под пользователем песочницы, под которым работает и агент. Сертификат живёт 7 дней, но перевыпуск идёт на тот же ключ без правки allowlist (ADR 0005), поэтому украденный ключ годится, пока хост выпускает на него сертификаты, а сами сертификаты не секрет. Предел в 7 дней начинает действовать только после смены ключа: новый ключ в песочнице, новый отпечаток в allowlist, старый удалён. Секрет-стор или аппаратный ключ в скоуп не входят.
+- **Удалённая из allowlist песочница предъявляет токен уже показанного одобрения внутри TTL.** Элемент очереди и pending-одобрение хранят идентичность и при reload не перепроверяются (решение спеки): следующий запрос получит `requester_not_allowed`, но токен одобрения, которое человек уже дал, предъявляется до истечения `token_ttl_seconds`.
+- **Запись в ту же иноду исполняемого файла** между одобрением и exec: закрепление держит иноду, а её содержимое остаётся изменяемым. С [#68](https://github.com/Vchekryzhov/tmb/issues/68) переписывание в скрипт обнаруживается при предъявлении токена (claim); переписывание в другой ELF проходит незамеченным. Нужен immutable-носитель или подпись.
 - **«Хост» это VM на Mac.** Lima с Ubuntu 24.04 и настоящим systemd ближе к хосту, чем контейнер Docker Desktop, но это всё ещё гость под Virtualization.framework на arm64; amd64, другие дистрибутивы и настоящее железо не проверялись. rpm ставится только в контейнере Fedora под `ci/run.sh package`, без systemd. Ручная проверка на omen это следующий шаг (пункт 35 спеки), не часть харнесса.
 - **Отзыв это правка allowlist плюс reload.** CRL и OCSP не используются (ADR 0005), поэтому сертификат, выпущенный на удалённый ключ, остаётся формально действительным до истечения; его держит только allowlist.
-- **Ключ CA лежит на хосте под root** (`/etc/tmb/ca/ca.key`, 0600). Компрометация root на хосте даёт выпуск сертификатов, но не право просить: allowlist по-прежнему единственный источник права.
+- **Ключ CA лежит на хосте под root** (`/etc/tmb/ca/ca.key`, 0600). Root на хосте правит и allowlist, поэтому ключ CA не даёт отдельной границы против компрометации root. Сама подпись CA допускает к соединению и не даёт права просить (ADR 0003, ADR 0005).
 - **VM-пруф идёт только локально.** В Actions нет Lima; CI проверяет закоммиченный `harness/last-vm-run.log` (`TestCommittedVMLogIsGreen`), и смена `run-vm.sh` или реестра требует нового локального прогона.
+- **Пробелы доказательства.** Стенды проходят, но часть ожиданий проверена слабее, чем звучит в реестре:
+  - V7 проверяет, что у убитого запроса нет события `exec_start`; след команды на диске не проверяется (запрошен `/usr/bin/id -u`, у которого его нет).
+  - N29 считает строки без `"schema":2`; на пустом файле счёт равен нулю, и проверка проходит, ничего не проверив.
+  - N23 «allowlist не менялся» это хэш файла конфига на стороне Mac, который монтируется в host-sim только для чтения: изменить его брокер не мог, поэтому проверка подтверждает, что не правил харнесс.
+  - Предъявление токена удалённой из allowlist песочницей внутри TTL и запись в ту же иноду исполняемого файла остаются рисками без сценария на стенде.
+  - Отказ `executable_script` из #80 проверяется Go-тестами (`validate_test.go`, этап одобрения и повторная проверка при предъявлении токена); сценария N-серии или V-серии для него нет.
+  - CI сверяет с реестром только закоммиченный `harness/last-vm-run.log` (`TestCommittedVMLogIsGreen`) и принимает лог любого возраста; закоммиченные логи N-серии, docker-pair и OpenShell-рига CI не сверяет, их цифры держатся на этом вердикте.
+  - Логи стендов содержат домашние пути Mac (`/Users/…`, временные каталоги); так было и в логах прежних вердиктов.
+- **Открытый вопрос владельцу.** `executable_script` это новое правило политики запроса (отказ до показа одобрения), но у него нет ADR и статьи в [CONTEXT.md](CONTEXT.md). Вердикт это фиксирует и не решает, нужен ли ADR.
 - Риски предыдущих вердиктов остаются: одобряющему нужен shell на хосте до [#3](https://github.com/Vchekryzhov/tmb/issues/3), токен не секрет, права cwd не проверяются.
 
 ## Как воспроизвести
