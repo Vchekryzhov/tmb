@@ -524,13 +524,13 @@ assert_rc "V7: the restarted broker serves the sandbox again -> exit 0" 0
 reset_io
 
 # -----------------------------------------------------------------------------
-log "SCENARIO V8: an approved sleep 30 survives systemctl restart; its marker appears"
+log "SCENARIO V8: an approved python3 one-liner (sleep 30, then a marker) survives systemctl restart"
 
 # The approved command sleeps 30 s and then writes the marker. It is a
-# python3 one-liner, not a shell script: shells are on shell_deny_list, and a
-# '#!' script cannot run at all because the broker execs the approved inode
-# through /proc/self/fd/N, which is closed on exec before the interpreter
-# opens it (the interpreter exits 2).
+# python3 one-liner: shells are on shell_deny_list, and the broker refuses a
+# '#!' script with executable_script before approval (PR #80): it execs the
+# approved inode through /proc/self/fd/N, which is closed on exec before an
+# interpreter could open it.
 MARKER=/var/lib/tmb-v8.marker
 V8_CODE="import time; time.sleep(30); open('$MARKER', 'w').close()"
 check "V8: /usr/bin/python3 present on the host" vm test -x /usr/bin/python3
