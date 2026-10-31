@@ -391,11 +391,6 @@ func (b *Broker) validateRequest(req *proto.Request) (exeReal, cwdReal string, d
 	if b.shellDenied(req.Executable, exeReal) {
 		return "", "", 0, 0, "shell_policy", exeReal
 	}
-	if script, ok := hasShebang(exeReal); !ok {
-		return "", "", 0, 0, "executable_stat_failed", exeReal
-	} else if script {
-		return "", "", 0, 0, "executable_script", exeReal
-	}
 	cwdReal, err = filepath.EvalSymlinks(req.Cwd)
 	if err != nil {
 		return "", "", 0, 0, "cwd_invalid", req.Cwd
@@ -409,22 +404,41 @@ func (b *Broker) validateRequest(req *proto.Request) (exeReal, cwdReal string, d
 	return exeReal, cwdReal, dev, ino, "", ""
 }
 
-// hasShebang reports whether the file starts with "#!". Scripts are refused:
-// exec goes through the pinned O_CLOEXEC fd (/proc/self/fd/N), so the kernel
-// hands the interpreter a path that is already closed when it opens it.
-// ok is false when the file cannot be read.
-func hasShebang(exeReal string) (script, ok bool) {
-	f, err := os.Open(exeReal)
+// scriptDeny refuses a #! script. Exec goes through the pinned O_CLOEXEC fd
+// (/proc/self/fd/N), so the kernel would hand the interpreter a path that is
+// already closed when it opens it. The first bytes are read from the pinned
+// inode (pread at offset 0, the exec fd keeps its position), not from the
+// path, so a swap between the check and the pin cannot slip a script
+// through. Returns ("", "") when the file is not a script.
+func (p *pendingApproval) scriptDeny() (string, string) {
+	r, release, err := p.exeReader()
 	if err != nil {
-		return false, false
+		return "executable_unreadable", p.ExePath
 	}
-	defer f.Close()
+	defer release()
 	var magic [2]byte
-	n, err := io.ReadFull(f, magic[:])
-	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-		return false, false
+	n, err := r.ReadAt(magic[:], 0)
+	if err != nil && err != io.EOF {
+		return "executable_unreadable", p.ExePath
 	}
-	return n == 2 && magic == [2]byte{'#', '!'}, true
+	if n == len(magic) && magic == [2]byte{'#', '!'} {
+		return "executable_script", p.ExePath
+	}
+	return "", ""
+}
+
+// pendingScriptDeny runs scriptDeny on the live pending approval for hash
+// under b.mu: a pending approval leaves the map under the lock before its
+// pins are closed, so the pinned fd stays open for the read. ("", "") when
+// there is no live approval (the claim then fails no_pending_approval).
+func (b *Broker) pendingScriptDeny(hash string) (string, string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	p, has := b.pending[hash]
+	if !has || time.Now().After(p.Expiry) {
+		return "", ""
+	}
+	return p.scriptDeny()
 }
 
 // --- approval -------------------------------------------------------------
@@ -460,6 +474,11 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 		Requester: id,
 	}
 	if code, detail := pinApproval(pend, exeReal, cwdReal, dev, ino); code != "" {
+		b.deny(req, id, code, detail, conn)
+		return false
+	}
+	if code, detail := pend.scriptDeny(); code != "" {
+		pend.closePins()
 		b.deny(req, id, code, detail, conn)
 		return false
 	}
@@ -640,6 +659,13 @@ func (b *Broker) claimStage(req *proto.Request, id RequesterID, conn net.Conn) {
 	if p, has := b.peekPending(hash); has && !p.Requester.Equal(id) {
 		b.deny(req, id, "requester_mismatch",
 			fmt.Sprintf("approval was granted to requester %s, token not consumed", p.Requester.Key()), conn)
+		return
+	}
+
+	// the approved inode may have been rewritten in place into a script:
+	// refuse before consuming the token
+	if code, detail := b.pendingScriptDeny(hash); code != "" {
+		b.deny(req, id, code, detail+", token not consumed", conn)
 		return
 	}
 

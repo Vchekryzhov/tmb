@@ -24,6 +24,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"syscall"
@@ -48,6 +49,15 @@ func pinApproval(p *pendingApproval, exeReal, cwdReal string, dev, ino uint64) (
 	p.CwdFile = cf
 	p.CwdDev, p.CwdIno, p.CwdPinned = cdev, cino, true
 	return "", ""
+}
+
+// exeReader returns the pinned exe fd for scriptDeny; release is a no-op,
+// the fd stays pinned for exec.
+func (p *pendingApproval) exeReader() (io.ReaderAt, func(), error) {
+	if p.ExeFile == nil {
+		return nil, nil, os.ErrClosed
+	}
+	return p.ExeFile, func() {}, nil
 }
 
 // pinExe opens exeReal read-only and fstats the fd to verify it is the file
