@@ -132,7 +132,10 @@ func run(args []string, stdout, stderr io.Writer, stop, hup <-chan os.Signal) in
 		defer tlsLn.Close()
 	}
 
-	if err := os.WriteFile(cfg.PidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o644); err != nil {
+	// WriteFile sets the mode only on create: drop a pid file left by a
+	// kill -9 (possibly 0644 from an older broker) so it is recreated 0600
+	_ = os.Remove(cfg.PidFile)
+	if err := os.WriteFile(cfg.PidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o600); err != nil {
 		return fail("pidfile: %v", err)
 	}
 
