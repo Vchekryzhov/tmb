@@ -4,7 +4,7 @@
 
 Текущая версия схемы: `3`.
 
-Версия `3`: подписанное решение ([ADR 0006](adr/0006-trusted-signer-touch-id.md), [ADR 0007](adr/0007-signer-key-classes-threshold-host-identity.md)). `queued` несёт короткий код payload одобрения; `approval` несёт payload, короткий код и доказательство решения (отпечатки, классы, имена ключей и подписи); `decision_rejected` несёт отпечаток ключа из решения; `broker_start` несёт `host_id` и отпечаток ключа идентичности брокера. Это единственный подъём версии на этап подписанта: событие подписи до порога (ADR 0007, Р2) добавляется новым событием и версию не меняет.
+Версия `3`: подписанное решение ([ADR 0006](adr/0006-trusted-signer-touch-id.md), [ADR 0007](adr/0007-signer-key-classes-threshold-host-identity.md)). `queued` несёт короткий код payload одобрения; `approval` несёт payload, короткий код и доказательство решения (отпечатки, классы, имена ключей и подписи); `decision_rejected` несёт отпечаток ключа из решения; `broker_start` несёт `host_id` и отпечаток ключа идентичности брокера. Это единственный подъём версии на этап подписанта: событие подписи до порога `signature_recorded` (ADR 0007, Р2) добавлено новым событием в версии `3` и версию не меняет, а при пороге больше одной подписи массивы `approval` просто содержат несколько элементов.
 
 Версия `2`: полный nonce вместо первых 12 символов, `hash` в `request`, `deny` и `approval`, `client_gone` в `exec_exit`; события сокета одобряющих пишут `approver_uid` и `approver_pid` вместо полей запросчика.
 
@@ -271,15 +271,32 @@ TLS-рукопожатие не прошло: нет сертификата, ч�
 
 ### `decision_rejected`
 
-Решение одобряющего не принято: элемента нет, он уже решён, хеш не совпал, одобряющий сам запросил этот запрос, срок решения прошёл или подпись не принята.
+Решение одобряющего не принято: элемента нет, он уже решён, хеш не совпал, одобряющий сам запросил этот запрос, срок решения прошёл, подпись не принята или этот ключ уже подписал элемент.
 
 | Поле | Тип | Описание |
 |---|---|---|
 | `approver_uid` | integer | uid одобряющего |
 | `approver_pid` | integer | pid одобряющего |
 | `item` | string | id элемента из решения |
-| `reason` | string | `no_such_item`, `already_decided`, `decision_mismatch`, `approver_is_requester`, `decision_expired`, `signature_required`, `signature_invalid` или `approver_key_unknown` |
+| `reason` | string | `no_such_item`, `already_decided`, `decision_mismatch`, `approver_is_requester`, `decision_expired`, `signature_required`, `signature_invalid`, `signature_duplicate` (ключ уже подписал этот элемент, счёт подписей не меняется) или `approver_key_unknown` |
 | `approver_key` | string | `approver_key` из решения как пришёл (отпечаток ключа); пустая строка у неподписанного решения |
+
+### `signature_recorded`
+
+Подписанное одобрение принято, но подписей разными ключами меньше `required_signatures` (ADR 0007, Р2): элемент остаётся в очереди, одобряющий получает кадр `recorded`. Решение по элементу и все подписи, давшие порог, потом пишет `approval`.
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `approver_uid` | integer | uid одобряющего |
+| `approver_pid` | integer | pid одобряющего |
+| `item` | string | id элемента |
+| `short_code` | string | короткий код payload элемента |
+| `approver_key` | string | отпечаток ключа подписи |
+| `approver_key_class` | string | класс этого ключа |
+| `approver_key_name` | string | имя этого ключа из `approver_keys` конфига |
+| `signature` | string | подпись, base64 DER |
+| `signatures` | integer | сколько подписей засчитано с этой; ключ, удалённый перечитыванием, не засчитывается |
+| `signatures_required` | integer | `required_signatures` на момент подписи |
 
 ### `queue_list_failed`
 
@@ -312,7 +329,7 @@ TLS-рукопожатие не прошло: нет сертификата, ч�
 | `short_code` | string | короткий код payload; только режим `queue`, если запрос встал в очередь |
 | `payload` | string | payload одобрения, base64; только режим `queue`, если запрос встал в очередь. По нему и открытым ключам подписи перепроверяются после факта |
 | `signed` | boolean | решение пришло с принятой подписью; только режим `queue`, если запрос встал в очередь |
-| `approver_keys` | array of string | отпечатки ключей принятых подписей; пустой у неподписанного решения и без решения (таймаут); только режим `queue`, если запрос встал в очередь |
+| `approver_keys` | array of string | отпечатки ключей принятых подписей (у одобрения все засчитанные подписи порога в порядке поступления, у отказа подпись отказа); пустой у неподписанного решения и без решения (таймаут); только режим `queue`, если запрос встал в очередь |
 | `approver_key_classes` | array of string | классы этих ключей, в том же порядке |
 | `approver_key_names` | array of string | имена этих ключей из `approver_keys` конфига, в том же порядке |
 | `signatures` | array of string | подписи, base64 DER, в том же порядке |

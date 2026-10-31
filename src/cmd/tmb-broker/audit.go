@@ -95,6 +95,10 @@ var auditEvents = map[string]map[string]string{
 	"request_abandoned": withRequester(map[string]string{"item": tString, "wait_seconds": tInt}),
 	"approver_denied":   withApprover(map[string]string{"reason": tString}),
 	"decision_rejected": withApprover(map[string]string{"item": tString, "reason": tString, "approver_key": tString}),
+	"signature_recorded": withApprover(map[string]string{
+		"item": tString, "short_code": tString, "approver_key": tString, "approver_key_class": tString,
+		"approver_key_name": tString, "signature": tString, "signatures": tInt, "signatures_required": tInt,
+	}),
 	"queue_list_failed": withApprover(map[string]string{"error": tString}),
 	"approval": withRequester(map[string]string{
 		"mode": tString, "approver": tString, "decision": tString, "result": tString, "reason": tString,

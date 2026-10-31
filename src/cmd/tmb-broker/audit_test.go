@@ -642,11 +642,10 @@ reload_ignored_field config:any field:string running:any
 request argv:array_of_string claim_token:string cwd:string env:object_of_string executable:string hash:string nonce:string requester_fp:string requester_pid:integer requester_uid:integer transport:string type:string uid:integer
 request_abandoned item:string requester_fp:string requester_pid:integer requester_uid:integer wait_seconds:integer
 requester_denied reason:string requester_fp:string requester_pid:integer requester_uid:integer
+signature_recorded approver_key:string approver_key_class:string approver_key_name:string approver_pid:integer approver_uid:integer item:string short_code:string signature:string signatures:integer signatures_required:integer
 tls_handshake_failed error:string remote:string
 tls_listen addr:string
 tls_no_client_cert remote:string
-FAIL
-FAIL	tmb-poc/cmd/tmb-broker	0.272s
 `,
 }
 

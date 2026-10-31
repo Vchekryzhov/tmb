@@ -49,11 +49,13 @@ type Config struct {
 	// Trusted signer (ADR 0006, ADR 0007). host_id names this host in every
 	// approval payload (default: the host name). approver_keys are the
 	// public keys whose signature over a payload counts as a decision; with
-	// require_signed_decision an unsigned approve is refused. All three
-	// reload on SIGHUP.
+	// require_signed_decision an unsigned approve is refused.
+	// required_signatures (default 1) is how many signatures by different
+	// keys approve an item (ADR 0007, Р2). All four reload on SIGHUP.
 	HostID                string        `json:"host_id"`
 	ApproverKeys          []ApproverKey `json:"approver_keys"`
 	RequireSignedDecision bool          `json:"require_signed_decision"`
+	RequiredSignatures    int           `json:"required_signatures"`
 }
 
 // ApproverKey is one approver_keys entry (ADR 0007, Р1): a name for the
@@ -109,6 +111,26 @@ func parseApproverKeys(entries []ApproverKey) (map[string]approverKey, error) {
 	return out, nil
 }
 
+// checkThreshold applies the ADR 0007 Р2 rules to required_signatures
+// (0 means the default 1): a threshold above 1 counts signatures, so it
+// needs require_signed_decision, and with signed decisions required the
+// threshold must be reachable with the listed keys.
+func checkThreshold(c *Config, keys int) error {
+	if c.RequiredSignatures < 0 {
+		return fmt.Errorf("config: required_signatures %d is negative", c.RequiredSignatures)
+	}
+	if c.RequiredSignatures == 0 {
+		c.RequiredSignatures = 1
+	}
+	if c.RequiredSignatures > 1 && !c.RequireSignedDecision {
+		return fmt.Errorf("config: required_signatures %d needs require_signed_decision: an unsigned approve would bypass the threshold", c.RequiredSignatures)
+	}
+	if c.RequireSignedDecision && c.RequiredSignatures > keys {
+		return fmt.Errorf("config: require_signed_decision with required_signatures %d needs at least %d approver_keys entries, have %d: no approve could ever be accepted", c.RequiredSignatures, c.RequiredSignatures, keys)
+	}
+	return nil
+}
+
 func loadConfig(path string) (*Config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -161,8 +183,8 @@ func loadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	if c.RequireSignedDecision && len(keys) == 0 {
-		return nil, fmt.Errorf("config: require_signed_decision needs at least one approver_keys entry: no approve could ever be accepted")
+	if err := checkThreshold(&c, len(keys)); err != nil {
+		return nil, err
 	}
 	roots, err := normalizeCwdRoots(c.AllowedCwdRoots)
 	if err != nil {
