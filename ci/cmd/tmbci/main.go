@@ -28,6 +28,7 @@ import (
 	"tmb-ci/internal/harness"
 	"tmb-ci/internal/manifest"
 	"tmb-ci/internal/result"
+	"tmb-ci/internal/sbom"
 	"tmb-ci/internal/scan"
 )
 
@@ -46,6 +47,7 @@ var commands = map[string]func(*env, []string) int{
 	"gate":            cmdGate,
 	"badges":          cmdBadges,
 	"archive":         cmdArchive,
+	"sbom":            cmdSBOM,
 }
 
 func run(args []string, w io.Writer) int {
@@ -290,7 +292,7 @@ func cmdTrivyDB(e *env, args []string) int {
 	if err := scan.TrivyDBFresh(f, time.Now().UTC()); err != nil {
 		return e.emit(*check, result.Error, err.Error())
 	}
-	return e.emit(*check, result.Pass, "vulnerability DB built within 24h")
+	return e.emit(*check, result.Pass, fmt.Sprintf("vulnerability DB built within %gh", scan.TrivyDBMaxAge.Hours()))
 }
 
 func cmdExceptionsLint(e *env, args []string) int {
@@ -775,6 +777,56 @@ func cmdArchive(e *env, args []string) int {
 	}
 	if err := os.WriteFile(*outFile, []byte(buf.String()), 0o644); err != nil {
 		fmt.Fprintf(e.w, "archive: %v\n", err)
+		return 2
+	}
+	fmt.Fprintln(e.w, *outFile)
+	return 0
+}
+
+// cmdSBOM writes the CycloneDX SBOM of one release file (deb, rpm or
+// tar.gz) and the Go binaries in it (ci/run.sh dist). It is not a check and
+// writes no result.
+func cmdSBOM(e *env, args []string) int {
+	fs := e.flags("sbom") // -out is accepted for uniformity and unused
+	outFile := fs.String("file-out", "", "SBOM to write")
+	var a sbom.Artifact
+	var o sbom.Options
+	fs.StringVar(&a.Path, "artifact", "", "release file the SBOM describes")
+	fs.StringVar(&a.Type, "type", "", "deb, rpm or archive")
+	fs.StringVar(&a.Name, "name", "", "package name")
+	fs.StringVar(&a.Version, "pkg-version", "", "version as the package carries it")
+	fs.StringVar(&a.OS, "os", "", "archive only: target OS")
+	fs.StringVar(&a.Arch, "arch", "", "architecture as the file names it")
+	fs.StringVar(&o.Version, "version", "", "product version of the binaries")
+	fs.StringVar(&o.Supplier, "supplier", "", "supplier name")
+	fs.StringVar(&o.URL, "url", "", "source repository")
+	mtime := fs.Int64("mtime", -1, "BOM timestamp, Unix seconds (SOURCE_DATE_EPOCH)")
+	var specs multi
+	fs.Var(&specs, "binary", "name=path of a Go binary in the artifact (repeatable)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *outFile == "" || *mtime < 0 {
+		fmt.Fprintln(e.w, "sbom: -file-out and -mtime are required")
+		return 2
+	}
+	o.Time = time.Unix(*mtime, 0)
+	var bins []sbom.Binary
+	for _, s := range specs {
+		name, path, ok := strings.Cut(s, "=")
+		if !ok || name == "" || path == "" {
+			fmt.Fprintf(e.w, "sbom: binary %q: want name=path\n", s)
+			return 2
+		}
+		bins = append(bins, sbom.Binary{Name: name, Path: path})
+	}
+	var buf strings.Builder
+	if err := sbom.Write(&buf, a, bins, o); err != nil {
+		fmt.Fprintf(e.w, "sbom: %v\n", err)
+		return 2
+	}
+	if err := os.WriteFile(*outFile, []byte(buf.String()), 0o644); err != nil {
+		fmt.Fprintf(e.w, "sbom: %v\n", err)
 		return 2
 	}
 	fmt.Fprintln(e.w, *outFile)

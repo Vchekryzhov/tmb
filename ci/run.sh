@@ -12,6 +12,7 @@
 #   ci/run.sh secrets <range|full> [base-ref]   gitleaks over a commit range + tree, or full history
 #   ci/run.sh harness               N-series + docker-pair on Linux, verified against ci/scenarios
 #   ci/run.sh images                build harness images, Trivy vulns/misconfig, SBOM and licenses
+#   ci/run.sh images-opensbx        OpenShell sandbox image (arm64 Docker host only): Trivy vulns, SBOM, licenses
 #   ci/run.sh manifest              security manifest against executed tests and scenarios
 #   ci/run.sh stress                repeated shuffled security tests under the race detector
 #   ci/run.sh mutation              security mutation checks in a temporary copy
@@ -20,7 +21,7 @@
 #   ci/run.sh gate <event>          ci-gate over every result
 #   ci/run.sh openshell             full acceptance (phase B): run-all.sh on the dedicated Mac, all three logs verified
 #   ci/run.sh vm                    VM proof (local only, Lima on a Mac): harness/run-vm.sh, last-vm-run.log verified
-#   ci/run.sh dist                  release files in out/dist: deb/rpm, tmb tar.gz, SHA256SUMS (version: TMB_VERSION or git)
+#   ci/run.sh dist                  release files in out/dist: deb/rpm, tmb tar.gz, CycloneDX SBOMs, SHA256SUMS (version: TMB_VERSION or git)
 #   ci/run.sh package               dist + a second build compared byte for byte + deb/rpm install tests in containers
 #   ci/run.sh local                 lint + test + ci-selftest + coverage + security + build + fuzz short
 #
@@ -337,14 +338,25 @@ dist_version() {
   echo "$v"
 }
 
+# pkg_version VERSION: the version nfpm writes into deb and rpm (semver
+# pre-release with ~ so it sorts before the release, release 1):
+# v0.0.0-dev+abc gives 0.0.0~dev+abc-1, v1.2.3 gives 1.2.3-1.
+pkg_version() {
+  local v=${1#v} core rest
+  core=${v%%[-+]*}; rest=${v#"$core"}
+  [[ $rest == -* ]] && rest="~${rest#-}"
+  echo "$core$rest-1"
+}
+
 DIST_TARGETS=("tmb linux amd64" "tmb linux arm64" "tmb darwin arm64" "tmb-broker linux amd64" "tmb-broker linux arm64")
 
 # dist_build OUTDIR VERSION LOG: binaries (version in buildinfo), deb and rpm
 # of tmb-broker and tmb for amd64/arm64, tmb tar.gz for linux/amd64,
-# linux/arm64, darwin/arm64, SHA256SUMS. File mtimes in packages and
+# linux/arm64, darwin/arm64, a CycloneDX SBOM next to each (<file>.cdx.json),
+# SHA256SUMS. File mtimes in packages and
 # archives are the commit time (SOURCE_DATE_EPOCH).
 dist_build() {
-  local out=$1 ver=$2 logf=$3 stage epoch t name os arch p
+  local out=$1 ver=$2 logf=$3 stage epoch t name os arch p pkgv f a
   stage=$(mktemp -d)
   epoch=$(git -C "$ROOT" log -1 --format=%ct HEAD)
   rm -rf "$out"; mkdir -p "$out" "$stage/bin" "$stage/build"
@@ -355,6 +367,8 @@ dist_build() {
       -ldflags="-buildid= -X tmb-poc/internal/buildinfo.Version=$ver" -o "$stage/build/$name-$os-$arch" "./cmd/$name") >>"$logf" 2>&1 \
       || { rm -rf "$stage"; return 1; }
   done
+  pkgv=$(pkg_version "$ver")
+  local sbomcmd=("$BIN/tmbci" sbom -version "$ver" -mtime "$epoch" -supplier "TMB" -url "https://github.com/Vchekryzhov/tmb")
   for arch in amd64 arm64; do
     for name in tmb-broker tmb; do
       cp "$stage/build/$name-linux-$arch" "$stage/bin/$name"
@@ -362,13 +376,20 @@ dist_build() {
         (cd "$stage" && TMB_VERSION=$ver TMB_ARCH=$arch SOURCE_DATE_EPOCH=$epoch \
           nfpm package -f "packaging/$name.nfpm.yaml" -p "$p" -t "$out/") >>"$logf" 2>&1 \
           || { rm -rf "$stage"; return 1; }
+        if [ "$p" = deb ]; then f="${name}_${pkgv}_${arch}.deb"; a=$arch
+        else a=$([ "$arch" = amd64 ] && echo x86_64 || echo aarch64); f="${name}-${pkgv}.${a}.rpm"; fi
+        "${sbomcmd[@]}" -file-out "$out/$f.cdx.json" -artifact "$out/$f" -type "$p" -name "$name" -pkg-version "$pkgv" -arch "$a" \
+          -binary "/usr/bin/$name=$stage/build/$name-linux-$arch" >>"$logf" 2>&1 || { rm -rf "$stage"; return 1; }
       done
     done
   done
   for t in "linux amd64" "linux arm64" "darwin arm64"; do
     read -r os arch <<<"$t"
-    "$BIN/tmbci" archive -file-out "$out/tmb_${ver#v}_${os}_${arch}.tar.gz" -mtime "$epoch" \
+    f="tmb_${ver#v}_${os}_${arch}.tar.gz"
+    "$BIN/tmbci" archive -file-out "$out/$f" -mtime "$epoch" \
       -file "tmb=$stage/build/tmb-$os-$arch" >>"$logf" 2>&1 || { rm -rf "$stage"; return 1; }
+    "${sbomcmd[@]}" -file-out "$out/$f.cdx.json" -artifact "$out/$f" -type archive -name tmb -pkg-version "${ver#v}" -os "$os" -arch "$arch" \
+      -binary "tmb=$stage/build/tmb-$os-$arch" >>"$logf" 2>&1 || { rm -rf "$stage"; return 1; }
   done
   (cd "$out" && sha256sum_all) >"$stage/SHA256SUMS" && mv "$stage/SHA256SUMS" "$out/SHA256SUMS"
   rm -rf "$stage"
@@ -395,7 +416,7 @@ cmd_dist() {
   log "dist $ver into $DIST"
   if dist_build "$DIST" "$ver" "$D/dist.log"; then
     echo "$ver" >"$D/version.txt"
-    result package/dist PASS "$ver: $(grep -c . "$DIST/SHA256SUMS") files (deb, rpm, tar.gz) in ${DIST#"$ROOT"/}" "$DIST/SHA256SUMS"
+    result package/dist PASS "$ver: $(grep -c . "$DIST/SHA256SUMS") files (deb, rpm, tar.gz, CycloneDX SBOMs) in ${DIST#"$ROOT"/}" "$DIST/SHA256SUMS"
   else
     result package/dist FAIL "build failed" "$D/dist.log"
   fi
@@ -618,6 +639,49 @@ cmd_images() {
   docker image rm -f "tmb-ci/host:$tag" "tmb-ci/sandbox:$tag" >/dev/null 2>&1
 }
 
+# Dockerfile.opensbx starts from the linux/arm64-only opencode image (the
+# OpenShell rig runs on a Mac arm64), so it is built and scanned on an arm64
+# Docker host: the images-opensbx job runs on an arm64 runner. Same Trivy
+# rules as cmd_images: fresh DB, HIGH/CRITICAL block, exceptions in
+# ci/exceptions.json.
+cmd_images_opensbx() {
+  need_tmbci
+  local I=$REPORTS/images-opensbx c
+  local checks=(images/opensbx-build images/opensbx-trivy-db images/opensbx-vulns images/opensbx-sbom)
+  rm -rf "$I"; mkdir -p "$I"
+  docker info >/dev/null 2>&1 || { for c in "${checks[@]}"; do result "$c" ERROR "docker unavailable"; done; return; }
+  local darch; darch=$(docker info -f '{{.Architecture}}' 2>/dev/null)
+  case $darch in aarch64|arm64) ;; *)
+    for c in "${checks[@]}"; do result "$c" ERROR "docker host is ${darch:-unknown}; the opensbx base image is linux/arm64 only"; done; return ;;
+  esac
+  local img=tmb-ci/opensbx:${TMB_CI_RUN_ID}-${TMB_CI_SHA:0:12}
+  if ! docker build -q -f "$ROOT/harness/images/Dockerfile.opensbx" -t "$img" "$ROOT" >"$I/build.log" 2>&1; then
+    result images/opensbx-build FAIL "image build failed" "$I/build.log"
+    for c in "${checks[@]:1}"; do result "$c" NOT_RUN "image did not build"; done
+    return
+  fi
+  result images/opensbx-build PASS "tmb-ci/opensbx built (linux/arm64)"
+  export TRIVY_CACHE_DIR; TRIVY_CACHE_DIR=$(mktemp -d)   # fresh DB every run, never a stale cache
+  trivy image --download-db-only --no-progress >"$I/trivy-db.log" 2>&1
+  trivy version --format json >"$I/trivy-version.json" 2>>"$I/trivy-db.log"
+  if "$BIN/tmbci" trivy-db -check images/opensbx-trivy-db -version-json "$I/trivy-version.json" -out "$RESULTS"; then
+    if trivy image --skip-db-update --no-progress --scanners vuln --format json -o "$I/trivy-opensbx.json" "$img" >"$I/vulns.log" 2>&1; then
+      "$BIN/tmbci" scan -check images/opensbx-vulns -scanner trivy -report "$I/trivy-opensbx.json" -exceptions "$ROOT/ci/exceptions.json" \
+        -tool "trivy=$(trivy --version | sed -n 's/^Version: //p')" -out "$RESULTS"
+    else result images/opensbx-vulns ERROR "trivy image failed" "$I/vulns.log"; fi
+    local sbom=0
+    trivy image --skip-db-update --no-progress --scanners vuln,license --format cyclonedx -o "$I/sbom-opensbx.cdx.json" "$img" >"$I/sbom.log" 2>&1 || sbom=1
+    trivy image --skip-db-update --no-progress --scanners license --format table -o "$I/licenses-opensbx.txt" "$img" >>"$I/sbom.log" 2>&1 || sbom=1
+    [ -s "$I/sbom-opensbx.cdx.json" ] || sbom=1
+    if [ $sbom -eq 0 ]; then result images/opensbx-sbom PASS "CycloneDX SBOM and license table for opensbx"
+    else result images/opensbx-sbom ERROR "SBOM or license report missing" "$I/sbom.log"; fi
+  else
+    result images/opensbx-vulns ERROR "vulnerability DB not fresh; no scan accepted"
+    result images/opensbx-sbom NOT_RUN "vulnerability DB not fresh"
+  fi
+  docker image rm -f "$img" >/dev/null 2>&1
+}
+
 cmd_manifest() {
   need_tmbci
   local args=(manifest -check security/manifest -manifest "$ROOT/ci/security-manifest.json" -out "$RESULTS")
@@ -766,6 +830,7 @@ case "$cmd" in
   secrets) cmd_secrets "$@" ;;
   harness) cmd_harness ;;
   images) cmd_images ;;
+  images-opensbx) cmd_images_opensbx ;;
   manifest) cmd_manifest ;;
   stress) cmd_stress ;;
   mutation) cmd_mutation ;;
@@ -776,6 +841,6 @@ case "$cmd" in
   openshell) cmd_openshell ;;
   vm) cmd_vm ;;
   local) cmd_local ;;
-  *) rm -f "$MARK"; sed -n '2,28p' "$0"; exit 2 ;;
+  *) rm -f "$MARK"; sed -n '2,29p' "$0"; exit 2 ;;
 esac
 worst_of_run
