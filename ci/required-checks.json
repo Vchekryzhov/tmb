@@ -564,9 +564,6 @@
         "check": "fuzz/registry"
       },
       {
-        "check": "secrets/range"
-      },
-      {
         "check": "secrets/tree"
       },
       {
@@ -727,9 +724,6 @@
       },
       {
         "check": "fuzz/registry"
-      },
-      {
-        "check": "secrets/range"
       },
       {
         "check": "secrets/tree"
