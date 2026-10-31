@@ -157,7 +157,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant A as Агент
+    participant A as tmb-клиент
     participant B as tmb-брокер
     participant S as Подписант на Mac
     participant E as Secure Enclave + Touch ID
