@@ -599,6 +599,46 @@
       "owner": "Vchekryzhov",
       "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
       "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/hostkey.go",
+      "match": "os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)",
+      "reason": "identity key path is the fixed file name under state_dir from the root-owned broker config; opened without following a symlink, owner and mode checked on the open file",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/hostkey_test.go",
+      "match": "os.ReadFile(",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G302",
+      "location": "src/cmd/tmb-broker/hostkey_test.go",
+      "match": "os.Chmod(",
+      "reason": "test gives its own t.TempDir() key file group or world bits, or makes its state_dir read-only, to provoke the identity key start errors",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/hostkey_test.go",
+      "match": "os.WriteFile(path, []byte(content), mode)",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
     }
   ]
 }
