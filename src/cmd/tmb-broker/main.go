@@ -132,7 +132,7 @@ func run(args []string, stdout, stderr io.Writer, stop, hup <-chan os.Signal) in
 		defer tlsLn.Close()
 	}
 
-	if err := os.WriteFile(cfg.PidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o644); err != nil {
+	if err := os.WriteFile(cfg.PidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o600); err != nil {
 		return fail("pidfile: %v", err)
 	}
 

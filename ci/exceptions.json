@@ -83,16 +83,6 @@
     },
     {
       "scanner": "gosec",
-      "rule": "G306",
-      "location": "src/cmd/tmb-broker/main.go",
-      "match": "os.WriteFile(cfg.PidFile",
-      "reason": "pid file is conventionally world-readable and holds no secret",
-      "owner": "Vchekryzhov",
-      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
-      "expires": "2027-04-14"
-    },
-    {
-      "scanner": "gosec",
       "rule": "G115",
       "location": "src/internal/proto/proto.go",
       "match": "uint32(len(b))",

@@ -161,6 +161,9 @@ func TestBrokerRunServesUntilStopped(t *testing.T) {
 	if st, _ := os.Stat(cfg.SocketPath); st.Mode().Perm() != 0o660 {
 		t.Errorf("socket mode %v, want 0660", st.Mode().Perm())
 	}
+	if st, _ := os.Stat(cfg.PidFile); st.Mode().Perm() != 0o600 {
+		t.Errorf("pidfile mode %v, want 0600", st.Mode().Perm())
+	}
 	hup <- syscall.SIGHUP // reload while serving
 	deadline = time.Now().Add(5 * time.Second)
 	for {
