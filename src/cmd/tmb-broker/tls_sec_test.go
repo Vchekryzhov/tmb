@@ -175,6 +175,9 @@ func TestTLSListenerRejectsMissingCertAndOldTLS(t *testing.T) {
 	if err != nil || f.Type != "approved" {
 		t.Fatalf("valid client: %+v, %v; want approved", f, err)
 	}
+	// the broker goes on to claim and run after "approved": wait for it, so
+	// the temp dir is not removed under its claim files
+	waitLog(t, b, `"event":"exec_exit"`)
 }
 
 func TestLoadTLSConfigRejectsBadMaterial(t *testing.T) {

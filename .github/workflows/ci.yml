@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  GO_PRIMARY: "1.27.2"
+  GO_PRIMARY: "1.27.3"
   TMB_CI_SHA: ${{ github.sha }}
   TMB_CI_RUN_ID: ${{ github.run_id }}
   # base for coverage and secrets: the target branch for PRs, the previous main otherwise
@@ -44,7 +44,7 @@ jobs:
       - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
       - run: ci/run.sh lint
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-lint
           path: out/ci/results
@@ -52,7 +52,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports-lint
           path: out/ci/reports
@@ -65,7 +65,7 @@ jobs:
       max-parallel: 6
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
-        go: ["1.27.2", "1.26.9"]
+        go: ["1.27.3", "1.26.10"]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     permissions:
@@ -85,7 +85,7 @@ jobs:
           label="$(go env GOOS)-$(go env GOARCH)-go${GO_CELL}"
           if [ "$(go env GOOS)" = linux ]; then ci/run.sh test "$label" race; else ci/run.sh test "$label"; fi
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-test-${{ matrix.runner }}-${{ matrix.go }}
           path: out/ci/results
@@ -93,7 +93,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports-test-${{ matrix.runner }}-${{ matrix.go }}
           path: out/ci/reports
@@ -114,7 +114,7 @@ jobs:
           tools: "false"
       - run: ci/run.sh ci-selftest
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-ci-selftest
           path: out/ci/results
@@ -137,7 +137,7 @@ jobs:
           tools: "false"
       - run: ci/run.sh coverage "$TMB_CI_BASE"
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-coverage
           path: out/ci/results
@@ -145,7 +145,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports-coverage
           path: out/ci/reports
@@ -164,7 +164,7 @@ jobs:
       - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
       - run: ci/run.sh security
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-security
           path: out/ci/results
@@ -172,7 +172,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports-security
           path: out/ci/reports
@@ -191,7 +191,7 @@ jobs:
       - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
       - run: ci/run.sh build
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-build
           path: out/ci/results
@@ -199,7 +199,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-artifacts
           path: |
@@ -230,7 +230,7 @@ jobs:
           tools: "false"
       - run: if [ "$NIGHTLY" = true ]; then ci/run.sh fuzz long; else ci/run.sh fuzz short; fi
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-fuzz
           path: out/ci/results
@@ -238,7 +238,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-corpus
           path: out/ci/reports/fuzz
@@ -258,7 +258,7 @@ jobs:
       - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
       - run: if [ "$NIGHTLY" = true ]; then ci/run.sh secrets full; else ci/run.sh secrets range "$TMB_CI_BASE"; fi
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-secrets
           path: out/ci/results
@@ -266,7 +266,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports-secrets
           path: out/ci/reports
@@ -288,7 +288,7 @@ jobs:
           tools: "false"
       - run: ci/run.sh harness
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-harness
           path: out/ci/results
@@ -296,7 +296,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports-harness
           path: out/ci/reports/harness
@@ -315,7 +315,7 @@ jobs:
       - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
       - run: ci/run.sh images
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-images
           path: out/ci/results
@@ -323,7 +323,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports-images
           path: out/ci/reports/images
@@ -355,7 +355,7 @@ jobs:
           path: out/ci/reports/harness
       - run: ci/run.sh manifest
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-manifest
           path: out/ci/results
@@ -384,7 +384,7 @@ jobs:
       - if: always()
         run: ci/run.sh links-external
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-nightly
           path: out/ci/results
@@ -392,7 +392,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports-nightly
           path: out/ci/reports

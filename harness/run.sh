@@ -488,7 +488,7 @@ OUT_FILE=$TD/n14a.out; ERR_FILE=$TD/n14a.err
 approve_as 4242 --list >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 assert_rc      "N14: requester uid 4242 on the approver socket -> exit 125" 125
 assert_err_has "N14: deny reason approver_not_allowed" "approver_not_allowed"
-if docker exec "$HOST" grep '"event":"approver_denied"' /var/log/tmb/broker.log | grep -q '"requester_uid":4242'; then ok "N14: JSONL approver_denied with uid 4242"; else bad "N14: JSONL approver_denied for uid 4242 missing"; fi
+if docker exec "$HOST" grep '"event":"approver_denied"' /var/log/tmb/broker.log | grep -q '"approver_uid":4242'; then ok "N14: JSONL approver_denied with uid 4242"; else bad "N14: JSONL approver_denied for uid 4242 missing"; fi
 if docker exec "$SBX" test -e "$APPROVE_SOCK"; then bad "N14: approver socket visible in the sandbox"; else ok "N14: approver socket not visible in the sandbox"; fi
 cat >"$TD/n14.json" <<'EOF'
 {"type":"list"}
@@ -831,8 +831,8 @@ n29_wait() { # n29_wait FILE STRING -> 0 once FILE in host-sim contains STRING
   done
   return 1
 }
-n29_unschema() { # n29_unschema FILE -> JSON lines of FILE without "schema":1
-  docker exec "$HOST" sh -c "grep '^{' $1 | grep -vc '\"schema\":1'" | tr -d '[:space:]'
+n29_unschema() { # n29_unschema FILE -> JSON lines of FILE without "schema":2
+  docker exec "$HOST" sh -c "grep '^{' $1 | grep -vc '\"schema\":2'" | tr -d '[:space:]'
 }
 stop_broker
 docker exec "$HOST" rm -f "$JERR"
@@ -843,7 +843,7 @@ echo "-- broker CapEff=$CAPEFF"
 if [ -n "$CAPEFF" ] && [ $((0x$CAPEFF & 0x6)) -eq 0 ]; then ok "N29: broker runs without CAP_DAC_OVERRIDE and CAP_DAC_READ_SEARCH"; else bad "N29: broker still has DAC override caps (CapEff=$CAPEFF)"; fi
 run_client "$SBX" tmb exec --root -- /usr/bin/id -u
 assert_rc     "N29: request before the rotation -> exit 0" 0
-if [ "$(n29_unschema "$JLOG")" = "0" ]; then ok "N29: every journal line carries \"schema\":1"; else bad "N29: journal lines without \"schema\":1"; fi
+if [ "$(n29_unschema "$JLOG")" = "0" ]; then ok "N29: every journal line carries \"schema\":2"; else bad "N29: journal lines without \"schema\":2"; fi
 
 echo "-- rotation: rename the journal, SIGHUP"
 docker exec "$HOST" mv "$JLOG" "$JLOG.1"
@@ -877,7 +877,7 @@ if docker exec "$HOST" grep -q 'accepting requests again' "$JERR"; then ok "N29:
 run_client "$SBX" tmb exec --root -- /usr/bin/id -u
 assert_rc     "N29: request after the recovery -> exit 0" 0
 assert_out_eq "N29: stdout '0'" "0"
-if [ "$(n29_unschema "$JLOG")" = "0" ] && [ "$(n29_unschema "$JLOG.1")" = "0" ] && [ "$(n29_unschema "$JERR")" = "0" ]; then ok "N29: every line in both journal files and the stderr reserve carries \"schema\":1"; else bad "N29: a line without \"schema\":1"; fi
+if [ "$(n29_unschema "$JLOG")" = "0" ] && [ "$(n29_unschema "$JLOG.1")" = "0" ] && [ "$(n29_unschema "$JERR")" = "0" ]; then ok "N29: every line in both journal files and the stderr reserve carries \"schema\":2"; else bad "N29: a line without \"schema\":2"; fi
 stop_broker
 start_broker mock-approve 10
 state_dump

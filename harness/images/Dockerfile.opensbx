@@ -6,7 +6,7 @@
 # Per-run client certificates are NOT baked here: run-openshell.sh layers
 # them on top with a second build whose context is the per-run cert temp
 # dir (see README-PROTOTYPE.md "Доставка сертификатов в песочницу").
-FROM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS build
+FROM golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS build
 WORKDIR /src
 COPY src/ .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/tmb ./cmd/tmb
@@ -14,7 +14,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/tmb ./cmd/tmb
 # The digest below is the linux/arm64 manifest of ghcr.io/anomalyco/opencode:latest,
 # resolved 2026-10-09 (docker manifest inspect). run-openshell.sh refuses to
 # run unless the local image matches OPENCODE_IMAGE_REF.
-FROM ghcr.io/anomalyco/opencode@sha256:6ebc13097f2381301220abe9d1b2a54f50cd1603a910dc1c66e93d8f2c4e8ebb
+FROM ghcr.io/anomalyco/opencode@sha256:f4cfe16d91efbbfca01a51c44094fba4cf82e15c7fa17de5f11f9059699b1e6e
 # base is Alpine; openssl is present for the O-series probes (s_client etc.)
 # hadolint ignore=DL3018 # base is digest-pinned; apk repository versions roll, the O-series needs only openssl
 RUN apk add --no-cache openssl

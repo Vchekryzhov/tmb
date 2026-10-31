@@ -27,6 +27,25 @@ var requesterFields = map[string]string{
 	"requester_fp":  tString,
 }
 
+// approverFields are approverLogFields: the approver socket peer, never
+// written as requester_* (CONTEXT.md keeps the two roles apart).
+var approverFields = map[string]string{
+	"approver_uid": tInt,
+	"approver_pid": tInt,
+}
+
+// withApprover adds the approver fields to an event's own fields.
+func withApprover(own map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range approverFields {
+		out[k] = v
+	}
+	for k, v := range own {
+		out[k] = v
+	}
+	return out
+}
+
 // withRequester adds the requester fields to an event's own fields.
 func withRequester(own map[string]string) map[string]string {
 	out := map[string]string{}
@@ -58,25 +77,26 @@ var auditEvents = map[string]map[string]string{
 	"tls_handshake_failed": {"remote": tString, "error": tString},
 	"tls_no_client_cert":   {"remote": tString},
 	"requester_denied":     withRequester(map[string]string{"reason": tString}),
-	"bad_frame":            withRequester(map[string]string{"error": tString}),
+	"bad_frame":            withRequester(withApprover(map[string]string{"error": tString})),
 	"bad_request":          withRequester(map[string]string{"error": tString}),
 	"request": withRequester(map[string]string{
 		"transport": tString, "type": tString, "executable": tString, "argv": tStrings,
-		"cwd": tString, "uid": tInt, "env": tStrMap, "nonce": tString, "claim_token": tString,
+		"cwd": tString, "uid": tInt, "env": tStrMap, "nonce": tString, "hash": tString, "claim_token": tString,
 	}),
 	"deny": withRequester(map[string]string{
-		"executable": tString, "argv": tStrings, "nonce": tString, "reason": tString, "detail": tString,
+		"executable": tString, "argv": tStrings, "nonce": tString, "hash": tString, "reason": tString, "detail": tString,
 	}),
 	"queued": withRequester(map[string]string{
 		"item": tString, "hash": tString, "executable": tString, "argv": tStrings, "cwd": tString, "nonce": tString,
 	}),
 	"approval_timeout":  withRequester(map[string]string{"item": tString, "wait_seconds": tInt}),
 	"request_abandoned": withRequester(map[string]string{"item": tString, "wait_seconds": tInt}),
-	"approver_denied":   withRequester(map[string]string{"reason": tString}),
-	"decision_rejected": withRequester(map[string]string{"item": tString, "reason": tString}),
+	"approver_denied":   withApprover(map[string]string{"reason": tString}),
+	"decision_rejected": withApprover(map[string]string{"item": tString, "reason": tString}),
+	"queue_list_failed": withApprover(map[string]string{"error": tString}),
 	"approval": withRequester(map[string]string{
 		"mode": tString, "approver": tString, "decision": tString, "result": tString, "reason": tString,
-		"executable": tString, "argv": tStrings, "nonce": tString,
+		"executable": tString, "argv": tStrings, "nonce": tString, "hash": tString,
 	}),
 	"claim": withRequester(map[string]string{
 		"token": tString, "hash": tString, "nonce": tString, "executable": tString, "result": tString,
@@ -89,6 +109,7 @@ var auditEvents = map[string]map[string]string{
 	"exec_fail": {"token": tString, "error": tString},
 	"exec_exit": withRequester(map[string]string{
 		"token": tString, "executable": tString, "exit_status": tInt, "duration_ms": tInt,
+		"client_gone": tBool,
 	}),
 	"reload":               {"pid": tInt, "changed": tStrings, "ignored": tStrings},
 	"reload_failed":        {"pid": tInt, "error": tString},

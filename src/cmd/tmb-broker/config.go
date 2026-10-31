@@ -11,8 +11,8 @@ import (
 // Config is broker-side configuration (loaded from JSON). The env allowlist,
 // shell deny list, and requester identity allowlists are BROKER POLICY -
 // never request data. Allowlist entries are per identity kind: uids for the
-// unix (SO_PEERCRED) listener, certificate fingerprints for the TLS
-// listener.
+// unix (SO_PEERCRED) listener, public key fingerprints (SHA-256 of the
+// SubjectPublicKeyInfo, ADR 0005) for the TLS listener.
 type Config struct {
 	SocketPath           string            `json:"socket_path"`
 	StateDir             string            `json:"state_dir"`

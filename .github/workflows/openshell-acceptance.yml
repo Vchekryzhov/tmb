@@ -75,7 +75,7 @@ jobs:
           docker ps -aq --filter name='^tmb-' | xargs -r docker rm -f
           rm -f harness/last-*run.log
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-openshell
           path: out/ci/results
@@ -83,7 +83,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports-openshell
           path: out/ci/reports/openshell

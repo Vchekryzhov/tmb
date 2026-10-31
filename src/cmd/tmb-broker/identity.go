@@ -76,6 +76,12 @@ func (id RequesterID) LogFields() map[string]any {
 	return map[string]any{}
 }
 
+// approverLogFields returns the JSONL identity fields of an approver socket
+// peer (always a unix uid).
+func approverLogFields(id RequesterID) map[string]any {
+	return map[string]any{"approver_uid": id.UID, "approver_pid": id.PID}
+}
+
 // ConsoleLine renders the requester for the manual approval console. The
 // uid rendering is byte-stable (the N-series scenario registry checks it);
 // the key rendering shows the first 16 hex chars of the fingerprint.

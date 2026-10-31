@@ -8,6 +8,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -30,8 +31,9 @@ type queueDecision struct {
 }
 
 type queueEntry struct {
-	item   proto.QueueItem
-	result chan queueDecision // buffered 1: the first decision wins
+	item      proto.QueueItem
+	requester RequesterID        // who asked: never the one who decides (ADR 0004)
+	result    chan queueDecision // buffered 1: the first decision wins
 }
 
 // approvalQueue holds the waiting requests by item id. Decided ids are
@@ -41,6 +43,21 @@ type approvalQueue struct {
 	mu      sync.Mutex
 	items   map[string]*queueEntry
 	decided map[string]time.Time
+	size    int // encoded bytes of the waiting items
+}
+
+// maxQueueBytes bounds the encoded size of all waiting items, so the list
+// an approver asks for always fits in one frame; the rest of MaxFrame is
+// room for the frame envelope and the separators.
+const maxQueueBytes = proto.MaxFrame - 64*1024
+
+// itemSize is the encoded size of one item in a queue frame.
+func itemSize(item proto.QueueItem) int {
+	b, err := json.Marshal(item)
+	if err != nil {
+		return maxQueueBytes + 1
+	}
+	return len(b) + 1 // the separating comma
 }
 
 func newApprovalQueue() *approvalQueue {
@@ -50,17 +67,32 @@ func newApprovalQueue() *approvalQueue {
 // decidedMemory bounds how long a decided id is remembered.
 const decidedMemory = time.Hour
 
-// add enqueues an item; false when a request with the same hash is already
-// waiting (the same request cannot be approved twice at once).
-func (q *approvalQueue) add(item proto.QueueItem) (*queueEntry, bool) {
+// add enqueues an item. It refuses with request_already_queued when a
+// request with the same hash is already waiting (the same request cannot be
+// approved twice at once) and with queue_full when the item would not fit
+// in the approver's list frame.
+func (q *approvalQueue) add(item proto.QueueItem, requester RequesterID) (*queueEntry, string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if _, dup := q.items[item.ID]; dup {
-		return nil, false
+		return nil, "request_already_queued"
 	}
-	e := &queueEntry{item: item, result: make(chan queueDecision, 1)}
+	n := itemSize(item)
+	if q.size+n > maxQueueBytes {
+		return nil, "queue_full"
+	}
+	e := &queueEntry{item: item, requester: requester, result: make(chan queueDecision, 1)}
 	q.items[item.ID] = e
-	return e, true
+	q.size += n
+	return e, ""
+}
+
+// remove drops a waiting item and its size; the caller holds q.mu.
+func (q *approvalQueue) remove(id string) {
+	if e, ok := q.items[id]; ok {
+		q.size -= itemSize(e.item)
+		delete(q.items, id)
+	}
 }
 
 // list returns the waiting items, oldest first.
@@ -88,12 +120,15 @@ func (q *approvalQueue) withdraw(id string) bool {
 	if _, ok := q.items[id]; !ok {
 		return false
 	}
-	delete(q.items, id)
+	q.remove(id)
 	return true
 }
 
 // decide delivers a verdict once. The item leaves the queue on the first
-// decision; the hash must match what the approver was shown.
+// decision; the hash must match what the approver was shown, and the
+// requester never decides its own request: a uid in both allowlists is
+// refused with approver_is_requester and the item stays for another
+// approver.
 func (q *approvalQueue) decide(id, hash string, d queueDecision) (deny, detail string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -113,7 +148,10 @@ func (q *approvalQueue) decide(id, hash string, d queueDecision) (deny, detail s
 	if e.item.Hash != hash {
 		return "decision_mismatch", fmt.Sprintf("item %s has hash %s, decision carries %s", id, e.item.Hash, hash)
 	}
-	delete(q.items, id)
+	if e.requester.Equal(d.approver) {
+		return "approver_is_requester", fmt.Sprintf("item %s was requested by %s, another approver must decide it", id, d.approver.Key())
+	}
+	q.remove(id)
 	q.decided[id] = now
 	e.result <- d
 	return "", ""
@@ -137,9 +175,9 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 		Nonce:      req.Nonce,
 		QueuedAt:   time.Now().UTC().Format(time.RFC3339Nano),
 	}
-	e, ok := b.queue.add(item)
-	if !ok {
-		return false, "request_already_queued", "mode:" + ModeQueue
+	e, refused := b.queue.add(item, id)
+	if refused != "" {
+		return false, refused, "mode:" + ModeQueue
 	}
 	ev := id.LogFields()
 	ev["item"] = item.ID
@@ -147,7 +185,7 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 	ev["executable"] = exeReal
 	ev["argv"] = req.Argv
 	ev["cwd"] = cwdReal
-	ev["nonce"] = short(req.Nonce, 12)
+	ev["nonce"] = logNonce(req.Nonce)
 	b.log.Event("queued", ev)
 	wait := b.approvalWait() // fixed for this item: a reload does not move it
 	proto.WriteFrame(conn, &proto.Frame{Type: "waiting", Token: item.ID,
@@ -166,14 +204,20 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 			return false, "approval_timeout", "mode:" + ModeQueue
 		}
 		d = <-e.result // decided at the last moment
-	case <-hangup:
-		if b.queue.withdraw(item.ID) {
-			b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))
-			return false, "request_abandoned", "mode:" + ModeQueue
+	case <-hangup.done:
+		// the requester is gone: nothing runs, even when a decision raced
+		// the hangup and is already waiting in the channel
+		approver := "mode:" + ModeQueue
+		if !b.queue.withdraw(item.ID) {
+			approver = (<-e.result).approver.Key()
 		}
-		d = <-e.result
+		b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))
+		return false, "request_abandoned", approver
 	}
-	stopWatch(conn, hangup)
+	if stopWatch(conn, hangup) {
+		b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))
+		return false, "request_abandoned", d.approver.Key()
+	}
 	if !d.granted {
 		return false, "approval_denied_by_human", d.approver.Key()
 	}
@@ -187,33 +231,47 @@ func queueEvent(id RequesterID, item string, wait time.Duration) map[string]any 
 	return ev
 }
 
+// hangupWatch keeps the read result even when a ready decision wins the
+// select. Receiving done synchronizes access to err.
+type hangupWatch struct {
+	done chan struct{}
+	err  error
+}
+
 // watchHangup reads the requester connection while its request waits: the
-// client sends nothing more, so a read that returns means it hung up. The
-// channel closes on that; stopWatch ends the watch otherwise.
-func watchHangup(conn net.Conn) <-chan struct{} {
-	gone := make(chan struct{})
+// client sends nothing more, so a read that returns means it hung up, unless
+// stopWatch interrupted the read with a deadline.
+func watchHangup(conn net.Conn) *hangupWatch {
+	w := &hangupWatch{done: make(chan struct{})}
 	go func() {
-		defer close(gone)
+		defer close(w.done)
 		var buf [1]byte
-		_, _ = conn.Read(buf[:])
+		_, w.err = conn.Read(buf[:])
 	}()
-	return gone
+	return w
 }
 
 // stopWatch unblocks the hangup reader with a past read deadline and waits
 // for it, so nothing else reads the connection concurrently; the deadline
-// is then cleared.
-func stopWatch(conn net.Conn, gone <-chan struct{}) {
+// is then cleared. True means the peer disconnected (or sent unexpected
+// data), rather than the read ending because we stopped the watch.
+func stopWatch(conn net.Conn, w *hangupWatch) bool {
 	_ = conn.SetReadDeadline(time.Unix(1, 0))
-	<-gone
+	<-w.done
 	_ = conn.SetReadDeadline(time.Time{})
+	if !errors.Is(w.err, os.ErrDeadlineExceeded) {
+		return true
+	}
+	// A past deadline can win over an EOF already waiting in a real
+	// socket. Inspect it without consuming bytes, after joining the reader.
+	return socketReadReady(conn)
 }
 
 // --- approver socket ----------------------------------------------------------
 
 // allowedApprover checks a unix peer against approver_uids. The roles are
-// told apart by socket and message type, so a uid in both lists gains
-// nothing from it.
+// told apart by socket and message type; a uid in both lists still cannot
+// decide its own request (approvalQueue.decide).
 func (b *Broker) allowedApprover(id RequesterID) bool {
 	if id.Kind != KindUID {
 		return false
@@ -250,13 +308,7 @@ func (b *Broker) startApprover(path string) error {
 
 // ServeApprover runs the accept loop of the approver socket.
 func (b *Broker) ServeApprover(ln net.Listener) error {
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			return err
-		}
-		go b.handleApproverConn(conn.(*net.UnixConn))
-	}
+	return serveConns(ln, func(c net.Conn) { b.handleApproverConn(c.(*net.UnixConn)) })
 }
 
 func (b *Broker) handleApproverConn(conn *net.UnixConn) {
@@ -277,7 +329,7 @@ func (b *Broker) handleApproverConn(conn *net.UnixConn) {
 // is refused before it sees anything of the queue.
 func (b *Broker) serveApprover(conn net.Conn, id RequesterID) {
 	if !b.allowedApprover(id) {
-		ev := id.LogFields()
+		ev := approverLogFields(id)
 		ev["reason"] = "approver_not_allowed"
 		b.log.Event("approver_denied", ev)
 		_ = conn.SetReadDeadline(time.Now().Add(denyDrainTimeout))
@@ -287,21 +339,27 @@ func (b *Broker) serveApprover(conn net.Conn, id RequesterID) {
 			Detail: fmt.Sprintf("%s is not in approver_uids", id.Key())})
 		return
 	}
+	_ = conn.SetReadDeadline(time.Now().Add(requestReadTimeout))
 	raw, err := proto.ReadRawFrame(conn)
+	_ = conn.SetReadDeadline(time.Time{})
 	if err != nil {
-		ev := id.LogFields()
+		ev := approverLogFields(id)
 		ev["error"] = err.Error()
 		b.log.Event("bad_frame", ev)
 		return
 	}
-	var req proto.Request
-	if err := json.Unmarshal(raw, &req); err != nil {
+	req, err := proto.DecodeRequest(raw)
+	if err != nil {
 		proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "bad_request", Detail: err.Error()})
 		return
 	}
 	switch req.Type {
 	case "list":
-		proto.WriteFrame(conn, &proto.Frame{Type: "queue", Items: b.queue.list()})
+		if err := proto.WriteFrame(conn, &proto.Frame{Type: "queue", Items: b.queue.list()}); err != nil {
+			ev := approverLogFields(id)
+			ev["error"] = err.Error()
+			b.log.Event("queue_list_failed", ev)
+		}
 	case "decide":
 		var granted bool
 		switch req.Decision {
@@ -313,7 +371,7 @@ func (b *Broker) serveApprover(conn net.Conn, id RequesterID) {
 			return
 		}
 		if deny, detail := b.queue.decide(req.ItemID, req.ItemHash, queueDecision{granted: granted, approver: id}); deny != "" {
-			ev := id.LogFields()
+			ev := approverLogFields(id)
 			ev["item"] = req.ItemID
 			ev["reason"] = deny
 			b.log.Event("decision_rejected", ev)
