@@ -2,11 +2,13 @@ package proto
 
 import (
 	"bytes"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"math/big"
@@ -27,10 +29,19 @@ const testSignerScalar = "4e7ab3d2a9c1f05e6b8d17c3a2e94f60b5d8c7e1f2a3b4c5d6e7f8
 
 func testSignerKey(t testing.TB) *ecdsa.PrivateKey {
 	t.Helper()
-	d, _ := new(big.Int).SetString(testSignerScalar, 16)
-	k := &ecdsa.PrivateKey{D: d}
+	raw, err := hex.DecodeString(testSignerScalar)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ek, err := ecdh.P256().NewPrivateKey(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub := ek.PublicKey().Bytes() // 0x04 || X || Y
+	k := &ecdsa.PrivateKey{D: new(big.Int).SetBytes(raw)}
 	k.Curve = elliptic.P256()
-	k.X, k.Y = elliptic.P256().ScalarBaseMult(d.Bytes())
+	k.X = new(big.Int).SetBytes(pub[1:33])
+	k.Y = new(big.Int).SetBytes(pub[33:])
 	return k
 }
 
@@ -254,7 +265,7 @@ func TestApprovalVectors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(vectorsPath, append(out, '\n'), 0o644); err != nil {
+		if err := os.WriteFile(vectorsPath, append(out, '\n'), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
