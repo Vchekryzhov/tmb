@@ -150,6 +150,29 @@ sequenceDiagram
     end
 ```
 
+### Будущий этап: подписант с Touch ID
+
+Черновик дизайна в [docs/design/trusted-signer.md](docs/design/trusted-signer.md), задача [#2](https://github.com/Vchekryzhov/tmb/issues/2). Выбран вариант А: брокер строит байты одобрения, подписант на Mac показывает их и после касания Touch ID подписывает ключом Secure Enclave, брокер проверяет подпись и только потом выдаёт токен. Ключ не покидает Secure Enclave, а без касания подписи нет. Остаточный риск: root на Mac управляет показом и числом подписей за касание, поэтому может подменить байты между показом и подписью; защита от этого это второе устройство (например, iPhone) и политика брокера.
+
+```mermaid
+sequenceDiagram
+    participant A as Агент
+    participant B as tmb-брокер
+    participant S as Подписант на Mac
+    participant E as Secure Enclave + Touch ID
+    A->>B: Запрос: путь, argv, cwd, uid, nonce
+    B->>B: Политика, очередь, payload с challenge
+    B->>S: Байты payload
+    S->>S: Строгий разбор, показ каждого поля
+    S->>E: Подписать ровно эти байты
+    E-->>S: Подпись после касания
+    S->>B: decide с подписью и отпечатком ключа
+    B->>B: Ключ в allowlist, подпись над своими байтами, срок
+    B-->>A: Одноразовый токен с TTL
+    A->>B: claim, запуск
+    Note over B: Без валидной подписи decide отклоняется
+```
+
 ### Fail-closed
 
 При любой неисправности компонентов TMB агентный путь закрывается: команда не запускается, клиент завершается с кодом 3.
