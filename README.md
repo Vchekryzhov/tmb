@@ -146,6 +146,8 @@ sequenceDiagram
 Для распространяемого продукта это недопустимый failure domain.
 Эксперименты сохранены на ветке `prototype/sudo-integration`, история в [#1](https://github.com/Vchekryzhov/tmb/issues/1) (закрыт).
 
+Сравнение с FreeIPA, JIT-доступом и approval-плагином sudo: [docs/alternatives.md](docs/alternatives.md).
+
 ## Запуск и проверка
 
 Сценарные проверки идут только в одноразовых непривилегированных контейнерах; Go-тесты запускаются отдельно, без привилегий хоста.
@@ -186,6 +188,7 @@ ci/run.sh dist
 - [ADR 0005](docs/adr/0005-requester-identity-by-public-key.md): идентичность песочницы по открытому ключу.
 - [VERDICT-OPENSHELL.md](VERDICT-OPENSHELL.md): вердикт OpenShell-майлстоуна, реестр O0–O9, отклонения от спеки, остаточные риски.
 - [VERDICT-A.md](VERDICT-A.md): вердикт майлстоуна A, реестр N13–N22 и PAIR-APPROVE, отклонения от спеки, остаточные риски.
+- [docs/alternatives.md](docs/alternatives.md): чем TMB отличается от FreeIPA, JIT-доступа и approval-плагина sudo.
 - [docs/ci.md](docs/ci.md): CI, фазы, `ci-gate`, пороги, исключения.
 - [harness/ref/README-PROTOTYPE.md](harness/ref/README-PROTOTYPE.md): стенды, топология, пререквизиты.
 - [harness/ref/VERDICT-BROKER.md](harness/ref/VERDICT-BROKER.md): исторический вердикт исходного Unix-PoC.
