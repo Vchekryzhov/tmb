@@ -208,7 +208,7 @@ bash harness/run-all.sh
 Точечные прогоны: `harness/run.sh` (N-серия, Unix-сокет), `harness/run-pair.sh` (docker-pair, mTLS), `harness/run-openshell.sh` (полный OpenShell-риг). `harness/run-vm.sh` (или `ci/run.sh vm`) ставит пакеты текущего коммита в одноразовую Lima-VM с systemd и прогоняет V-серию V0–V9, лог в `harness/last-vm-run.log`; `bash harness/run-all.sh --vm` добавляет её четвёртой частью. Подробности в [docs/ci.md](docs/ci.md#vm-пруф).
 Пререквизиты и топология стенда описаны в [harness/ref/README-PROTOTYPE.md](harness/ref/README-PROTOTYPE.md).
 
-Проверки CI локально (lint, тесты, покрытие, безопасность, сборка, короткий fuzz):
+Проверки CI локально (lint, тесты, покрытие, безопасность, сборка, короткий fuzz, подписант на macOS):
 
 ```bash
 ci/run.sh tools && ci/run.sh local
