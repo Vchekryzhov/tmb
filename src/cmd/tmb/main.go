@@ -103,6 +103,7 @@ func (c *cli) usage() {
 usage:
   tmb exec [--root] [--cwd DIR] [--env K=V]... -- /abs/executable [args...]   full flow
   tmb approve [--list | --yes ID | --no ID] [--socket PATH]                   approver: decide queued requests
+  tmb approve --list --json | --decide [--socket PATH]                        approver, machine mode: queue as JSON; decision JSON on stdin
                         (socket env TMB_APPROVE_SOCK, default %[2]s)
   tmb keygen --out FILE                                                      sandbox key (P-256, 0600); prints public key + fingerprint
   tmb version                                                                print the release version (also -version)
