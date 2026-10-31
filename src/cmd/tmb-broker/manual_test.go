@@ -9,7 +9,8 @@ import (
 
 // The manual console escapes requester-chosen fields as tmb approve does: an
 // ESC, C1 or bidi rune in the nonce, cwd or argv shows as an escape and never
-// reaches the operator's terminal raw.
+// reaches the operator's terminal raw. The cwd line carries the realpath the
+// broker will run in next to the requested path, as tmb approve shows it.
 func TestManualPromptEscapesRequesterFields(t *testing.T) {
 	req := &proto.Request{
 		Executable: "/usr/bin/id\x1b]0;x\a",
@@ -19,7 +20,7 @@ func TestManualPromptEscapesRequesterFields(t *testing.T) {
 	}
 	id := RequesterID{Kind: KindUID, UID: 1000, PID: 42}
 	var sb strings.Builder
-	printManualPrompt(&sb, req, id, "/usr/bin/id", 1, 2, []string{"A=\xe2\x81\xa6b"})
+	printManualPrompt(&sb, req, id, "/usr/bin/id", "/tmp/\xe2\x80\xaereal", 1, 2, []string{"A=\xe2\x81\xa6b"})
 	out := sb.String()
 	for _, raw := range []string{"\x1b", "\xc2\x9b", "\xe2\x80\xae", "\xe2\x81\xa6", "\a"} {
 		if strings.Contains(out, raw) {
@@ -28,7 +29,7 @@ func TestManualPromptEscapesRequesterFields(t *testing.T) {
 	}
 	for _, want := range []string{
 		"nonce     : \"n\\x1b[2A\\u009b1K\\u202ex\"",
-		"cwd       : \"/tmp/\\u202eevil\"",
+		"cwd       : \"/tmp/\\u202eevil\" (realpath \"/tmp/\\u202ereal\")",
 		"executable: \"/usr/bin/id\\x1b]0;x\\a\" (realpath /usr/bin/id, dev=1 ino=2)",
 		"argv      : [\"/usr/bin/id\",\"\\u009b2A\"]",
 		"env       : [\"A=\\u2066b\"]",

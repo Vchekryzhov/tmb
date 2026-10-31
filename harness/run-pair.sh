@@ -231,7 +231,7 @@ cat > "$TD/config-pair.json" <<EOF
     "/usr/bin/tcsh", "/bin/csh", "/usr/bin/csh", "/usr/bin/busybox"
   ],
   "token_ttl_seconds": $TTL,
-  "approval_default": "mock-approve",
+  "approval_default": "queue",
   "tls_addr": ":$TLS_PORT",
   "tls_ca_file": "/etc/tmb/certs/ca.crt",
   "tls_cert_file": "/etc/tmb/certs/server.crt",
