@@ -38,6 +38,12 @@ type Request struct {
 	ItemID   string `json:"item_id,omitempty"`
 	ItemHash string `json:"item_hash,omitempty"`
 	Decision string `json:"decision,omitempty"`
+	// signed "decide" (ADR 0006): a base64 DER ECDSA P-256 signature over
+	// the item's payload bytes, and the fingerprint (KeyFingerprint) of the
+	// approver key that made it. A broker without signer support refuses
+	// both as unknown fields.
+	Signature   string `json:"signature,omitempty"`
+	ApproverKey string `json:"approver_key,omitempty"`
 }
 
 // QueueItem is one request waiting in the approval queue, as the approver
@@ -53,6 +59,20 @@ type QueueItem struct {
 	Env        []string `json:"env"` // final process environment
 	Nonce      string   `json:"nonce"`
 	QueuedAt   string   `json:"queued_at"`
+
+	// Signer fields (ADR 0006). Payload is the base64 of the exact bytes an
+	// approver key signs (ApprovalPayload); the other fields repeat parts
+	// of it for display and are never what gets signed. An older client
+	// ignores them; an older broker does not send them.
+	Payload            string `json:"payload,omitempty"`
+	ShortCode          string `json:"short_code,omitempty"`
+	HostID             string `json:"host_id,omitempty"`
+	HostKey            string `json:"host_key,omitempty"`
+	Challenge          string `json:"challenge,omitempty"`
+	Deadline           string `json:"deadline,omitempty"` // RFC 3339, broker clock
+	TokenTTLSeconds    int    `json:"token_ttl_seconds,omitempty"`
+	SignaturesRequired int    `json:"signatures_required,omitempty"`
+	Signatures         int    `json:"signatures,omitempty"` // valid signatures recorded so far
 }
 
 // canonicalRequest is the exact tuple an approval binds to. Type and
@@ -129,7 +149,7 @@ func NewNonce() string {
 
 // Frame is a broker->client response frame.
 type Frame struct {
-	Type   string `json:"type"` // approved|denied|stdout|stderr|exit|error; approver: queue|decided
+	Type   string `json:"type"` // approved|denied|stdout|stderr|exit|error; approver: queue|decided|recorded
 	Token  string `json:"token,omitempty"`
 	Reason string `json:"reason,omitempty"`
 	Detail string `json:"detail,omitempty"`

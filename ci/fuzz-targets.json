@@ -8,6 +8,10 @@
     {
       "package": "tmb-poc/internal/proto",
       "name": "FuzzDecodeRequest"
+    },
+    {
+      "package": "tmb-poc/internal/proto",
+      "name": "FuzzParseApprovalPayload"
     }
   ]
 }
