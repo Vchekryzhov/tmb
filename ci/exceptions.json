@@ -76,7 +76,7 @@
       "rule": "G301",
       "location": "src/cmd/tmb-broker/main.go",
       "match": "os.MkdirAll(cfg.SocketPath[:lastSlash(cfg.SocketPath)], 0o755)",
-      "reason": "socket directory must be traversable by unprivileged clients; narrowing to 0o750 (dir is root:socket gid) waits for a testable main()",
+      "reason": "0755 on purpose: the sockets limit access (tmb.sock 0660 root:socket gid); the same dir holds approve.sock, where approvers pass by SO_PEERCRED against approver_uids, not by group; systemd RuntimeDirectoryMode and tmpfiles also create it 0755",
       "owner": "Vchekryzhov",
       "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
       "expires": "2027-04-14"
