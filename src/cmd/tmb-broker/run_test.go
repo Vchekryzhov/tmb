@@ -138,6 +138,9 @@ func TestBrokerRunServesUntilStopped(t *testing.T) {
 	if err := os.WriteFile(cfg.SocketPath, nil, 0o600); err != nil { // stale socket from a crash
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(cfg.PidFile, []byte("1\n"), 0o644); err != nil { // stale pid file from an older broker
+		t.Fatal(err)
+	}
 
 	var out, errb bytes.Buffer
 	stop, hup := make(chan os.Signal, 1), make(chan os.Signal, 1)
@@ -149,7 +152,7 @@ func TestBrokerRunServesUntilStopped(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if st, err := os.Stat(cfg.SocketPath); err == nil && st.Mode()&os.ModeSocket != 0 {
-			if _, err := os.Stat(cfg.PidFile); err == nil {
+			if b, err := os.ReadFile(cfg.PidFile); err == nil && string(b) != "1\n" { // rewritten, not the stale one
 				break
 			}
 		}
