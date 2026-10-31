@@ -391,6 +391,11 @@ func (b *Broker) validateRequest(req *proto.Request) (exeReal, cwdReal string, d
 	if b.shellDenied(req.Executable, exeReal) {
 		return "", "", 0, 0, "shell_policy", exeReal
 	}
+	if script, ok := hasShebang(exeReal); !ok {
+		return "", "", 0, 0, "executable_stat_failed", exeReal
+	} else if script {
+		return "", "", 0, 0, "executable_script", exeReal
+	}
 	cwdReal, err = filepath.EvalSymlinks(req.Cwd)
 	if err != nil {
 		return "", "", 0, 0, "cwd_invalid", req.Cwd
@@ -402,6 +407,24 @@ func (b *Broker) validateRequest(req *proto.Request) (exeReal, cwdReal string, d
 		return "", "", 0, 0, "cwd_not_allowed", cwdReal
 	}
 	return exeReal, cwdReal, dev, ino, "", ""
+}
+
+// hasShebang reports whether the file starts with "#!". Scripts are refused:
+// exec goes through the pinned O_CLOEXEC fd (/proc/self/fd/N), so the kernel
+// hands the interpreter a path that is already closed when it opens it.
+// ok is false when the file cannot be read.
+func hasShebang(exeReal string) (script, ok bool) {
+	f, err := os.Open(exeReal)
+	if err != nil {
+		return false, false
+	}
+	defer f.Close()
+	var magic [2]byte
+	n, err := io.ReadFull(f, magic[:])
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return false, false
+	}
+	return n == 2 && magic == [2]byte{'#', '!'}, true
 }
 
 // --- approval -------------------------------------------------------------

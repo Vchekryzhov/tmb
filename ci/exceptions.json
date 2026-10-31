@@ -273,6 +273,16 @@
     {
       "scanner": "gosec",
       "rule": "G304",
+      "location": "src/cmd/tmb-broker/broker.go",
+      "match": "os.Open(exeReal)",
+      "reason": "hasShebang reads the first two bytes of the validated realpath of the request, read-only, to refuse #! scripts",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
       "location": "src/cmd/tmb-broker/pin_linux.go",
       "match": "os.OpenFile(path, os.O_RDONLY|syscall.O_DIRECTORY, 0)",
       "reason": "pinDir gets the validated realpath of the approved cwd inside allowed_cwd_roots; holding it open read-only is the pinning primitive",

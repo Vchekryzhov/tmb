@@ -21,6 +21,10 @@ func TestApproveDeniesInvalidRequests(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	script := filepath.Join(dir, "script")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nid\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	link := filepath.Join(dir, "shell-link")
 	sh := shExe(t)
 	if err := os.Symlink(sh, link); err != nil {
@@ -48,6 +52,7 @@ func TestApproveDeniesInvalidRequests(t *testing.T) {
 		{"missing executable", func(r *proto.Request) { r.Executable = filepath.Join(dir, "none") }, "executable_not_found"},
 		{"directory executable", func(r *proto.Request) { r.Executable = dir }, "executable_not_regular"},
 		{"shell by symlink", func(r *proto.Request) { r.Executable = link }, "shell_policy"},
+		{"script with shebang", func(r *proto.Request) { r.Executable = script }, "executable_script"},
 		{"missing cwd", func(r *proto.Request) { r.Cwd = filepath.Join(dir, "none") }, "cwd_invalid"},
 		{"file cwd", func(r *proto.Request) { r.Cwd = file }, "cwd_invalid"},
 	}
@@ -153,4 +158,55 @@ func jsonBody(r *proto.Request) ([]byte, error) {
 		return nil, err
 	}
 	return []byte(buf.String()[4:]), nil
+}
+
+func TestApproveDeniesUnreadableExecutable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a mode-0 file")
+	}
+	exe := filepath.Join(t.TempDir(), "unreadable")
+	if err := os.WriteFile(exe, nil, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	b := newTestBroker(t)
+	req := testReq(t, "unreadable")
+	req.Executable = exe
+	if f := approveDo(t, b, req, UIDRequester(4242, 1)); f.Type != "denied" || f.Reason != "executable_stat_failed" {
+		t.Fatalf("frame = %+v, want denied executable_stat_failed", f)
+	}
+}
+
+func TestHasShebang(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		name         string
+		body         []byte
+		script, read bool
+	}{
+		{"script", []byte("#!/bin/sh\n"), true, true},
+		{"elf", []byte("\x7fELF"), false, true},
+		{"empty", nil, false, true},
+		{"one byte", []byte("#"), false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := filepath.Join(dir, c.name)
+			if err := os.WriteFile(p, c.body, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if script, ok := hasShebang(p); script != c.script || ok != c.read {
+				t.Fatalf("hasShebang = (%v, %v), want (%v, %v)", script, ok, c.script, c.read)
+			}
+		})
+	}
+	t.Run("unreadable", func(t *testing.T) {
+		if script, ok := hasShebang(filepath.Join(dir, "none")); script || ok {
+			t.Fatalf("hasShebang = (%v, %v), want (false, false)", script, ok)
+		}
+	})
+	t.Run("directory", func(t *testing.T) {
+		if script, ok := hasShebang(dir); script || ok {
+			t.Fatalf("hasShebang = (%v, %v), want (false, false)", script, ok)
+		}
+	})
 }
