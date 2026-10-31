@@ -1,5 +1,5 @@
 {
-  "_comment": "PROTOTYPE config - throwaway PoC. NOTE: token_ttl_seconds is deliberately short (2-3s) so tests never sleep a real 60s; production default would be 60.",
+  "_comment": "PROTOTYPE config - throwaway PoC. NOTE: token_ttl_seconds is deliberately short (2-3s) so tests never sleep a real 60s; production default would be 60. approval_default matches the product default (queue); every scenario starts the broker with an explicit -approval mode, so this value is never used.",
   "socket_path": "/run/tmb/tmb.sock",
   "state_dir": "/var/lib/tmb-proto",
   "log_path": "/var/log/tmb/broker.log",
@@ -22,5 +22,5 @@
     "/usr/bin/tcsh", "/bin/csh", "/usr/bin/csh", "/usr/bin/busybox"
   ],
   "token_ttl_seconds": 3,
-  "approval_default": "mock-approve"
+  "approval_default": "queue"
 }

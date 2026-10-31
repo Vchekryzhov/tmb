@@ -498,13 +498,13 @@ func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeR
 	if b.mode == ModeQueue {
 		return b.queueApproval(req, id, exeReal, cwdReal, conn)
 	}
-	granted, reason := b.benchApproval(req, id, exeReal, dev, ino)
+	granted, reason := b.benchApproval(req, id, exeReal, cwdReal, dev, ino)
 	return granted, reason, "mode:" + b.mode
 }
 
 // benchApproval is the approval of the bench modes: the broker decides on
 // its own (mock-*) or asks its console (manual).
-func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal string, dev, ino uint64) (bool, string) {
+func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64) (bool, string) {
 	switch b.mode {
 	case ModeMockApprove:
 		return true, ""
@@ -518,7 +518,7 @@ func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal strin
 		b.mu.Lock() // serialize prompts so they never interleave
 		defer b.mu.Unlock()
 		// the environment the process will actually get, not the request's
-		printManualPrompt(b.console, req, id, exeReal, dev, ino, b.buildEnv(req))
+		printManualPrompt(b.console, req, id, exeReal, cwdReal, dev, ino, b.buildEnv(req))
 		line, err := b.stdin.ReadString('\n')
 		if err != nil && line == "" {
 			// stdin closed (detached broker) -> fail closed
@@ -540,14 +540,14 @@ func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal strin
 // field passes through termsafe, as in tmb approve: a control sequence in the
 // nonce, argv, env or a path must not redraw the lines the operator reads
 // before answering y/N.
-func printManualPrompt(w io.Writer, req *proto.Request, id RequesterID, exeReal string, dev, ino uint64, env []string) {
+func printManualPrompt(w io.Writer, req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64, env []string) {
 	argvJ, _ := json.Marshal(req.Argv)
 	envJ, _ := json.Marshal(env)
 	fmt.Fprintf(w, "=== TMB APPROVAL REQUIRED ===\n")
 	fmt.Fprintf(w, "  requester : %s\n", termsafe.Text(id.ConsoleLine()))
 	fmt.Fprintf(w, "  executable: %s (realpath %s, dev=%d ino=%d)\n", termsafe.Text(req.Executable), termsafe.Text(exeReal), dev, ino)
 	fmt.Fprintf(w, "  argv      : %s\n", termsafe.JSON(argvJ))
-	fmt.Fprintf(w, "  cwd       : %s\n", termsafe.Text(req.Cwd))
+	fmt.Fprintf(w, "  cwd       : %s (realpath %s)\n", termsafe.Text(req.Cwd), termsafe.Text(cwdReal))
 	fmt.Fprintf(w, "  run as uid: %d\n", req.UID)
 	fmt.Fprintf(w, "  env       : %s\n", termsafe.JSON(envJ))
 	fmt.Fprintf(w, "  nonce     : %s\n", termsafe.Text(req.Nonce))
