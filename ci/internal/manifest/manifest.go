@@ -27,6 +27,7 @@ var RequiredIDs = []string{
 	"SEC-26", // spec #39: fsynced journal, audit_unavailable, reopen, schema
 	"SEC-27", // spec #39: journal rotation by the packaged logrotate on a systemd host (V6)
 	"SEC-28", // spec #39: fail-closed on a systemd host (V7)
+	"SEC-29", // spec #99: signed decide checked by the broker, identity key
 }
 
 // Level says where a case's evidence can be produced.

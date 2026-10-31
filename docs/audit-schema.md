@@ -2,7 +2,9 @@
 
 Журнал брокера (`log_path` в конфиге, на хосте обычно `/var/log/tmb/broker.log`) это JSONL: одно событие на строку, объект JSON с ключами в алфавитном порядке. Документ перечисляет все события, которые пишет `tmb-broker`, и все их поля с типами. Регистр событий в коде (`src/cmd/tmb-broker/audit.go`) и этот документ сверяет Go-тест `TestAuditSchemaDoc`; `TestAuditSchemaCode` сверяет регистр с тем, что код реально пишет. Событие или поле не из документа, как и документированное поле, которого код не пишет, роняют тест.
 
-Текущая версия схемы: `2`.
+Текущая версия схемы: `3`.
+
+Версия `3`: подписанное решение ([ADR 0006](adr/0006-trusted-signer-touch-id.md), [ADR 0007](adr/0007-signer-key-classes-threshold-host-identity.md)). `queued` несёт короткий код payload одобрения; `approval` несёт payload, короткий код и доказательство решения (отпечатки, классы, имена ключей и подписи); `decision_rejected` несёт отпечаток ключа из решения; `broker_start` несёт `host_id` и отпечаток ключа идентичности брокера. Это единственный подъём версии на этап подписанта: событие подписи до порога (ADR 0007, Р2) добавляется новым событием и версию не меняет.
 
 Версия `2`: полный nonce вместо первых 12 символов, `hash` в `request`, `deny` и `approval`, `client_gone` в `exec_exit`; события сокета одобряющих пишут `approver_uid` и `approver_pid` вместо полей запросчика.
 
@@ -19,7 +21,7 @@
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `schema` | integer | версия схемы, сейчас `2` |
+| `schema` | integer | версия схемы, сейчас `3` |
 | `ts` | string | время события, UTC, RFC 3339 с наносекундами |
 | `event` | string | имя события, один из заголовков ниже |
 
@@ -38,6 +40,8 @@
 | `allowed_requester_uids` | array of integer | allowlist uid на локальном пути |
 | `allowed_requester_keys` | array of string | allowlist отпечатков ключей песочниц |
 | `tls_addr` | string | адрес TLS-листенера; только если он настроен |
+| `host_id` | string | `host_id` из конфига (по умолчанию имя хоста), он же в каждом payload одобрения |
+| `host_key` | string | отпечаток ключа идентичности брокера (SHA-256 от SPKI, hex), он же `host_key` в payload |
 
 ### `broker_stop`
 
@@ -229,6 +233,7 @@ TLS-рукопожатие не прошло: нет сертификата, ч�
 | `argv` | array of string | argv |
 | `cwd` | string | realpath cwd |
 | `nonce` | string | nonce целиком (до 128 символов; длиннее только у запроса, отклонённого `nonce_invalid`) |
+| `short_code` | string | короткий код payload одобрения (`XXXX-XXXX`), тот же, что в элементе очереди |
 
 ### `approval_timeout`
 
@@ -266,14 +271,15 @@ TLS-рукопожатие не прошло: нет сертификата, ч�
 
 ### `decision_rejected`
 
-Решение одобряющего не принято: элемента нет, он уже решён, хеш не совпал или одобряющий сам запросил этот запрос.
+Решение одобряющего не принято: элемента нет, он уже решён, хеш не совпал, одобряющий сам запросил этот запрос, срок решения прошёл или подпись не принята.
 
 | Поле | Тип | Описание |
 |---|---|---|
 | `approver_uid` | integer | uid одобряющего |
 | `approver_pid` | integer | pid одобряющего |
 | `item` | string | id элемента из решения |
-| `reason` | string | `no_such_item`, `already_decided`, `decision_mismatch` или `approver_is_requester` |
+| `reason` | string | `no_such_item`, `already_decided`, `decision_mismatch`, `approver_is_requester`, `decision_expired`, `signature_required`, `signature_invalid` или `approver_key_unknown` |
+| `approver_key` | string | `approver_key` из решения как пришёл (отпечаток ключа); пустая строка у неподписанного решения |
 
 ### `queue_list_failed`
 
@@ -303,6 +309,13 @@ TLS-рукопожатие не прошло: нет сертификата, ч�
 | `argv` | array of string | argv |
 | `nonce` | string | nonce целиком (до 128 символов; длиннее только у запроса, отклонённого `nonce_invalid`) |
 | `hash` | string | хеш точного запроса |
+| `short_code` | string | короткий код payload; только режим `queue`, если запрос встал в очередь |
+| `payload` | string | payload одобрения, base64; только режим `queue`, если запрос встал в очередь. По нему и открытым ключам подписи перепроверяются после факта |
+| `signed` | boolean | решение пришло с принятой подписью; только режим `queue`, если запрос встал в очередь |
+| `approver_keys` | array of string | отпечатки ключей принятых подписей; пустой у неподписанного решения и без решения (таймаут); только режим `queue`, если запрос встал в очередь |
+| `approver_key_classes` | array of string | классы этих ключей, в том же порядке |
+| `approver_key_names` | array of string | имена этих ключей из `approver_keys` конфига, в том же порядке |
+| `signatures` | array of string | подписи, base64 DER, в том же порядке |
 
 ## Выполнение
 

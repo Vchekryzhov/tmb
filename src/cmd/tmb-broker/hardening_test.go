@@ -46,7 +46,8 @@ func TestHangupWinsOverRacingDecision(t *testing.T) {
 	result := make(chan bool, 1)
 	go func() {
 		defer server.Close()
-		result <- b.approveStage(req, id, server)
+		_, ok := b.approveStage(req, id, server)
+		result <- ok
 	}()
 	if f, err := proto.ReadFrame(client); err != nil || f.Type != "waiting" {
 		t.Fatalf("first frame %+v, %v; want waiting", f, err)

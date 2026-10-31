@@ -195,6 +195,10 @@ func TestBrokerRunServesUntilStopped(t *testing.T) {
 	if !strings.Contains(out.String(), "mode=mock-approve ttl=7s") || !strings.Contains(out.String(), "tls listening on 127.0.0.1:0") {
 		t.Errorf("stdout:\n%s", out.String())
 	}
+	// the identity key was created in state_dir, its fingerprint printed
+	if fp, err := readHostKey(filepath.Join(cfg.StateDir, hostKeyFile)); err != nil || !strings.Contains(out.String(), "host_key="+fp+"\n") {
+		t.Errorf("identity key %q (%v) not printed at start:\n%s", fp, err, out.String())
+	}
 	log, _ := os.ReadFile(cfg.LogPath)
 	for _, ev := range []string{"broker_start", "tls_listen", "broker_stop"} {
 		if !strings.Contains(string(log), `"event":"`+ev+`"`) {

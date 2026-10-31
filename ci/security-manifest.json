@@ -73,6 +73,8 @@
      "scenarios": ["V6"]},
     {"id": "SEC-28", "title": "on a systemd host SIGKILL of the broker fails an in-flight sandbox request closed (exit 3, nothing runs), Restart=on-failure brings it back, human password sudo works, sudo.conf has no Plugin line",
      "level": "vm",
-     "scenarios": ["V7"]}
+     "scenarios": ["V7"]},
+    {"id": "SEC-29", "title": "a signed decide counts only when a key in approver_keys signed the exact payload the broker built for this item, host and challenge before its deadline: another item, host or challenge, a replay, an unknown key, an expired item and an unsigned approve under require_signed_decision are refused; the token never outlives the signed TTL; the broker identity key is owner-only and stable",
+     "tests": ["tmb-poc/cmd/tmb-broker.TestSignedDecideApproves", "tmb-poc/cmd/tmb-broker.TestSignedDecideRejections", "tmb-poc/cmd/tmb-broker.TestSignedDecideReplay", "tmb-poc/cmd/tmb-broker.TestUnsignedAndSignedWithoutRequirement", "tmb-poc/cmd/tmb-broker.TestTokenTTLCappedBySignedTTL", "tmb-poc/cmd/tmb-broker.TestPayloadUnbuildableRefusedBeforeQueue", "tmb-poc/cmd/tmb-broker.TestLoadConfigApproverKeys", "tmb-poc/cmd/tmb-broker.TestReloadAppliesApproverKeys", "tmb-poc/cmd/tmb-broker.TestHostKeyCreatedOnceAndStable", "tmb-poc/cmd/tmb-broker.TestHostKeyRefusesBadFile", "tmb-poc/cmd/tmb-broker.TestBrokerRunRefusesOpenHostKey"]}
   ]
 }
