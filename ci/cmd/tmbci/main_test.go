@@ -214,3 +214,39 @@ func TestArchive(t *testing.T) {
 		}
 	}
 }
+
+func TestSBOM(t *testing.T) {
+	dir := t.TempDir()
+	art := filepath.Join(dir, "tmb.deb")
+	if err := os.WriteFile(art, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bin, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := filepath.Join(dir, "a.cdx.json"), filepath.Join(dir, "b.cdx.json")
+	common := []string{"-artifact", art, "-type", "deb", "-name", "tmb", "-pkg-version", "1.0.0-1", "-arch", "amd64", "-version", "v1.0.0", "-mtime", "1700000000"}
+	for _, out := range []string{a, b} {
+		args := append([]string{"sbom", "-file-out", out, "-binary", "/usr/bin/tmb=" + bin}, common...)
+		if code, msg, _ := tmbci(t, "", args...); code != 0 {
+			t.Fatalf("sbom: code %d\n%s", code, msg)
+		}
+	}
+	x, _ := os.ReadFile(a)
+	y, _ := os.ReadFile(b)
+	if !strings.Contains(string(x), `"bomFormat": "CycloneDX"`) || string(x) != string(y) {
+		t.Fatal("two SBOMs of one artifact differ or are not CycloneDX")
+	}
+	for _, args := range [][]string{
+		append([]string{"sbom", "-binary", "/usr/bin/tmb=" + bin}, common...),
+		{"sbom", "-file-out", a, "-binary", "/usr/bin/tmb=" + bin, "-type", "deb"},
+		append([]string{"sbom", "-file-out", a, "-binary", "nopath"}, common...),
+		append([]string{"sbom", "-file-out", filepath.Join(dir, "no", "x.json"), "-binary", "/usr/bin/tmb=" + bin}, common...),
+		{"sbom", "-bogus"},
+	} {
+		if code, _, _ := tmbci(t, "", args...); code != 2 {
+			t.Fatalf("%v: code %d, want 2", args, code)
+		}
+	}
+}

@@ -132,6 +132,18 @@
         "check": "images/config"
       },
       {
+        "check": "images/opensbx-build"
+      },
+      {
+        "check": "images/opensbx-trivy-db"
+      },
+      {
+        "check": "images/opensbx-vulns"
+      },
+      {
+        "check": "images/opensbx-sbom"
+      },
+      {
         "check": "security/manifest"
       },
       {
@@ -151,6 +163,7 @@
       "secrets",
       "harness",
       "images",
+      "images-opensbx",
       "manifest"
     ]
   },
@@ -287,6 +300,18 @@
         "check": "images/config"
       },
       {
+        "check": "images/opensbx-build"
+      },
+      {
+        "check": "images/opensbx-trivy-db"
+      },
+      {
+        "check": "images/opensbx-vulns"
+      },
+      {
+        "check": "images/opensbx-sbom"
+      },
+      {
         "check": "security/manifest"
       },
       {
@@ -306,6 +331,7 @@
       "secrets",
       "harness",
       "images",
+      "images-opensbx",
       "manifest"
     ]
   },
@@ -442,6 +468,18 @@
         "check": "images/config"
       },
       {
+        "check": "images/opensbx-build"
+      },
+      {
+        "check": "images/opensbx-trivy-db"
+      },
+      {
+        "check": "images/opensbx-vulns"
+      },
+      {
+        "check": "images/opensbx-sbom"
+      },
+      {
         "check": "security/manifest"
       },
       {
@@ -461,6 +499,7 @@
       "secrets",
       "harness",
       "images",
+      "images-opensbx",
       "manifest"
     ]
   },
@@ -594,6 +633,18 @@
         "check": "images/config"
       },
       {
+        "check": "images/opensbx-build"
+      },
+      {
+        "check": "images/opensbx-trivy-db"
+      },
+      {
+        "check": "images/opensbx-vulns"
+      },
+      {
+        "check": "images/opensbx-sbom"
+      },
+      {
         "check": "security/manifest"
       },
       {
@@ -622,6 +673,7 @@
       "secrets",
       "harness",
       "images",
+      "images-opensbx",
       "manifest",
       "nightly"
     ]
@@ -756,6 +808,18 @@
         "check": "images/config"
       },
       {
+        "check": "images/opensbx-build"
+      },
+      {
+        "check": "images/opensbx-trivy-db"
+      },
+      {
+        "check": "images/opensbx-vulns"
+      },
+      {
+        "check": "images/opensbx-sbom"
+      },
+      {
         "check": "security/manifest"
       },
       {
@@ -784,6 +848,7 @@
       "secrets",
       "harness",
       "images",
+      "images-opensbx",
       "manifest",
       "nightly"
     ]

@@ -393,10 +393,10 @@ func Evaluate(scanner string, findings []Finding, ex Exceptions, today time.Time
 }
 
 // TrivyDBFresh checks `trivy version --format json`: the vulnerability DB
-// must have been built at the source within trivyDBMaxAge. The limit is
+// must have been built at the source within TrivyDBMaxAge. The limit is
 // 72h rather than 24h because Aqua's DB build has skipped days before
 // (2026-10-16/17); a day-old DB still scans, a missing scan does not.
-const trivyDBMaxAge = 72 * time.Hour
+const TrivyDBMaxAge = 72 * time.Hour
 
 func TrivyDBFresh(r io.Reader, now time.Time) error {
 	var v struct {
@@ -411,8 +411,8 @@ func TrivyDBFresh(r io.Reader, now time.Time) error {
 	if v.VulnerabilityDB == nil || v.VulnerabilityDB.UpdatedAt.IsZero() {
 		return fmt.Errorf("trivy reports no vulnerability DB metadata")
 	}
-	if age := now.Sub(v.VulnerabilityDB.UpdatedAt); age > trivyDBMaxAge {
-		return fmt.Errorf("trivy DB built %s ago (limit %s)", age.Round(time.Minute), trivyDBMaxAge)
+	if age := now.Sub(v.VulnerabilityDB.UpdatedAt); age > TrivyDBMaxAge {
+		return fmt.Errorf("trivy DB built %s ago (limit %s)", age.Round(time.Minute), TrivyDBMaxAge)
 	}
 	return nil
 }

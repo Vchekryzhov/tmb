@@ -330,6 +330,34 @@ jobs:
           retention-days: ${{ env.AUDIT_RETENTION }}
           overwrite: true
 
+  images-opensbx:
+    # Dockerfile.opensbx has a linux/arm64-only base: built and scanned on arm64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup # zizmor: ignore[self-repository] actionlint 1.7.12 cannot parse $/ yet
+      - run: ci/run.sh images-opensbx
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: results-images-opensbx
+          path: out/ci/results
+          retention-days: ${{ env.RETENTION }}
+          overwrite: true
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reports-images-opensbx
+          path: out/ci/reports/images-opensbx
+          retention-days: ${{ env.AUDIT_RETENTION }}
+          overwrite: true
+
   manifest:
     needs: [test, harness]
     if: always()
@@ -403,7 +431,7 @@ jobs:
     # The one stable required check. It runs for every event, including
     # docs-only PRs (no path filters anywhere), and is red unless every
     # required job and check for this event passed on this SHA and run.
-    needs: [lint, test, ci-selftest, coverage, security, build, package, fuzz, secrets, harness, images, manifest, nightly]
+    needs: [lint, test, ci-selftest, coverage, security, build, package, fuzz, secrets, harness, images, images-opensbx, manifest, nightly]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 3

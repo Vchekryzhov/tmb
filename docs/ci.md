@@ -23,7 +23,7 @@ ci/run.sh tools
 ci/run.sh local
 ```
 
-`tools` собирает `tmbci` и закреплённые инструменты в `out/ci/bin`. `local` прогоняет lint, тесты, самопроверку CI, покрытие, gosec/govulncheck, сборку и короткий fuzz. Отдельные проверки: `ci/run.sh lint`, `test <метка> [race]`, `coverage [base-ref]`, `security`, `build`, `dist`, `package`, `fuzz short|long`, `secrets range|full`, `harness`, `vm`, `images`, `manifest`, `stress`, `mutation`, `bench`. Полный список выводит `ci/run.sh` без аргументов.
+`tools` собирает `tmbci` и закреплённые инструменты в `out/ci/bin`. `local` прогоняет lint, тесты, самопроверку CI, покрытие, gosec/govulncheck, сборку и короткий fuzz. Отдельные проверки: `ci/run.sh lint`, `test <метка> [race]`, `coverage [base-ref]`, `security`, `build`, `dist`, `package`, `fuzz short|long`, `secrets range|full`, `harness`, `vm`, `images`, `images-opensbx`, `manifest`, `stress`, `mutation`, `bench`. Полный список выводит `ci/run.sh` без аргументов.
 
 Каждая проверка пишет `out/ci/results/<check>.json`. В файле есть статус (PASS, FAIL, ERROR, NOT_RUN, UNAVAILABLE или NOT_APPLICABLE), проверенный SHA, номер запуска, версии инструментов и сводка. Отчёты лежат в `out/ci/reports/`. Красная проверка воспроизводится той же командой, что указана в шаге workflow.
 
@@ -50,11 +50,12 @@ ci/run.sh local
 | coverage | профиль всего модуля, сравнение с merge-base, diff coverage, цели | 20 мин |
 | security | gosec (исходники и тесты, сборки linux и darwin, находки объединяются), govulncheck на уровне символов | 15 мин |
 | build | `tmb` и `tmb-broker` для Linux amd64/arm64, `tmb` для macOS arm64; две чистые сборки с одинаковым SHA-256, build manifest, govulncheck по бинарникам | 15 мин |
-| package | `ci/run.sh package` из [package.yml](../.github/workflows/package.yml): deb и rpm `tmb-broker` и `tmb` (amd64, arm64), архивы `tmb`, SHA256SUMS; вторая чистая сборка побайтно совпадает; установка deb в Ubuntu 24.04 и rpm в Fedora 44 в контейнере; файлы релиза уходят в артефакт `dist` | 20 мин |
+| package | `ci/run.sh package` из [package.yml](../.github/workflows/package.yml): deb и rpm `tmb-broker` и `tmb` (amd64, arm64), архивы `tmb`, SBOM CycloneDX к каждому файлу, SHA256SUMS; вторая чистая сборка побайтно совпадает; установка deb в Ubuntu 24.04 и rpm в Fedora 44 в контейнере; файлы релиза уходят в артефакт `dist` | 20 мин |
 | fuzz | реестр fuzz targets; PR: до 30 с на target и 3 мин всего; nightly: до 5 мин и 15 мин | 25 мин |
 | secrets | Gitleaks: диапазон коммитов PR и дерево; nightly: вся история | 10 мин |
 | harness | `run-pair.sh`, который заново запускает `run.sh`, на одноразовом Linux runner; логи сверяются с [ci/scenarios](../ci/scenarios) | 25 мин |
 | images | сборка host/sandbox-образов, Trivy (уязвимости, misconfiguration), SBOM CycloneDX, лицензии | 20 мин |
+| images-opensbx | образ песочницы OpenShell `Dockerfile.opensbx` на arm64 runner (база только linux/arm64): сборка, Trivy (уязвимости), SBOM CycloneDX, лицензии | 20 мин |
 | manifest | матрица SEC-01…SEC-28 против реально выполненных тестов и сценариев | 5 мин |
 | nightly | повторные перемешанные тесты под race, mutation checks, benchmarks, внешние ссылки | 55 мин |
 
@@ -70,11 +71,10 @@ Mac-брокер собирается только как часть тесто�
 - Mutation: мутант, который не компилируется, даёт ERROR, а не «убит». Перед мутантами тесты проходит немутированная копия `src/` и `docs/` (control); если она падает, прогон даёт ERROR: иначе любой мутант считался бы убитым. govulncheck: блокирует достижимый уязвимый символ. Trivy: HIGH/CRITICAL в образах и конфигурации блокируют, отсутствие исправления не даёт автоматического ignore. Gitleaks: блокирует любая находка, значения редактируются (`--redact`).
 - Свежесть: БД Trivy скачивается заново на каждый запуск и должна быть собрана не более 72 часов назад, иначе ERROR. Лимит был 24 часа; поднят 2026-10-17, когда сборка БД у Aqua пропустила больше суток и все PR встали: суточная база всё ещё сканирует, отсутствующий скан не защищает ни от чего. govulncheck каждый раз обращается к vuln.go.dev; при сбое сети результат ERROR, а не PASS.
 
-Известные ограничения фазы A (ещё не сделано в рамках #14):
+Известные ограничения фазы A (хвосты ведутся в [#83](https://github.com/Vchekryzhov/tmb/issues/83)):
 
 - интеграционное покрытие инструментированными бинарниками (`go build -cover`, GOCOVERDIR) не собирается, есть только Go-test профиль;
 - профиль покрытия снимается на linux/amd64, поэтому изменения в файлах только для darwin в diff coverage не видны;
-- образ `Dockerfile.opensbx` (база только linux/arm64) проверяется Trivy только как конфигурация, без сканирования уязвимостей;
 - харнессы используют фиксированные имена контейнеров. Конфликтов нет, потому что каждая job получает свою VM. Два одновременных локальных прогона на одной машине конфликтуют.
 
 GAP из [#15](https://github.com/Vchekryzhov/tmb/issues/15) закрыты: SEC-кейсы, fuzz targets и цели покрытия закреплены, все мутанты `ci/mutation.sh` убиваются продуктовыми тестами. Принятые исключения сканеров ведутся в [#29](https://github.com/Vchekryzhov/tmb/issues/29), см. раздел «Исключения».
@@ -130,7 +130,9 @@ ci/run.sh dist
 
 - `tmb-broker` deb и rpm для amd64 и arm64: `/usr/bin/tmb-broker`, unit `/usr/lib/systemd/system/tmb-broker.service`, `/etc/tmb/config.json.example` (`allowed_cwd_roots: ["/tmp"]`, `approval_default: queue`, пустые allowlist и `approver_uids`), `/etc/logrotate.d/tmb-broker` (`postrotate` делает `systemctl reload`), `/usr/lib/tmpfiles.d/tmb.conf` для `/run/tmb`, каталоги `/var/lib/tmb` 0700 и `/var/log/tmb` 0750. `/etc/tmb/config.json` пакет не создаёт: `ExecStartPre` без него завершает старт с сообщением в журнале systemd, `Restart=on-failure` повторяет старт до лимита systemd (`StartLimitBurst`, по умолчанию 5 за 10 секунд), после чего unit остаётся failed (под настоящим systemd это проверяет VM-пруф [#45](https://github.com/Vchekryzhov/tmb/issues/45)). Пакет не включает и не запускает сервис; обновление делает `try-restart`, удаление останавливает сервис и оставляет конфиг, `/var/lib/tmb` и `/var/log/tmb`.
 - `tmb` deb и rpm для amd64 и arm64: `/usr/bin/tmb`.
-- `tmb_<версия>_<os>_<arch>.tar.gz` для linux/amd64, linux/arm64 и darwin/arm64 и `SHA256SUMS` по всем файлам.
+- `tmb_<версия>_<os>_<arch>.tar.gz` для linux/amd64, linux/arm64 и darwin/arm64.
+- `<файл>.cdx.json` рядом с каждым пакетом и архивом: SBOM CycloneDX 1.6, который пишет `tmbci sbom`. В нём сам файл (purl `pkg:deb`, `pkg:rpm` или `pkg:generic`, SHA-256), Go-бинарник внутри (purl `pkg:golang/tmb-poc@<версия>#cmd/<имя>`, SHA-256, путь, настройки сборки) и его зависимости из build info: модули (пока их нет, модуль stdlib-only) и стандартная библиотека Go версии toolchain. Время в SBOM это время коммита, серийный номер выводится из хеша файла, поэтому SBOM воспроизводим и входит в сравнение `package/reproducible`. Файлы пакета, не являющиеся программами (unit, пример конфига, logrotate), в SBOM не перечисляются.
+- `SHA256SUMS` по всем файлам.
 
 Описания пакетов: [packaging/tmb-broker.nfpm.yaml](../packaging/tmb-broker.nfpm.yaml) и [packaging/tmb.nfpm.yaml](../packaging/tmb.nfpm.yaml), по одному файлу на пакет для deb и rpm. Unit без sandboxing systemd (`ProtectSystem`, `PrivateTmp`, `ProtectHome` и подобных): брокер выполняет одобренные команды на настоящем хосте. `KillMode=process`: остановка и рестарт завершают только брокер, уже запущенные одобренные команды дорабатывают. Состав unit и пример конфига закреплены Go-тестом `packaging_test.go` пакета брокера.
 
@@ -142,7 +144,7 @@ ci/run.sh package
 
 `package` делает `dist`, затем вторую сборку со свежим `GOCACHE` и сравнивает SHA256SUMS (`package/reproducible`: бинарники, пакеты и архивы побайтно одинаковы), затем собирает образы [packaging/test](../packaging/test) из Ubuntu 24.04 и Fedora 44 с закреплённым digest. Пакеты копируются в контекст сборки, без монтирования, без привилегий и без `docker.sock`; [check-install.sh](../packaging/test/check-install.sh) внутри сборки проверяет метаданные пакетов обеих архитектур, ставит пакеты своей архитектуры, сверяет `tmb-broker -version` и `tmb version` с версией, права файлов и каталогов, директивы unit, `systemd-analyze verify`, `systemd-tmpfiles --create`, `logrotate -d`, затем удаляет пакеты и проверяет, что конфиг, состояние и журнал остались (`package/deb-ubuntu`, `package/rpm-fedora`). systemd в контейнере не запускается: старт, reload и логротация под настоящим systemd проверяются в VM-пруфе [#45](https://github.com/Vchekryzhov/tmb/issues/45). Пакеты другой архитектуры только инспектируются.
 
-Job `package` в ci.yml вызывает [package.yml](../.github/workflows/package.yml) на каждом PR и push, поэтому релизная сборка проверена до тега. [release.yml](../.github/workflows/release.yml) запускается на push тега `v*`: тот же package.yml с `TMB_VERSION` из тега, затем job `publish` проверяет, что коммит тега есть в main (GitHub compare API, иначе ничего не публикуется), `sha256sum -c SHA256SUMS`, что SHA256SUMS перечисляет ровно загружаемые файлы, и создаёт релиз `gh release create --verify-tag` с пакетами, архивами и SHA256SUMS. Публикуются только теги вида `vMAJOR.MINOR.PATCH`: в именах пакетов пре-релиза есть `~` и `+`, GitHub переименовывает такие файлы, и они разошлись бы с SHA256SUMS. Ручной запуск release.yml (workflow_dispatch) это пробный прогон: сборка и проверки идут, `publish` пропускается.
+Job `package` в ci.yml вызывает [package.yml](../.github/workflows/package.yml) на каждом PR и push, поэтому релизная сборка проверена до тега. [release.yml](../.github/workflows/release.yml) запускается на push тега `v*`: тот же package.yml с `TMB_VERSION` из тега, затем job `publish` проверяет, что коммит тега есть в main (GitHub compare API, иначе ничего не публикуется), `sha256sum -c SHA256SUMS`, что SHA256SUMS перечисляет ровно загружаемые файлы, и создаёт релиз `gh release create --verify-tag` с пакетами, архивами, их SBOM и SHA256SUMS. Публикуются только теги вида `vMAJOR.MINOR.PATCH`: в именах пакетов пре-релиза есть `~` и `+`, GitHub переименовывает такие файлы, и они разошлись бы с SHA256SUMS. Ручной запуск release.yml (workflow_dispatch) это пробный прогон: сборка и проверки идут, `publish` пропускается.
 
 Выпуск релиза: зелёный `ci-gate` на коммите в main, затем `git tag v<версия> <коммит> && git push origin v<версия>`. Тег ставит владелец; агенты теги не пушат.
 
