@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"tmb-poc/internal/proto"
@@ -250,5 +251,64 @@ func TestClaimDeniesExecutableRewrittenToScript(t *testing.T) {
 	hash := req.Hash()
 	if ok, err := b.claims.ClaimToken(hash, proto.TokenID(hash), id.Key()); err != nil || !ok {
 		t.Fatalf("token after the denied claim: ok=%v err=%v, want still unconsumed", ok, err)
+	}
+}
+
+// The script check reads a reader of its own: closing the pin (a concurrent
+// claim that took the approval) does not cut the read short.
+func TestScriptReaderOutlivesPin(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "script")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p := pinnedFor(t, path)
+	r, release, err := p.exeReader()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.closePins()
+	if code, _ := scriptCode(r, release, nil, path); code != "executable_script" {
+		t.Fatalf("scriptCode after closePins = %q, want executable_script", code)
+	}
+}
+
+// pendingScriptDeny racing takePending+closePins: the pin is duplicated under
+// b.mu and read outside it, so a check either finds the approval and reads
+// it whole or does not find it; it never reads a closed pin.
+func TestPendingScriptDenyRacesTake(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "tool")
+	if err := os.WriteFile(exe, []byte("\x7fELF not a script"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 20; i++ {
+		b := newTestBroker(t)
+		req := testReq(t, fmt.Sprintf("race-%d", i))
+		req.Executable, req.Argv = exe, []string{exe}
+		approved(t, b, req, UIDRequester(4242, 1))
+		hash := req.Hash()
+		var wg sync.WaitGroup
+		codes := make(chan string, 8)
+		for j := 0; j < 8; j++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				code, _ := b.pendingScriptDeny(hash)
+				codes <- code
+			}()
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if p, has := b.takePending(hash); has {
+				p.closePins()
+			}
+		}()
+		wg.Wait()
+		close(codes)
+		for code := range codes {
+			if code != "" {
+				t.Fatalf("round %d: pendingScriptDeny = %q, want \"\"", i, code)
+			}
+		}
 	}
 }

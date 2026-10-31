@@ -26,7 +26,8 @@ func (p *pendingApproval) cwdTarget(cwdReal string) (string, bool) { return cwdR
 
 func closeOnExecInherited() error { return nil }
 
-// exeReader opens the approved path: nothing is pinned off-Linux.
+// exeReader opens the approved path: nothing is pinned off-Linux (the
+// broker ships only for Linux, so this open may run under b.mu).
 func (p *pendingApproval) exeReader() (io.ReaderAt, func(), error) {
 	f, err := os.Open(p.ExePath)
 	if err != nil {
