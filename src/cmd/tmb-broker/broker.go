@@ -497,14 +497,15 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 		return false
 	}
 
-	granted, reason, approver := b.runApprovalInteraction(req, id, exeReal, cwdReal, pend.ExeDev, pend.ExeIno, conn)
+	out := b.runApprovalInteraction(req, id, exeReal, cwdReal, pend.ExeDev, pend.ExeIno, conn)
+	granted := out.granted
 	aev := id.LogFields()
 	aev["mode"] = b.mode
 	// the approver's identity in queue mode, mode:<mode> for bench modes
-	aev["approver"] = approver
+	aev["approver"] = out.approver
 	aev["decision"] = decision(granted)
 	aev["result"] = boolRes(granted)
-	aev["reason"] = reason
+	aev["reason"] = out.reason
 	aev["executable"] = req.Executable
 	aev["argv"] = req.Argv
 	aev["nonce"] = logNonce(req.Nonce)
@@ -516,10 +517,12 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 	}
 	if !granted {
 		pend.closePins()
-		b.deny(req, id, reason, "nothing was executed", conn)
+		b.deny(req, id, out.reason, "nothing was executed", conn)
 		return false
 	}
 
+	// out.proof is always nil until the signed decide; this function is the
+	// one place it will reach the journal (aev above) and the token terms
 	hash := req.Hash()
 	pend.Hash = hash
 	pend.Expiry = time.Now().Add(b.tokenTTL())
@@ -550,12 +553,12 @@ func (b *Broker) dropIfExpired(hash string, pend *pendingApproval) {
 // runApprovalInteraction performs the mode-specific approval. manual prints
 // the exact request to the broker console and reads y/n from stdin; mock
 // modes are deterministic stand-ins for tests.
-func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64, conn net.Conn) (bool, string, string) {
+func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64, conn net.Conn) approvalOutcome {
 	if b.mode == ModeQueue {
 		return b.queueApproval(req, id, exeReal, cwdReal, conn)
 	}
 	granted, reason := b.benchApproval(req, id, exeReal, cwdReal, dev, ino)
-	return granted, reason, "mode:" + b.mode
+	return approvalOutcome{granted: granted, reason: reason, approver: "mode:" + b.mode}
 }
 
 // benchApproval is the approval of the bench modes: the broker decides on

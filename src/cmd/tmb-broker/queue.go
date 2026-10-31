@@ -24,16 +24,37 @@ import (
 // approver over the approver socket, not from the broker's own console.
 const ModeQueue = "queue"
 
-// decision is one approver verdict delivered to the waiting request.
+// queueDecision is one approver verdict delivered to the waiting request.
 type queueDecision struct {
 	granted  bool
 	approver RequesterID
+	proof    *decisionProof // nil: the decision rests on the approver's channel alone
+}
+
+// decisionProof is the slot for what proves a queue decision beyond the
+// approver socket's peer credentials. It is empty and always nil for now:
+// the signed decide (ADR 0006) fills it in serveDecide/approvalQueue.decide
+// and reads it in approveStage, so the signature touches one path.
+type decisionProof struct{}
+
+// approvalOutcome is the result of one approval interaction: the verdict,
+// the deny reason, the approver (its key in queue mode, mode:<mode> for the
+// bench modes) and the decision proof (nil when there is none).
+type approvalOutcome struct {
+	granted  bool
+	reason   string
+	approver string
+	proof    *decisionProof
 }
 
 type queueEntry struct {
 	item      proto.QueueItem
 	requester RequesterID        // who asked: never the one who decides (ADR 0004)
 	result    chan queueDecision // buffered 1: the first decision wins
+	// per-item terms, fixed when the item is queued: a reload does not move
+	// them. Zero values mean none (entries built by add).
+	queuedAt time.Time
+	deadline time.Time
 }
 
 // approvalQueue holds the waiting requests by item id. Decided ids are
@@ -72,17 +93,23 @@ const decidedMemory = time.Hour
 // approved twice at once) and with queue_full when the item would not fit
 // in the approver's list frame.
 func (q *approvalQueue) add(item proto.QueueItem, requester RequesterID) (*queueEntry, string) {
+	return q.addEntry(&queueEntry{item: item, requester: requester})
+}
+
+// addEntry enqueues a prepared entry (item, requester and the per-item
+// terms) under the same rules as add; it owns the entry's result channel.
+func (q *approvalQueue) addEntry(e *queueEntry) (*queueEntry, string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if _, dup := q.items[item.ID]; dup {
+	if _, dup := q.items[e.item.ID]; dup {
 		return nil, "request_already_queued"
 	}
-	n := itemSize(item)
+	n := itemSize(e.item)
 	if q.size+n > maxQueueBytes {
 		return nil, "queue_full"
 	}
-	e := &queueEntry{item: item, requester: requester, result: make(chan queueDecision, 1)}
-	q.items[item.ID] = e
+	e.result = make(chan queueDecision, 1)
+	q.items[e.item.ID] = e
 	q.size += n
 	return e, ""
 }
@@ -160,9 +187,14 @@ func (q *approvalQueue) decide(id, hash string, d queueDecision) (deny, detail s
 // queueApproval puts the request in the queue and blocks until an approver
 // decides, approval_wait_seconds pass (approval_timeout) or the requester
 // hangs up (request_abandoned). It tells the requester once that it waits,
-// and returns the verdict, the deny reason and the approver.
-func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdReal string, conn net.Conn) (bool, string, string) {
+// and returns the outcome with the deciding approver's proof, if any.
+func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdReal string, conn net.Conn) approvalOutcome {
+	refuse := func(reason, approver string) approvalOutcome {
+		return approvalOutcome{reason: reason, approver: approver}
+	}
 	hash := req.Hash()
+	now := time.Now()
+	wait := b.approvalWait() // fixed for this item: a reload does not move it
 	item := proto.QueueItem{
 		ID:         proto.TokenID(hash),
 		Hash:       hash,
@@ -173,11 +205,12 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 		UID:        req.UID,
 		Env:        b.buildEnv(req),
 		Nonce:      req.Nonce,
-		QueuedAt:   time.Now().UTC().Format(time.RFC3339Nano),
+		QueuedAt:   now.UTC().Format(time.RFC3339Nano),
 	}
-	e, refused := b.queue.add(item, id)
+	e, refused := b.queue.addEntry(&queueEntry{item: item, requester: id,
+		queuedAt: now, deadline: now.Add(wait)})
 	if refused != "" {
-		return false, refused, "mode:" + ModeQueue
+		return refuse(refused, "mode:"+ModeQueue)
 	}
 	ev := id.LogFields()
 	ev["item"] = item.ID
@@ -187,7 +220,6 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 	ev["cwd"] = cwdReal
 	ev["nonce"] = logNonce(req.Nonce)
 	b.log.Event("queued", ev)
-	wait := b.approvalWait() // fixed for this item: a reload does not move it
 	proto.WriteFrame(conn, &proto.Frame{Type: "waiting", Token: item.ID,
 		Detail: fmt.Sprintf("at most %s", wait)})
 
@@ -201,27 +233,31 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 		if b.queue.withdraw(item.ID) {
 			stopWatch(conn, hangup)
 			b.log.Event("approval_timeout", queueEvent(id, item.ID, wait))
-			return false, "approval_timeout", "mode:" + ModeQueue
+			return refuse("approval_timeout", "mode:"+ModeQueue)
 		}
 		d = <-e.result // decided at the last moment
 	case <-hangup.done:
 		// the requester is gone: nothing runs, even when a decision raced
 		// the hangup and is already waiting in the channel
-		approver := "mode:" + ModeQueue
+		out := refuse("request_abandoned", "mode:"+ModeQueue)
 		if !b.queue.withdraw(item.ID) {
-			approver = (<-e.result).approver.Key()
+			d = <-e.result
+			out.approver, out.proof = d.approver.Key(), d.proof
 		}
 		b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))
-		return false, "request_abandoned", approver
+		return out
 	}
-	if stopWatch(conn, hangup) {
+	out := approvalOutcome{approver: d.approver.Key(), proof: d.proof}
+	switch {
+	case stopWatch(conn, hangup):
 		b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))
-		return false, "request_abandoned", d.approver.Key()
+		out.reason = "request_abandoned"
+	case !d.granted:
+		out.reason = "approval_denied_by_human"
+	default:
+		out.granted = true
 	}
-	if !d.granted {
-		return false, "approval_denied_by_human", d.approver.Key()
-	}
-	return true, "", d.approver.Key()
+	return out
 }
 
 func queueEvent(id RequesterID, item string, wait time.Duration) map[string]any {
@@ -361,25 +397,34 @@ func (b *Broker) serveApprover(conn net.Conn, id RequesterID) {
 			b.log.Event("queue_list_failed", ev)
 		}
 	case "decide":
-		var granted bool
-		switch req.Decision {
-		case "approve":
-			granted = true
-		case "deny":
-		default:
-			proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "bad_request", Detail: fmt.Sprintf("decision %q, want approve or deny", req.Decision)})
-			return
-		}
-		if deny, detail := b.queue.decide(req.ItemID, req.ItemHash, queueDecision{granted: granted, approver: id}); deny != "" {
-			ev := approverLogFields(id)
-			ev["item"] = req.ItemID
-			ev["reason"] = deny
-			b.log.Event("decision_rejected", ev)
-			proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: deny, Detail: detail})
-			return
-		}
-		proto.WriteFrame(conn, &proto.Frame{Type: "decided", Detail: req.Decision})
+		b.serveDecide(conn, id, req)
 	default:
 		proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "unknown_request_type", Detail: req.Type})
 	}
+}
+
+// serveDecide applies one decide from an allowed approver (ADR 0004): it
+// parses the verdict, hands it to the queue and answers decided, or denied
+// with decision_rejected in the journal. The decision carries no proof yet;
+// a signed decide checks its signature here and passes the proof on in the
+// queueDecision.
+func (b *Broker) serveDecide(conn net.Conn, id RequesterID, req *proto.Request) {
+	var granted bool
+	switch req.Decision {
+	case "approve":
+		granted = true
+	case "deny":
+	default:
+		proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "bad_request", Detail: fmt.Sprintf("decision %q, want approve or deny", req.Decision)})
+		return
+	}
+	if deny, detail := b.queue.decide(req.ItemID, req.ItemHash, queueDecision{granted: granted, approver: id}); deny != "" {
+		ev := approverLogFields(id)
+		ev["item"] = req.ItemID
+		ev["reason"] = deny
+		b.log.Event("decision_rejected", ev)
+		proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: deny, Detail: detail})
+		return
+	}
+	proto.WriteFrame(conn, &proto.Frame{Type: "decided", Detail: req.Decision})
 }
