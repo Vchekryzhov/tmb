@@ -47,11 +47,11 @@ C4Context
 | Брокер как отдельный привилегированный демон, sudo не затрагивается | [ADR 0002](docs/adr/0002-standalone-tmb-broker.md) | принято |
 | Песочница OpenShell, TCP endpoint с mTLS-идентичностью | [ADR 0003](docs/adr/0003-sandbox-transport-tcp-mtls.md) | принято |
 | Одобряющий как отдельная роль, очередь одобрений вместо консоли | [ADR 0004](docs/adr/0004-approver-role-and-approval-queue.md) | принято, реализовано в майлстоуне A |
-| Идентичность песочницы по открытому ключу, короткоживущие сертификаты | [ADR 0005](docs/adr/0005-requester-identity-by-public-key.md) | принято, реализация в майлстоуне B ([#39](https://github.com/Vchekryzhov/tmb/issues/39)) |
+| Идентичность песочницы по открытому ключу, короткоживущие сертификаты | [ADR 0005](docs/adr/0005-requester-identity-by-public-key.md) | принято, реализовано в майлстоуне B |
 | OpenShell-майлстоун: реестр O0–O9 на живой связке | [#5](https://github.com/Vchekryzhov/tmb/issues/5), [вердикт](VERDICT-OPENSHELL.md) | доказан: N=77/77, pair=59/59, OpenShell=65/65 |
 | Майлстоун A «политика и харденинг»: очередь одобрений, корни cwd, политика окружения, fd каталога, сборщик claim-файлов | [#27](https://github.com/Vchekryzhov/tmb/issues/27), [вердикт](VERDICT-A.md) | доказан: N=159/159, pair=67/67, OpenShell=65/65 |
 | CI: переносимые проверки на каждый PR, единый статус `ci-gate` | [docs/ci.md](docs/ci.md) | фаза A действует, фазы B и C ждут |
-| Майлстоун B «эксплуатация»: идентичность по ключу, reload, журнал, пакеты, пруф на VM | [#39](https://github.com/Vchekryzhov/tmb/issues/39), зонтик [#4](https://github.com/Vchekryzhov/tmb/issues/4) | в работе: CA в `tmb-broker`, reload по SIGHUP, журнал с fsync и схемой, пакеты deb/rpm и релиз по тегу готовы; VM-пруф на Lima с systemd: V=114/114 ([лог](harness/last-vm-run.log)) |
+| Майлстоун B «эксплуатация»: идентичность по ключу, CA в `tmb-broker`, reload по SIGHUP, журнал с fsync и схемой, пакеты deb/rpm, пруф на VM с systemd | [#39](https://github.com/Vchekryzhov/tmb/issues/39), зонтик [#4](https://github.com/Vchekryzhov/tmb/issues/4), [вердикт](VERDICT-B.md) | доказан: N=195/195, pair=112/112, OpenShell=65/65, V=114/114 |
 
 ## Как это работает
 
@@ -197,7 +197,7 @@ sequenceDiagram
 Сценарные проверки идут только в одноразовых непривилегированных контейнерах; Go-тесты запускаются отдельно, без привилегий хоста.
 Запрещены `--privileged`, проброс `docker.sock` и монтирование чувствительных путей хоста.
 
-Полный прогон (N-серия, docker-pair и OpenShell-риг), суммарный вердикт в `harness/last-full-run.log`:
+Полный прогон (N-серия, docker-pair и OpenShell-риг), суммарный вердикт в `harness/last-full-run.log`; цифры в таблице «Статус» берутся из логов `harness/last-*.log`:
 
 ```bash
 bash harness/run-all.sh
