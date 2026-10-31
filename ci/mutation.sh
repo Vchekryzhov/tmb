@@ -15,7 +15,7 @@ MUTANTS=(
   "M1-client-cert|cmd/tmb-broker/tls.go|ClientAuth:   tls.RequireAndVerifyClientCert,|ClientAuth:   tls.RequestClientCert,|mTLS listener stops verifying client certificates"
   "M2-allowlist-uid|cmd/tmb-broker/broker.go|if u == id.UID {|if u == id.UID \|\| true {|any uid passes the requester allowlist"
   "M3-allowlist-cert|cmd/tmb-broker/broker.go|if fp == id.FP {|if fp == id.FP \|\| true {|any certificate fingerprint passes the allowlist"
-  "M4-requester-binding|cmd/tmb-broker/broker.go|has \&\& !p.Requester.Equal(id) {|has \&\& false {|another requester may redeem an approval"
+  "M4-requester-binding|cmd/tmb-broker/broker.go|has && !p.Requester.Equal(id) {|has && false {|another requester may redeem an approval"
   "M5-request-binding|cmd/tmb-broker/broker.go|if req.ClaimToken != tokenID {|if false {|token no longer binds to the exact request"
   "M6-one-shot|cmd/tmb-broker/store.go|os.O_CREATE\|os.O_EXCL\|os.O_WRONLY, 0o600|os.O_CREATE\|os.O_TRUNC\|os.O_WRONLY, 0o600|claim file no longer exclusive: replay possible"
 )
@@ -41,7 +41,6 @@ errors=0
 for m in "${MUTANTS[@]}"; do
   IFS='|' read -r id file orig repl what <<<"$(printf '%s' "$m" | sed 's/\\|/\x01/g')"
   orig=${orig//$'\x01'/|}; repl=${repl//$'\x01'/|}
-  orig=${orig//\\&/&}; repl=${repl//\\&/&}
   work=$(mktemp -d)
   copy_tree "$work" || { echo "$id: ERROR copy failed" >>"$OUT/summary.txt"; errors=1; continue; }
   n=$(grep -cF -- "$orig" "$work/src/$file" || true)
