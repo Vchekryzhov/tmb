@@ -17,8 +17,9 @@ import (
 // reader sees either the old policy or the new one, never a mix.
 type policy struct {
 	cfg  *Config
-	ttl  time.Duration // token: approval -> claim
-	wait time.Duration // queue: enqueue -> decision (approval_wait_seconds)
+	ttl  time.Duration          // token: approval -> claim
+	wait time.Duration          // queue: enqueue -> decision (approval_wait_seconds)
+	keys map[string]approverKey // approver_keys by fingerprint
 }
 
 func newPolicy(cfg *Config, ttl time.Duration) *policy {
@@ -26,7 +27,23 @@ func newPolicy(cfg *Config, ttl time.Duration) *policy {
 	if wait <= 0 {
 		wait = 300 * time.Second
 	}
-	return &policy{cfg: cfg, ttl: ttl, wait: wait}
+	// loadConfig has validated the keys; a Config built in code with a bad
+	// entry gets no keys, which only ever refuses signed decisions
+	keys, err := parseApproverKeys(cfg.ApproverKeys)
+	if err != nil {
+		keys = nil
+	}
+	return &policy{cfg: cfg, ttl: ttl, wait: wait, keys: keys}
+}
+
+// hostID is host_id; loadConfig defaults it to the host name, and a policy
+// built in code without one falls back to the same.
+func (p *policy) hostID() string {
+	if p.cfg.HostID != "" {
+		return p.cfg.HostID
+	}
+	h, _ := os.Hostname()
+	return h
 }
 
 func (b *Broker) conf() *Config               { return b.pol.Load().cfg }

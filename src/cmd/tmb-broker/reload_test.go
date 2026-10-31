@@ -86,7 +86,9 @@ func reloadBroker(t *testing.T, path string, mode string) *Broker {
 	if err != nil {
 		t.Fatalf("claim store: %v", err)
 	}
-	return NewBroker(cfg, log, claims, mode, time.Duration(cfg.TokenTTLSeconds)*time.Second)
+	b := NewBroker(cfg, log, claims, mode, time.Duration(cfg.TokenTTLSeconds)*time.Second)
+	b.hostKey = testHostKey
+	return b
 }
 
 // logEvents returns the JSONL events of one kind.

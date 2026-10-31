@@ -23,6 +23,9 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "ca" {
 		os.Exit(runCA(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
+	if len(os.Args) > 1 && os.Args[1] == "identity" {
+		os.Exit(runIdentity(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	stop := make(chan os.Signal, 1)
@@ -82,6 +85,10 @@ func run(args []string, stdout, stderr io.Writer, stop, hup <-chan os.Signal) in
 	if err != nil {
 		return fail("claim store: %v", err)
 	}
+	hostKey, err := loadHostKey(cfg.StateDir)
+	if err != nil {
+		return fail("%v", err)
+	}
 	gcStop := make(chan struct{})
 	defer close(gcStop)                                // runs before log.Close: the loop never logs into a closed file
 	startClaimGC(claims, log, claimGCInterval, gcStop) // before any socket opens
@@ -140,6 +147,7 @@ func run(args []string, stdout, stderr io.Writer, stop, hup <-chan os.Signal) in
 	}
 
 	b := NewBroker(cfg, log, claims, mode, ttl)
+	b.hostKey = hostKey
 	if *ttlSec > 0 {
 		b.ttlFlag = ttl
 	}
@@ -150,12 +158,14 @@ func run(args []string, stdout, stderr io.Writer, stop, hup <-chan os.Signal) in
 		"pid": os.Getpid(), "socket": cfg.SocketPath, "mode": mode,
 		"ttl_seconds": int(ttl.Seconds()), "allowed_requester_uids": cfg.AllowedRequesterUIDs,
 		"allowed_requester_keys": cfg.AllowedRequesterKeys,
+		"host_id":                cfg.HostID, "host_key": hostKey,
 	}
 	if tlsLn != nil {
 		startEv["tls_addr"] = tlsAddr
 	}
 	log.Event("broker_start", startEv)
 	fmt.Fprintf(stdout, "tmb-broker: listening on %s (mode=%s ttl=%s pid=%d)\n", cfg.SocketPath, mode, ttl, os.Getpid())
+	fmt.Fprintf(stdout, "tmb-broker: identity host_id=%s host_key=%s\n", cfg.HostID, hostKey)
 
 	// Both accept loops only ever return an error; the first one ends the
 	// broker unless a stop signal came first.

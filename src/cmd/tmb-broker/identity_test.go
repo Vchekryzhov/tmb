@@ -31,7 +31,9 @@ func newTestBroker(t *testing.T) *Broker {
 		FixedEnv:             map[string]string{"PATH": "/usr/bin:/bin"},
 		AllowedCwdRoots:      []string{"/"},
 	}
-	return NewBroker(cfg, log, claims, ModeMockApprove, 30*time.Second)
+	b := NewBroker(cfg, log, claims, ModeMockApprove, 30*time.Second)
+	b.hostKey = testHostKey
+	return b
 }
 
 func trueExe(t *testing.T) string {

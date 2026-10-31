@@ -12,6 +12,9 @@
   "approval_default": "queue",
   "approval_wait_seconds": 300,
   "token_ttl_seconds": 60,
+  "host_id": "",
+  "approver_keys": [],
+  "require_signed_decision": false,
   "allowed_cwd_roots": ["/tmp"],
   "allowed_env_keys": ["LANG"],
   "fixed_env": {

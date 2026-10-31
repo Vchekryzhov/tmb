@@ -842,7 +842,7 @@ start_broker mock-approve 10
 state_dump
 
 # -----------------------------------------------------------------------------
-log "SCENARIO N29: the journal reopens on SIGHUP, an unwritable journal closes the agent path, schema 1 on every line"
+log "SCENARIO N29: the journal reopens on SIGHUP, an unwritable journal closes the agent path, the schema version on every line"
 # logrotate renames the file and sends SIGHUP: the broker opens a new file
 # at log_path. Then the log directory becomes unwritable and the file is
 # gone: the reopen fails, new requests get audit_unavailable and nothing
@@ -860,8 +860,8 @@ n29_wait() { # n29_wait FILE STRING -> 0 once FILE in host-sim contains STRING
   done
   return 1
 }
-n29_unschema() { # n29_unschema FILE -> JSON lines of FILE without "schema":2
-  docker exec "$HOST" sh -c "grep '^{' $1 | grep -vc '\"schema\":2'" | tr -d '[:space:]'
+n29_unschema() { # n29_unschema FILE -> JSON lines of FILE without "schema":3
+  docker exec "$HOST" sh -c "grep '^{' $1 | grep -vc '\"schema\":3'" | tr -d '[:space:]'
 }
 stop_broker
 docker exec "$HOST" rm -f "$JERR"
@@ -872,7 +872,7 @@ echo "-- broker CapEff=$CAPEFF"
 if [ -n "$CAPEFF" ] && [ $((0x$CAPEFF & 0x6)) -eq 0 ]; then ok "N29: broker runs without CAP_DAC_OVERRIDE and CAP_DAC_READ_SEARCH"; else bad "N29: broker still has DAC override caps (CapEff=$CAPEFF)"; fi
 run_client "$SBX" tmb exec --root -- /usr/bin/id -u
 assert_rc     "N29: request before the rotation -> exit 0" 0
-if [ "$(n29_unschema "$JLOG")" = "0" ]; then ok "N29: every journal line carries \"schema\":2"; else bad "N29: journal lines without \"schema\":2"; fi
+if [ "$(n29_unschema "$JLOG")" = "0" ]; then ok "N29: every journal line carries \"schema\":3"; else bad "N29: journal lines without \"schema\":3"; fi
 
 echo "-- rotation: rename the journal, SIGHUP"
 docker exec "$HOST" mv "$JLOG" "$JLOG.1"
@@ -906,7 +906,7 @@ if docker exec "$HOST" grep -q 'accepting requests again' "$JERR"; then ok "N29:
 run_client "$SBX" tmb exec --root -- /usr/bin/id -u
 assert_rc     "N29: request after the recovery -> exit 0" 0
 assert_out_eq "N29: stdout '0'" "0"
-if [ "$(n29_unschema "$JLOG")" = "0" ] && [ "$(n29_unschema "$JLOG.1")" = "0" ] && [ "$(n29_unschema "$JERR")" = "0" ]; then ok "N29: every line in both journal files and the stderr reserve carries \"schema\":2"; else bad "N29: a line without \"schema\":2"; fi
+if [ "$(n29_unschema "$JLOG")" = "0" ] && [ "$(n29_unschema "$JLOG.1")" = "0" ] && [ "$(n29_unschema "$JERR")" = "0" ]; then ok "N29: every line in both journal files and the stderr reserve carries \"schema\":3"; else bad "N29: a line without \"schema\":3"; fi
 stop_broker
 start_broker mock-approve 10
 state_dump

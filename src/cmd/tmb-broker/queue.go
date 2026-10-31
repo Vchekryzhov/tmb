@@ -7,13 +7,18 @@ package main
 // pending request does not delay any other connection.
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"os"
+	"os/user"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -28,14 +33,34 @@ const ModeQueue = "queue"
 type queueDecision struct {
 	granted  bool
 	approver RequesterID
-	proof    *decisionProof // nil: the decision rests on the approver's channel alone
+	// vote is the signature a signed decide carries, not yet verified:
+	// approvalQueue.decide checks it against the item's payload. nil for an
+	// unsigned decide.
+	vote *approverSignature
+	// proof is set by approvalQueue.decide: the item's payload terms and the
+	// verified signatures. nil only for items queued without a payload.
+	proof *decisionProof
 }
 
-// decisionProof is the slot for what proves a queue decision beyond the
-// approver socket's peer credentials. It is empty and always nil for now:
-// the signed decide (ADR 0006) fills it in serveDecide/approvalQueue.decide
-// and reads it in approveStage, so the signature touches one path.
-type decisionProof struct{}
+// approverSignature is a signature over an item's payload by one key of
+// approver_keys.
+type approverSignature struct {
+	key approverKey
+	der []byte // the decoded signature
+	b64 string // as the approver sent it, for the journal
+}
+
+// decisionProof is what proves a queue decision beyond the approver
+// socket's peer credentials (ADR 0006): the exact payload the item was
+// queued with, its short code, the token TTL signed in it and the verified
+// signatures (none for an unsigned decision). approveStage writes it to the
+// approval event and caps the token's life with tokenTTL.
+type decisionProof struct {
+	payload    []byte
+	shortCode  string
+	tokenTTL   time.Duration
+	signatures []approverSignature
+}
 
 // approvalOutcome is the result of one approval interaction: the verdict,
 // the deny reason, the approver (its key in queue mode, mode:<mode> for the
@@ -54,7 +79,21 @@ type queueEntry struct {
 	// per-item terms, fixed when the item is queued: a reload does not move
 	// them. Zero values mean none (entries built by add).
 	queuedAt time.Time
-	deadline time.Time
+	deadline time.Time // no decision is accepted after it (decision_expired)
+	// payload is the exact approval payload (ADR 0006) a signature must
+	// cover; tokenTTL is the token TTL written in it. nil and zero for
+	// entries built by add.
+	payload  []byte
+	tokenTTL time.Duration
+}
+
+// proof is the decision proof of this entry with the given verified
+// signatures; nil when the entry has no payload.
+func (e *queueEntry) proof(sigs ...approverSignature) *decisionProof {
+	if e.payload == nil {
+		return nil
+	}
+	return &decisionProof{payload: e.payload, shortCode: proto.ShortCode(e.payload), tokenTTL: e.tokenTTL, signatures: sigs}
 }
 
 // approvalQueue holds the waiting requests by item id. Decided ids are
@@ -64,7 +103,8 @@ type approvalQueue struct {
 	mu      sync.Mutex
 	items   map[string]*queueEntry
 	decided map[string]time.Time
-	size    int // encoded bytes of the waiting items
+	size    int              // encoded bytes of the waiting items
+	now     func() time.Time // the broker clock (tests move it); read under mu
 }
 
 // maxQueueBytes bounds the encoded size of all waiting items, so the list
@@ -82,7 +122,7 @@ func itemSize(item proto.QueueItem) int {
 }
 
 func newApprovalQueue() *approvalQueue {
-	return &approvalQueue{items: map[string]*queueEntry{}, decided: map[string]time.Time{}}
+	return &approvalQueue{items: map[string]*queueEntry{}, decided: map[string]time.Time{}, now: time.Now}
 }
 
 // decidedMemory bounds how long a decided id is remembered.
@@ -151,15 +191,26 @@ func (q *approvalQueue) withdraw(id string) bool {
 	return true
 }
 
+// clock reads the queue clock.
+func (q *approvalQueue) clock() time.Time {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.now()
+}
+
 // decide delivers a verdict once. The item leaves the queue on the first
 // decision; the hash must match what the approver was shown, and the
 // requester never decides its own request: a uid in both allowlists is
 // refused with approver_is_requester and the item stays for another
-// approver.
+// approver. No decision is taken after the item's deadline
+// (decision_expired), and a signed decision (d.vote) must verify over the
+// payload the item was queued with (signature_invalid), whether it approves
+// or denies; a refused decision leaves the item waiting. The delivered
+// decision carries the item's proof.
 func (q *approvalQueue) decide(id, hash string, d queueDecision) (deny, detail string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	now := time.Now()
+	now := q.now()
 	for k, t := range q.decided {
 		if now.Sub(t) > decidedMemory {
 			delete(q.decided, k)
@@ -178,37 +229,115 @@ func (q *approvalQueue) decide(id, hash string, d queueDecision) (deny, detail s
 	if e.requester.Equal(d.approver) {
 		return "approver_is_requester", fmt.Sprintf("item %s was requested by %s, another approver must decide it", id, d.approver.Key())
 	}
+	if !e.deadline.IsZero() && now.After(e.deadline) {
+		return "decision_expired", fmt.Sprintf("item %s: its deadline %s has passed", id, e.deadline.UTC().Format(time.RFC3339Nano))
+	}
+	var sigs []approverSignature
+	if v := d.vote; v != nil {
+		if e.payload == nil || !proto.VerifyPayloadSignature(v.key.pub, e.payload, v.der) {
+			return "signature_invalid", fmt.Sprintf("the signature does not verify over the payload of item %s with key %s (%s)", id, v.key.name, v.key.fp)
+		}
+		sigs = append(sigs, *v)
+	}
+	d.proof = e.proof(sigs...)
 	q.remove(id)
 	q.decided[id] = now
 	e.result <- d
 	return "", ""
 }
 
+// newChallenge is the broker's random challenge for one queue item.
+// crypto/rand.Read never fails (Go 1.24+).
+func newChallenge() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// userName is the name of a target uid for the payload, "" if it has none.
+func userName(uid int) string {
+	u, err := user.LookupId(strconv.Itoa(uid))
+	if err != nil {
+		return ""
+	}
+	return u.Username
+}
+
+// ttlSeconds is a token TTL in whole seconds, rounded up, at least 1.
+func ttlSeconds(d time.Duration) int {
+	n := int((d + time.Second - 1) / time.Second)
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
 // queueApproval puts the request in the queue and blocks until an approver
 // decides, approval_wait_seconds pass (approval_timeout) or the requester
 // hangs up (request_abandoned). It tells the requester once that it waits,
-// and returns the outcome with the deciding approver's proof, if any.
-func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdReal string, conn net.Conn) approvalOutcome {
+// and returns the outcome with the item's decision proof.
+//
+// The approval payload is built here, once per item, from what the broker
+// resolved: realpaths, the pinned executable inode, the final environment,
+// a fresh challenge, the host identity and the broker's own deadline and
+// token TTL (ADR 0006, ADR 0007). A request whose payload cannot be encoded
+// (a path that is not UTF-8) is refused before it is queued.
+func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64, conn net.Conn) approvalOutcome {
 	refuse := func(reason, approver string) approvalOutcome {
 		return approvalOutcome{reason: reason, approver: approver}
 	}
+	pol := b.pol.Load()
 	hash := req.Hash()
-	now := time.Now()
-	wait := b.approvalWait() // fixed for this item: a reload does not move it
-	item := proto.QueueItem{
-		ID:         proto.TokenID(hash),
-		Hash:       hash,
-		Requester:  id.ConsoleLine(),
-		Executable: exeReal,
-		Argv:       req.Argv,
-		Cwd:        cwdReal,
-		UID:        req.UID,
-		Env:        b.buildEnv(req),
-		Nonce:      req.Nonce,
-		QueuedAt:   now.UTC().Format(time.RFC3339Nano),
+	now := b.queue.clock()
+	wait := pol.wait // fixed for this item: a reload does not move it
+	env := b.buildEnv(req)
+	p := &proto.ApprovalPayload{
+		HostID:      pol.hostID(),
+		HostKey:     b.hostKey,
+		ItemID:      proto.TokenID(hash),
+		RequestHash: hash,
+		Challenge:   newChallenge(),
+		Requester:   id.Key(),
+		UID:         req.UID,
+		User:        userName(req.UID),
+		Executable:  exeReal,
+		ExeDev:      dev,
+		ExeIno:      ino,
+		Argv:        req.Argv,
+		Cwd:         cwdReal,
+		Env:         env,
+		Nonce:       req.Nonce,
+		QueuedAt:    now.UnixMilli(),
+		Deadline:    now.Add(wait).UnixMilli(),
+		TokenTTL:    ttlSeconds(pol.ttl),
 	}
-	e, refused := b.queue.addEntry(&queueEntry{item: item, requester: id,
-		queuedAt: now, deadline: now.Add(wait)})
+	payload, err := p.Encode()
+	if err != nil {
+		return refuse("approval_payload_invalid", "mode:"+ModeQueue)
+	}
+	code := proto.ShortCode(payload)
+	deadline := time.UnixMilli(p.Deadline)
+	item := proto.QueueItem{
+		ID:              p.ItemID,
+		Hash:            hash,
+		Requester:       id.ConsoleLine(),
+		Executable:      exeReal,
+		Argv:            req.Argv,
+		Cwd:             cwdReal,
+		UID:             req.UID,
+		Env:             env,
+		Nonce:           req.Nonce,
+		QueuedAt:        now.UTC().Format(time.RFC3339Nano),
+		Payload:         base64.StdEncoding.EncodeToString(payload),
+		ShortCode:       code,
+		HostID:          p.HostID,
+		HostKey:         p.HostKey,
+		Challenge:       p.Challenge,
+		Deadline:        deadline.UTC().Format(time.RFC3339Nano),
+		TokenTTLSeconds: p.TokenTTL,
+	}
+	e, refused := b.queue.addEntry(&queueEntry{item: item, requester: id, queuedAt: now, deadline: deadline,
+		payload: payload, tokenTTL: time.Duration(p.TokenTTL) * time.Second})
 	if refused != "" {
 		return refuse(refused, "mode:"+ModeQueue)
 	}
@@ -219,6 +348,7 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 	ev["argv"] = req.Argv
 	ev["cwd"] = cwdReal
 	ev["nonce"] = logNonce(req.Nonce)
+	ev["short_code"] = code
 	b.log.Event("queued", ev)
 	proto.WriteFrame(conn, &proto.Frame{Type: "waiting", Token: item.ID,
 		Detail: fmt.Sprintf("at most %s", wait)})
@@ -233,13 +363,16 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 		if b.queue.withdraw(item.ID) {
 			stopWatch(conn, hangup)
 			b.log.Event("approval_timeout", queueEvent(id, item.ID, wait))
-			return refuse("approval_timeout", "mode:"+ModeQueue)
+			out := refuse("approval_timeout", "mode:"+ModeQueue)
+			out.proof = e.proof()
+			return out
 		}
 		d = <-e.result // decided at the last moment
 	case <-hangup.done:
 		// the requester is gone: nothing runs, even when a decision raced
 		// the hangup and is already waiting in the channel
 		out := refuse("request_abandoned", "mode:"+ModeQueue)
+		out.proof = e.proof()
 		if !b.queue.withdraw(item.ID) {
 			d = <-e.result
 			out.approver, out.proof = d.approver.Key(), d.proof
@@ -403,11 +536,15 @@ func (b *Broker) serveApprover(conn net.Conn, id RequesterID) {
 	}
 }
 
-// serveDecide applies one decide from an allowed approver (ADR 0004): it
-// parses the verdict, hands it to the queue and answers decided, or denied
-// with decision_rejected in the journal. The decision carries no proof yet;
-// a signed decide checks its signature here and passes the proof on in the
-// queueDecision.
+// serveDecide applies one decide from an allowed approver (ADR 0004, ADR
+// 0006). For a signed decide it finds the key named by approver_key in
+// approver_keys (approver_key_unknown) and decodes the signature
+// (signature_invalid); the queue then verifies it over the item's payload.
+// A signed decide is checked whatever require_signed_decision says. With
+// require_signed_decision an unsigned approve is refused
+// (signature_required); an unsigned deny is always accepted, a deny grants
+// nothing. It answers decided, or denied with decision_rejected in the
+// journal.
 func (b *Broker) serveDecide(conn net.Conn, id RequesterID, req *proto.Request) {
 	var granted bool
 	switch req.Decision {
@@ -418,10 +555,32 @@ func (b *Broker) serveDecide(conn net.Conn, id RequesterID, req *proto.Request) 
 		proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "bad_request", Detail: fmt.Sprintf("decision %q, want approve or deny", req.Decision)})
 		return
 	}
-	if deny, detail := b.queue.decide(req.ItemID, req.ItemHash, queueDecision{granted: granted, approver: id}); deny != "" {
+	pol := b.pol.Load()
+	d := queueDecision{granted: granted, approver: id}
+	var deny, detail string
+	switch {
+	case req.Signature != "" || req.ApproverKey != "":
+		k, known := pol.keys[req.ApproverKey]
+		sig, err := base64.StdEncoding.DecodeString(req.Signature)
+		switch {
+		case !known:
+			deny, detail = "approver_key_unknown", fmt.Sprintf("approver_key %q is not in approver_keys", req.ApproverKey)
+		case err != nil || len(sig) == 0:
+			deny, detail = "signature_invalid", "the signature is not base64 DER"
+		default:
+			d.vote = &approverSignature{key: k, der: sig, b64: req.Signature}
+		}
+	case granted && pol.cfg.RequireSignedDecision:
+		deny, detail = "signature_required", "require_signed_decision is on: an approve must be signed by a key in approver_keys"
+	}
+	if deny == "" {
+		deny, detail = b.queue.decide(req.ItemID, req.ItemHash, d)
+	}
+	if deny != "" {
 		ev := approverLogFields(id)
 		ev["item"] = req.ItemID
 		ev["reason"] = deny
+		ev["approver_key"] = req.ApproverKey
 		b.log.Event("decision_rejected", ev)
 		proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: deny, Detail: detail})
 		return
