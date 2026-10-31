@@ -1,4 +1,3 @@
-// PROTOTYPE CODE - throwaway PoC, not production.
 package proto
 
 // The approval payload (ADR 0006): the exact bytes a trusted signer shows
@@ -7,16 +6,26 @@ package proto
 // the received array, never its own serialization.
 //
 // Format: the domain prefix "tmb-approval-v1\x00" followed by one JSON object
-// in canonical form. Canonical means exactly what canonicalJSON produces:
-// fields in the declaration order of ApprovalPayload, no whitespace, strings
-// escaped as encoding/json does with HTML escaping off (\" \\ \b \f \n \r \t,
-// other control characters as \u00xx, U+2028 and U+2029 as \u2028 and
-// \u2029, everything else literal UTF-8), integers in decimal. A parser
-// accepts the bytes only when re-encoding what it parsed gives the same
-// bytes, so duplicate keys, unknown or missing fields, another order,
-// whitespace, other escapes and invalid UTF-8 are all refused. The Swift
-// signer implements the same rule; signer/Tests/vectors holds the shared
-// vectors both sides test against.
+// in canonical form, written by canonicalJSON (not encoding/json, whose
+// escaping has changed between Go releases):
+//
+//   - the fields of ApprovalPayload in declaration order, every field always
+//     present, no whitespace anywhere;
+//   - integers in plain decimal (a minus sign only for a negative number, no
+//     leading zeros, no fraction or exponent);
+//   - an array of strings as [..] with "," between elements, [] when empty;
+//   - a string is '"', its UTF-8 bytes, '"', where only these are escaped:
+//     '"' and '\' with a backslash, U+0008 U+000C U+000A U+000D U+0009 as
+//     the short escapes b f n r t, every other code point below U+0020 and
+//     U+2028 and U+2029 in the \uXXXX form with lowercase hex. Everything
+//     else, DEL, '/', '<', '>', '&' and all non-ASCII included, is written
+//     as its literal UTF-8 bytes.
+//
+// A parser accepts the bytes only when re-encoding what it parsed gives the
+// same bytes, so duplicate keys, unknown or missing fields, another key case
+// or order, whitespace, other escapes, other number forms, null and invalid
+// UTF-8 are all refused. The Swift signer implements the same rules;
+// signer/Tests/vectors holds the shared vectors both sides test against.
 
 import (
 	"bytes"
@@ -31,6 +40,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
+	"strconv"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -47,66 +59,130 @@ const ShortCodeLen = 8
 // ApprovalPayload is everything one approval binds to (ADR 0006, В12): the
 // host, the queue item, the broker challenge, who asked, what runs as whom
 // and where (as the broker resolved it), and the broker's deadlines. The
-// field order is the canonical order.
+// field order is the canonical order. ExeDev and ExeIno are not in the В12
+// list: they bind the signature to the executable pin the broker keeps
+// anyway, and a signer shows them as service fields.
 type ApprovalPayload struct {
 	HostID      string   `json:"host_id"`      // host_id from the broker config
-	HostKey     string   `json:"host_key"`     // SPKI SHA-256 of the broker TLS server key; "" without a TLS listener
+	HostKey     string   `json:"host_key"`     // KeyFingerprint of the broker identity key
 	ItemID      string   `json:"item_id"`      // queue item id (TokenID of the request hash)
 	RequestHash string   `json:"request_hash"` // full Request.Hash()
-	Challenge   string   `json:"challenge"`    // 32 random bytes per item, hex
+	Challenge   string   `json:"challenge"`    // 32 random bytes per item, lowercase hex
 	Requester   string   `json:"requester"`    // requester identity (uid:N or keyfp:HEX)
-	UID         int      `json:"uid"`          // target uid
+	UID         int      `json:"uid"`          // target uid, 0..2^32-1
 	User        string   `json:"user"`         // target user name; "" when the uid has none
 	Executable  string   `json:"executable"`   // realpath
-	ExeDev      uint64   `json:"exe_dev"`      // pinned inode of the executable
+	ExeDev      uint64   `json:"exe_dev"`      // pinned device and inode of the executable
 	ExeIno      uint64   `json:"exe_ino"`
-	Argv        []string `json:"argv"`
-	Cwd         string   `json:"cwd"` // realpath
-	Env         []string `json:"env"` // final process environment, KEY=VALUE sorted
-	Nonce       string   `json:"nonce"`
+	Argv        []string `json:"argv"`              // at least one element
+	Cwd         string   `json:"cwd"`               // realpath
+	Env         []string `json:"env"`               // final process environment, KEY=VALUE sorted, distinct keys
+	Nonce       string   `json:"nonce"`             // the request nonce
 	QueuedAt    int64    `json:"queued_at"`         // unix milliseconds, broker clock
 	Deadline    int64    `json:"deadline"`          // unix milliseconds: no decision is accepted after it
 	TokenTTL    int      `json:"token_ttl_seconds"` // the token issued on approval lives at most this long
 }
 
 // canonicalJSON encodes p in canonical form (without the prefix). Nil
-// slices encode as empty arrays, so the encoding of a built payload never
-// contains null.
-func (p *ApprovalPayload) canonicalJSON() ([]byte, error) {
-	c := *p
-	if c.Argv == nil {
-		c.Argv = []string{}
+// slices encode as empty arrays, so an encoding never contains null.
+func (p *ApprovalPayload) canonicalJSON() []byte {
+	var w canonWriter
+	w.buf.WriteByte('{')
+	w.str("host_id", p.HostID)
+	w.str("host_key", p.HostKey)
+	w.str("item_id", p.ItemID)
+	w.str("request_hash", p.RequestHash)
+	w.str("challenge", p.Challenge)
+	w.str("requester", p.Requester)
+	w.num("uid", strconv.Itoa(p.UID))
+	w.str("user", p.User)
+	w.str("executable", p.Executable)
+	w.num("exe_dev", strconv.FormatUint(p.ExeDev, 10))
+	w.num("exe_ino", strconv.FormatUint(p.ExeIno, 10))
+	w.list("argv", p.Argv)
+	w.str("cwd", p.Cwd)
+	w.list("env", p.Env)
+	w.str("nonce", p.Nonce)
+	w.num("queued_at", strconv.FormatInt(p.QueuedAt, 10))
+	w.num("deadline", strconv.FormatInt(p.Deadline, 10))
+	w.num("token_ttl_seconds", strconv.Itoa(p.TokenTTL))
+	w.buf.WriteByte('}')
+	return w.buf.Bytes()
+}
+
+// canonWriter writes the canonical JSON object one field at a time.
+type canonWriter struct {
+	buf    bytes.Buffer
+	fields int
+}
+
+func (w *canonWriter) key(k string) {
+	if w.fields > 0 {
+		w.buf.WriteByte(',')
 	}
-	if c.Env == nil {
-		c.Env = []string{}
+	w.fields++
+	writeCanonicalString(&w.buf, k)
+	w.buf.WriteByte(':')
+}
+
+func (w *canonWriter) str(k, v string) { w.key(k); writeCanonicalString(&w.buf, v) }
+func (w *canonWriter) num(k, v string) { w.key(k); w.buf.WriteString(v) }
+
+func (w *canonWriter) list(k string, vs []string) {
+	w.key(k)
+	w.buf.WriteByte('[')
+	for i, v := range vs {
+		if i > 0 {
+			w.buf.WriteByte(',')
+		}
+		writeCanonicalString(&w.buf, v)
 	}
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(&c); err != nil {
-		return nil, err
+	w.buf.WriteByte(']')
+}
+
+// writeCanonicalString writes s as a JSON string under the escaping rules
+// of the package comment. s must be valid UTF-8 (check refuses the rest).
+func writeCanonicalString(buf *bytes.Buffer, s string) {
+	const hexDigits = "0123456789abcdef"
+	buf.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"', '\\':
+			buf.WriteByte('\\')
+			buf.WriteRune(r)
+		case '\b':
+			buf.WriteString("\\b")
+		case '\f':
+			buf.WriteString("\\f")
+		case '\n':
+			buf.WriteString("\\n")
+		case '\r':
+			buf.WriteString("\\r")
+		case '\t':
+			buf.WriteString("\\t")
+		default:
+			if r < 0x20 || r == 0x2028 || r == 0x2029 {
+				buf.WriteString("\\u")
+				for shift := 12; shift >= 0; shift -= 4 {
+					buf.WriteByte(hexDigits[(r>>shift)&15])
+				}
+			} else {
+				buf.WriteRune(r)
+			}
+		}
 	}
-	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
+	buf.WriteByte('"')
 }
 
 // Encode returns the payload bytes: prefix and canonical JSON. It refuses a
-// payload with a string that is not valid UTF-8 (encoding/json would replace
-// the bytes and the signer would be shown another path than the one that
-// runs) and one that does not pass the field checks of ParseApprovalPayload.
+// payload that does not pass the field checks of ParseApprovalPayload, among
+// them a string that is not valid UTF-8 (the signer would be shown another
+// path than the one that runs): the broker then denies before queueing.
 func (p *ApprovalPayload) Encode() ([]byte, error) {
 	if err := p.check(); err != nil {
 		return nil, err
 	}
-	for _, s := range p.strings() {
-		if !utf8.ValidString(s) {
-			return nil, fmt.Errorf("proto: approval payload: %q is not valid UTF-8", s)
-		}
-	}
-	js, err := p.canonicalJSON()
-	if err != nil {
-		return nil, err
-	}
-	return append([]byte(PayloadPrefix), js...), nil
+	return append([]byte(PayloadPrefix), p.canonicalJSON()...), nil
 }
 
 func (p *ApprovalPayload) strings() []string {
@@ -115,12 +191,18 @@ func (p *ApprovalPayload) strings() []string {
 	return append(out, p.Env...)
 }
 
-// check holds the field rules every payload must pass, built or parsed.
+// check holds the field rules every payload must pass, built or parsed:
+// what an honest broker builds, and nothing a signer could show two ways.
 func (p *ApprovalPayload) check() error {
+	for _, s := range p.strings() {
+		if !utf8.ValidString(s) {
+			return fmt.Errorf("proto: approval payload: %q is not valid UTF-8", s)
+		}
+	}
 	switch {
 	case p.HostID == "":
 		return errors.New("proto: approval payload: empty host_id")
-	case p.HostKey != "" && !isHex(p.HostKey, 64):
+	case !isHex(p.HostKey, 64):
 		return errors.New("proto: approval payload: host_key is not a SHA-256 hex fingerprint")
 	case !isHex(p.RequestHash, 64):
 		return errors.New("proto: approval payload: request_hash is not a SHA-256 hex digest")
@@ -128,14 +210,36 @@ func (p *ApprovalPayload) check() error {
 		return errors.New("proto: approval payload: item_id does not match request_hash")
 	case !isHex(p.Challenge, 64):
 		return errors.New("proto: approval payload: challenge is not 32 bytes of hex")
-	case p.Requester == "" || p.Executable == "" || p.Cwd == "":
-		return errors.New("proto: approval payload: empty requester, executable or cwd")
-	case p.UID < 0:
-		return errors.New("proto: approval payload: negative uid")
+	case p.Requester == "" || p.Nonce == "":
+		return errors.New("proto: approval payload: empty requester or nonce")
+	case !strings.HasPrefix(p.Executable, "/") || !strings.HasPrefix(p.Cwd, "/"):
+		return errors.New("proto: approval payload: executable or cwd is not an absolute path")
+	case p.UID < 0 || uint64(p.UID) > math.MaxUint32:
+		return errors.New("proto: approval payload: uid out of range")
+	case len(p.Argv) == 0:
+		return errors.New("proto: approval payload: empty argv")
 	case p.QueuedAt <= 0 || p.Deadline <= p.QueuedAt:
 		return errors.New("proto: approval payload: deadline is not after queued_at")
 	case p.TokenTTL <= 0:
 		return errors.New("proto: approval payload: token_ttl_seconds is not positive")
+	}
+	return checkEnv(p.Env)
+}
+
+// checkEnv: the final environment is KEY=VALUE entries with non-empty,
+// distinct keys, sorted by bytes as the broker builds it, so one
+// environment has exactly one payload.
+func checkEnv(env []string) error {
+	prevKey := ""
+	for i, e := range env {
+		k, _, ok := strings.Cut(e, "=")
+		if !ok || k == "" {
+			return fmt.Errorf("proto: approval payload: env entry %d is not KEY=VALUE", i)
+		}
+		if i > 0 && (e <= env[i-1] || k == prevKey) {
+			return errors.New("proto: approval payload: env is not sorted with distinct keys")
+		}
+		prevKey = k
 	}
 	return nil
 }
@@ -173,11 +277,7 @@ func ParseApprovalPayload(raw []byte) (*ApprovalPayload, error) {
 	if err := p.check(); err != nil {
 		return nil, err
 	}
-	js, err := p.canonicalJSON()
-	if err != nil {
-		return nil, err
-	}
-	if !bytes.Equal(js, body) {
+	if !bytes.Equal(p.canonicalJSON(), body) {
 		return nil, errors.New("proto: approval payload: not in canonical form")
 	}
 	return &p, nil
@@ -206,12 +306,17 @@ func PayloadDigest(payload []byte) []byte {
 }
 
 // VerifyPayloadSignature checks a DER (ASN.1) ECDSA signature over payload.
+// A nil key verifies nothing.
 func VerifyPayloadSignature(pub *ecdsa.PublicKey, payload, sigDER []byte) bool {
+	if pub == nil {
+		return false
+	}
 	return ecdsa.VerifyASN1(pub, PayloadDigest(payload), sigDER)
 }
 
 // KeyFingerprint is the identity of a public key: lowercase hex SHA-256 over
-// its DER SubjectPublicKeyInfo (ADR 0005). Approver keys use the same form.
+// its DER SubjectPublicKeyInfo (ADR 0005). Approver keys and the broker
+// identity key (host_key) use the same form.
 func KeyFingerprint(spkiDER []byte) string {
 	sum := sha256.Sum256(spkiDER)
 	return hex.EncodeToString(sum[:])

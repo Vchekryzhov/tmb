@@ -71,12 +71,20 @@ func samplePayload() *ApprovalPayload {
 // the canonical encoding must reproduce byte for byte.
 func trickyPayload() *ApprovalPayload {
 	p := samplePayload()
-	p.HostKey = ""
 	p.User = ""
 	p.UID = 4294967294
 	p.ExeIno = 1<<63 + 5
 	p.Argv = []string{"", `quote " and \ backslash`, "nl\ncr\rtab\tbs\bff\f", "ctl\x01\x1f del\x7f", "<html>&amp;", "\u00e9 \u65e5\u672c \U0001f600", "bidi\u202eevil", "zero\u200bwidth", "ls\u2028\u2029", "--flag=a b"}
 	p.Env = []string{}
+	return p
+}
+
+// envEdgePayload: empty values, '=' inside a value, keys that sort by bytes
+// (uppercase before underscore before lowercase), the largest uid.
+func envEdgePayload() *ApprovalPayload {
+	p := samplePayload()
+	p.UID = 4294967295
+	p.Env = []string{"A=", "B=x=y", "B_C=1", "b=2"}
 	return p
 }
 
@@ -155,6 +163,20 @@ func invalidCases(t testing.TB) []invalidVector {
 		alt("negative uid", pre+strings.Replace(body, `"uid":0,`, `"uid":-1,`, 1)),
 		alt("not an object", pre+`[]`),
 		alt("empty body", pre),
+		alt("empty host_key", pre+strings.Replace(body, `"host_key":"`+strings.Repeat("0f", 32)+`"`, `"host_key":""`, 1)),
+		alt("key in other case", pre+strings.Replace(body, `"host_id":`, `"HOST_ID":`, 1)),
+		alt("long escape of a backspace", pre+strings.Replace(body, `"nginx"`, "\"ngi\\u0008nx\"", 1)),
+		alt("uppercase hex in an escape", pre+strings.Replace(body, `"nginx"`, "\"ngi\\u001Fnx\"", 1)),
+		alt("escaped DEL", pre+strings.Replace(body, `"nginx"`, "\"ngi\\u007fnx\"", 1)),
+		alt("literal U+2028", pre+strings.Replace(body, `"nginx"`, "\"ngi\xe2\x80\xa8nx\"", 1)),
+		alt("raw control byte in a string", pre+strings.Replace(body, `"nginx"`, "\"ngi\x01nx\"", 1)),
+		alt("leading zero in a number", pre+strings.Replace(body, `"exe_dev":2049`, `"exe_dev":02049`, 1)),
+		alt("negative zero uid", pre+strings.Replace(body, `"uid":0,`, `"uid":-0,`, 1)),
+		alt("uid above 32 bits", pre+strings.Replace(body, `"uid":0,`, `"uid":4294967296,`, 1)),
+		alt("relative cwd", pre+strings.Replace(body, `"/srv/app"`, `"srv/app"`, 1)),
+		alt("empty argv", pre+strings.Replace(body, `["systemctl","restart","nginx"]`, `[]`, 1)),
+		alt("env not sorted", pre+strings.Replace(body, `["LANG=C.UTF-8","PATH=/usr/sbin:/usr/bin"]`, `["PATH=/usr/sbin:/usr/bin","LANG=C.UTF-8"]`, 1)),
+		alt("env entry without =", pre+strings.Replace(body, `"LANG=C.UTF-8"`, `"LANG"`, 1)),
 	}
 }
 
@@ -167,7 +189,7 @@ func buildVectors(t testing.TB) vectorFile {
 	for _, c := range []struct {
 		name string
 		p    *ApprovalPayload
-	}{{"sample", samplePayload()}, {"tricky strings and large numbers", trickyPayload()}} {
+	}{{"sample", samplePayload()}, {"tricky strings and large numbers", trickyPayload()}, {"env edge values", envEdgePayload()}} {
 		b := mustEncode(t, c.p)
 		vf.Valid = append(vf.Valid, validVector{
 			Name: c.name, Payload: base64.StdEncoding.EncodeToString(b), Fields: *c.p,
@@ -362,5 +384,80 @@ func TestParseApproverPublicKey(t *testing.T) {
 		if _, _, err := ParseApproverPublicKey(in); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// TestPayloadFieldRules: a payload the broker could not have built honestly
+// is refused on both sides (Encode and Parse share the rules).
+func TestPayloadFieldRules(t *testing.T) {
+	for name, mut := range map[string]func(p *ApprovalPayload){
+		"empty host_key":        func(p *ApprovalPayload) { p.HostKey = "" },
+		"uppercase host_key":    func(p *ApprovalPayload) { p.HostKey = strings.Repeat("0F", 32) },
+		"short host_key":        func(p *ApprovalPayload) { p.HostKey = strings.Repeat("0f", 31) },
+		"uid above 32 bits":     func(p *ApprovalPayload) { p.UID = 1 << 32 },
+		"relative executable":   func(p *ApprovalPayload) { p.Executable = "bin/systemctl" },
+		"relative cwd":          func(p *ApprovalPayload) { p.Cwd = "srv/app" },
+		"empty argv":            func(p *ApprovalPayload) { p.Argv = nil },
+		"empty nonce":           func(p *ApprovalPayload) { p.Nonce = "" },
+		"env not sorted":        func(p *ApprovalPayload) { p.Env = []string{"PATH=/bin", "LANG=C"} },
+		"env entry without =":   func(p *ApprovalPayload) { p.Env = []string{"LANG"} },
+		"env entry with no key": func(p *ApprovalPayload) { p.Env = []string{"=x"} },
+		"env duplicate key":     func(p *ApprovalPayload) { p.Env = []string{"A=1", "A=2"} },
+		"invalid UTF-8 in argv": func(p *ApprovalPayload) { p.Argv = []string{"ls", "a\xffb"} },
+		"invalid UTF-8 host_id": func(p *ApprovalPayload) { p.HostID = "h\xc3" },
+		"negative queued_at":    func(p *ApprovalPayload) { p.QueuedAt = -1 },
+		"negative token ttl":    func(p *ApprovalPayload) { p.TokenTTL = -5 },
+		"empty request_hash":    func(p *ApprovalPayload) { p.RequestHash = ""; p.ItemID = "" },
+		"short challenge":       func(p *ApprovalPayload) { p.Challenge = "c3" },
+		"empty requester":       func(p *ApprovalPayload) { p.Requester = "" },
+	} {
+		p := samplePayload()
+		mut(p)
+		if b, err := p.Encode(); err == nil {
+			t.Errorf("%s: encoded %q", name, b)
+		}
+	}
+	// an empty value and a value containing '=' are fine
+	p := samplePayload()
+	p.Env = []string{"A=", "B=x=y"}
+	if _, err := p.Encode(); err != nil {
+		t.Fatalf("env with = in value: %v", err)
+	}
+}
+
+// TestCanonicalEscaping pins the escaping rules with hand-written bytes, so
+// the encoding does not depend on what encoding/json of a Go release does:
+// the Swift signer implements these rules from their description.
+func TestCanonicalEscaping(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"plain", `"plain"`},
+		{`q"b\`, `"q\"b\\"`},
+		{"\b\f\n\r\t", `"\b\f\n\r\t"`},
+		{"\x00\x01\x1f", `"\u0000\u0001\u001f"`},
+		{"\x7f", "\"\x7f\""},
+		{"<&>/'", `"<&>/'"`},
+		{"\u2028\u2029", "\"\\u2028\\u2029\""},
+		{"\u00e9\u202e\u200b\U0001f600\ufffd", "\"\u00e9\u202e\u200b\U0001f600\ufffd\""},
+	} {
+		p := samplePayload()
+		p.Argv = []string{c.in}
+		b := mustEncode(t, p)
+		if !bytes.Contains(b, []byte(`"argv":[`+c.want+`]`)) {
+			t.Errorf("%q: encoded as %q, want %s", c.in, b, c.want)
+		}
+		if _, err := ParseApprovalPayload(b); err != nil {
+			t.Errorf("%q: canonical bytes refused: %v", c.in, err)
+		}
+	}
+	// the whole canonical sample, written by hand
+	want := PayloadPrefix + `{"host_id":"build-01","host_key":"` + strings.Repeat("0f", 32) + `","item_id":"abababababababab","request_hash":"` + strings.Repeat("ab", 32) + `","challenge":"` + strings.Repeat("c3", 32) + `","requester":"uid:1000","uid":0,"user":"root","executable":"/usr/bin/systemctl","exe_dev":2049,"exe_ino":131077,"argv":["systemctl","restart","nginx"],"cwd":"/srv/app","env":["LANG=C.UTF-8","PATH=/usr/sbin:/usr/bin"],"nonce":"0123456789abcdef0123456789abcdef","queued_at":1793534400000,"deadline":1793534700000,"token_ttl_seconds":60}`
+	if got := string(mustEncode(t, samplePayload())); got != want {
+		t.Fatalf("sample encoding:\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestVerifyPayloadSignatureNilKey(t *testing.T) {
+	if VerifyPayloadSignature(nil, []byte("x"), []byte("y")) {
+		t.Fatal("verified with no key")
 	}
 }
