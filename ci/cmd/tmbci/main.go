@@ -41,6 +41,8 @@ var commands = map[string]func(*env, []string) int{
 	"trivy-db":        cmdTrivyDB,
 	"exceptions-lint": cmdExceptionsLint,
 	"coverage":        cmdCoverage,
+	"coverage-merge":  cmdCoverageMerge,
+	"covdata":         cmdCovdata,
 	"harness":         cmdHarness,
 	"manifest":        cmdManifest,
 	"fuzz":            cmdFuzz,
@@ -464,6 +466,83 @@ func cmdCoverage(e *env, args []string) int {
 	t := coverage.CheckTargets(pol, head, e.today)
 	note(e.emit(cTargets, t.Status, fmt.Sprintf("%d targets, %d GAP", len(pol.Targets), len(t.Gaps)), append(append(t.Problems, t.Rows...), prefixed("GAP ", t.Gaps)...)...))
 	return worst
+}
+
+// cmdCovdata accounts for the coverage data the harness collected
+// (harness/coverage-data): counters per container and every broker process
+// from the journal, either with counters or listed as killed.
+func cmdCovdata(e *env, args []string) int {
+	fs := e.flags("covdata")
+	check := fs.String("check", "", "check id")
+	dir := fs.String("dir", "", "TMB_COVER_DIR of the harness run")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	r, err := coverage.AccountCovdata(*dir)
+	if err != nil {
+		return e.fail(*check, err)
+	}
+	var rows []string
+	procs, killed := 0, 0
+	for _, c := range r.Containers {
+		procs += c.Counters
+		killed += len(c.Killed)
+		row := fmt.Sprintf("%s: %d processes with counters, %d brokers started", c.Name, c.Counters, c.Brokers)
+		if len(c.Killed) > 0 {
+			row += fmt.Sprintf(", %d killed without counters (pids %v)", len(c.Killed), c.Killed)
+		}
+		rows = append(rows, row)
+	}
+	st := statusOf(r.Problems)
+	return e.emit(*check, st, fmt.Sprintf("%d processes left counters; %d brokers killed by SIGKILL left none (listed)", procs, killed), append(r.Problems, rows...)...)
+}
+
+// cmdCoverageMerge merges the Go-test profile with the integration profile
+// of the harness binaries (coverage/merged). It reports both and the union;
+// no threshold applies to the union.
+func cmdCoverageMerge(e *env, args []string) int {
+	fs := e.flags("coverage-merge")
+	check := fs.String("check", "", "check id")
+	unitPath := fs.String("unit", "", "Go-test profile (ci/run.sh coverage)")
+	integPath := fs.String("integration", "", "integration profile (go tool covdata textfmt)")
+	outFile := fs.String("file-out", "", "merged profile to write")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	unit, err := readProfile(*unitPath)
+	if err != nil {
+		return e.fail(*check, fmt.Errorf("unit profile: %w", err))
+	}
+	integ, err := readProfile(*integPath)
+	if err != nil {
+		return e.fail(*check, fmt.Errorf("integration profile: %w", err))
+	}
+	m, err := coverage.Merge(unit, integ)
+	if err != nil {
+		return e.fail(*check, err)
+	}
+	var buf strings.Builder
+	if err := m.Write(&buf); err != nil {
+		return e.fail(*check, err)
+	}
+	if err := os.WriteFile(*outFile, []byte(buf.String()), 0o644); err != nil {
+		return e.fail(*check, err)
+	}
+	rows := []string{
+		fmt.Sprintf("go test     %s", unit.Total()),
+		fmt.Sprintf("integration %s (packages linked into tmb and tmb-broker)", integ.Total()),
+		fmt.Sprintf("merged      %s; %d statements covered only by the harness", m.Total(), integ.OnlyIn(unit)),
+	}
+	mp := m.Packages()
+	names := make([]string, 0, len(mp))
+	for p := range mp {
+		names = append(names, p)
+	}
+	sort.Strings(names)
+	for _, p := range names {
+		rows = append(rows, fmt.Sprintf("%-40s %6s of %d", p, mp[p], mp[p].Total))
+	}
+	return e.emit(*check, result.Pass, fmt.Sprintf("go test %s + harness %s = %s", unit.Total(), integ.Total(), m.Total()), rows...)
 }
 
 func short(sha string) string {

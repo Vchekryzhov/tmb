@@ -69,6 +69,9 @@
         "check": "coverage/targets"
       },
       {
+        "check": "coverage/merged"
+      },
+      {
         "check": "security/gosec"
       },
       {
@@ -115,6 +118,9 @@
       },
       {
         "check": "harness/artifact-hygiene"
+      },
+      {
+        "check": "harness/coverage-data"
       },
       {
         "check": "images/build"
@@ -164,6 +170,7 @@
       "harness",
       "images",
       "images-opensbx",
+      "coverage-merged",
       "manifest"
     ]
   },
@@ -237,6 +244,9 @@
         "check": "coverage/targets"
       },
       {
+        "check": "coverage/merged"
+      },
+      {
         "check": "security/gosec"
       },
       {
@@ -283,6 +293,9 @@
       },
       {
         "check": "harness/artifact-hygiene"
+      },
+      {
+        "check": "harness/coverage-data"
       },
       {
         "check": "images/build"
@@ -332,6 +345,7 @@
       "harness",
       "images",
       "images-opensbx",
+      "coverage-merged",
       "manifest"
     ]
   },
@@ -405,6 +419,9 @@
         "check": "coverage/targets"
       },
       {
+        "check": "coverage/merged"
+      },
+      {
         "check": "security/gosec"
       },
       {
@@ -451,6 +468,9 @@
       },
       {
         "check": "harness/artifact-hygiene"
+      },
+      {
+        "check": "harness/coverage-data"
       },
       {
         "check": "images/build"
@@ -500,6 +520,7 @@
       "harness",
       "images",
       "images-opensbx",
+      "coverage-merged",
       "manifest"
     ]
   },
@@ -573,6 +594,9 @@
         "check": "coverage/targets"
       },
       {
+        "check": "coverage/merged"
+      },
+      {
         "check": "security/gosec"
       },
       {
@@ -616,6 +640,9 @@
       },
       {
         "check": "harness/artifact-hygiene"
+      },
+      {
+        "check": "harness/coverage-data"
       },
       {
         "check": "images/build"
@@ -674,6 +701,7 @@
       "harness",
       "images",
       "images-opensbx",
+      "coverage-merged",
       "manifest",
       "nightly"
     ]
@@ -748,6 +776,9 @@
         "check": "coverage/targets"
       },
       {
+        "check": "coverage/merged"
+      },
+      {
         "check": "security/gosec"
       },
       {
@@ -791,6 +822,9 @@
       },
       {
         "check": "harness/artifact-hygiene"
+      },
+      {
+        "check": "harness/coverage-data"
       },
       {
         "check": "images/build"
@@ -849,6 +883,7 @@
       "harness",
       "images",
       "images-opensbx",
+      "coverage-merged",
       "manifest",
       "nightly"
     ]
