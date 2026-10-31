@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"tmb-poc/internal/proto"
@@ -19,6 +20,10 @@ func TestApproveDeniesInvalidRequests(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "file")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "script")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nid\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	link := filepath.Join(dir, "shell-link")
@@ -48,6 +53,7 @@ func TestApproveDeniesInvalidRequests(t *testing.T) {
 		{"missing executable", func(r *proto.Request) { r.Executable = filepath.Join(dir, "none") }, "executable_not_found"},
 		{"directory executable", func(r *proto.Request) { r.Executable = dir }, "executable_not_regular"},
 		{"shell by symlink", func(r *proto.Request) { r.Executable = link }, "shell_policy"},
+		{"script with shebang", func(r *proto.Request) { r.Executable = script }, "executable_script"},
 		{"missing cwd", func(r *proto.Request) { r.Cwd = filepath.Join(dir, "none") }, "cwd_invalid"},
 		{"file cwd", func(r *proto.Request) { r.Cwd = file }, "cwd_invalid"},
 	}
@@ -153,4 +159,156 @@ func jsonBody(r *proto.Request) ([]byte, error) {
 		return nil, err
 	}
 	return []byte(buf.String()[4:]), nil
+}
+
+// scriptDeny reads the first bytes of the pinned file (linux) or of the
+// path (elsewhere): a script is refused, a file that cannot be read is
+// refused with its own code, anything else passes.
+func TestScriptDeny(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		name string
+		body []byte
+		code string
+	}{
+		{"script", []byte("#!/bin/sh\n"), "executable_script"},
+		{"elf", []byte("\x7fELF"), ""},
+		{"empty", nil, ""},
+		{"one byte", []byte("#"), ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path := filepath.Join(dir, strings.ReplaceAll(c.name, " ", "-"))
+			if err := os.WriteFile(path, c.body, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			p := pinnedFor(t, path)
+			if code, _ := p.scriptDeny(); code != c.code {
+				t.Fatalf("scriptDeny = %q, want %q", code, c.code)
+			}
+		})
+	}
+	t.Run("not pinned or missing", func(t *testing.T) {
+		p := &pendingApproval{ExePath: filepath.Join(dir, "none")}
+		if code, _ := p.scriptDeny(); code != "executable_unreadable" {
+			t.Fatalf("scriptDeny = %q, want executable_unreadable", code)
+		}
+	})
+	t.Run("read fails", func(t *testing.T) {
+		f, err := os.Open(".") // a directory: ReadAt fails with EISDIR
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		p := &pendingApproval{ExePath: ".", ExeFile: f}
+		if code, _ := p.scriptDeny(); code != "executable_unreadable" {
+			t.Fatalf("scriptDeny = %q, want executable_unreadable", code)
+		}
+	})
+}
+
+// pinnedFor returns a pending approval for path pinned the way approveStage
+// pins it (an open fd on linux, nothing elsewhere).
+func pinnedFor(t *testing.T, path string) *pendingApproval {
+	t.Helper()
+	req := testReq(t, "pin")
+	req.Executable = path
+	exeReal, cwdReal, dev, ino, deny, detail := newTestBroker(t).validateRequest(req)
+	if deny != "" {
+		t.Fatalf("validate: %s %s", deny, detail)
+	}
+	p := &pendingApproval{ExePath: exeReal}
+	if code, detail := pinApproval(p, exeReal, cwdReal, dev, ino); code != "" {
+		t.Fatalf("pin: %s %s", code, detail)
+	}
+	t.Cleanup(p.closePins)
+	return p
+}
+
+// #68: the approved inode rewritten in place into a script is refused at
+// claim before the token is consumed.
+func TestClaimDeniesExecutableRewrittenToScript(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "tool")
+	if err := os.WriteFile(exe, []byte("\x7fELF not a script"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b := newTestBroker(t)
+	id := UIDRequester(4242, 1)
+	req := testReq(t, "rewritten-to-script")
+	req.Executable, req.Argv = exe, []string{exe}
+	req = approved(t, b, req, id)
+
+	before, _ := os.Stat(exe)
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\nid\n"), 0o600); err != nil { // O_TRUNC: same inode
+		t.Fatal(err)
+	}
+	if after, _ := os.Stat(exe); !os.SameFile(before, after) {
+		t.Fatal("rewrite changed the inode; the test needs the same one")
+	}
+	if got := claimDo(t, b, req, id); got.Type != "denied" || got.Reason != "executable_script" {
+		t.Fatalf("claim = %+v, want denied executable_script", got)
+	}
+	hash := req.Hash()
+	if ok, err := b.claims.ClaimToken(hash, proto.TokenID(hash), id.Key()); err != nil || !ok {
+		t.Fatalf("token after the denied claim: ok=%v err=%v, want still unconsumed", ok, err)
+	}
+}
+
+// The script check reads a reader of its own: closing the pin (a concurrent
+// claim that took the approval) does not cut the read short.
+func TestScriptReaderOutlivesPin(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "script")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p := pinnedFor(t, path)
+	r, release, err := p.exeReader()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.closePins()
+	if code, _ := scriptCode(r, release, nil, path); code != "executable_script" {
+		t.Fatalf("scriptCode after closePins = %q, want executable_script", code)
+	}
+}
+
+// pendingScriptDeny racing takePending+closePins: the pin is duplicated under
+// b.mu and read outside it, so a check either finds the approval and reads
+// it whole or does not find it; it never reads a closed pin.
+func TestPendingScriptDenyRacesTake(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "tool")
+	if err := os.WriteFile(exe, []byte("\x7fELF not a script"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 20; i++ {
+		b := newTestBroker(t)
+		req := testReq(t, fmt.Sprintf("race-%d", i))
+		req.Executable, req.Argv = exe, []string{exe}
+		approved(t, b, req, UIDRequester(4242, 1))
+		hash := req.Hash()
+		var wg sync.WaitGroup
+		codes := make(chan string, 8)
+		for j := 0; j < 8; j++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				code, _ := b.pendingScriptDeny(hash)
+				codes <- code
+			}()
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if p, has := b.takePending(hash); has {
+				p.closePins()
+			}
+		}()
+		wg.Wait()
+		close(codes)
+		for code := range codes {
+			if code != "" {
+				t.Fatalf("round %d: pendingScriptDeny = %q, want \"\"", i, code)
+			}
+		}
+	}
 }

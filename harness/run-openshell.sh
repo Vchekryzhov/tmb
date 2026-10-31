@@ -51,10 +51,11 @@ cd "$(dirname "$0")" || exit 1
 
 # ---------------------------------------------------------------- pins ----
 OPENSHELL_VERSION=0.1.3
-# linux/arm64 manifest digest of ghcr.io/anomalyco/opencode:latest,
-# resolved 2026-10-09 via `docker manifest inspect` (index -> arm64 entry).
-# Keep in sync with harness/images/Dockerfile.opensbx (FROM line).
-OPENCODE_IMAGE_REF=ghcr.io/anomalyco/opencode@sha256:6911572e4a9b3ead5e4086b40e2c98bd82075dae617aff679767f358cf8f374e
+# opencode base image: the digest-pinned FROM line of images/Dockerfile.opensbx
+# is the only source (dependabot bumps it there), so the rig checks the same
+# image the sandbox is built from.
+OPENCODE_IMAGE_REF=$(sed -n 's/^FROM \(ghcr\.io\/anomalyco\/opencode@sha256:[0-9a-f]\{64\}\).*/\1/p' images/Dockerfile.opensbx)
+[ -n "$OPENCODE_IMAGE_REF" ] || { echo "no digest-pinned opencode FROM line in images/Dockerfile.opensbx" >&2; exit 1; }
 
 SERVER_NAME=host.openshell.internal
 TLS_PORT=17600                 # broker TLS listener (published on 0.0.0.0 of the VM)

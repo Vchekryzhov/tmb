@@ -24,6 +24,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"syscall"
@@ -48,6 +49,22 @@ func pinApproval(p *pendingApproval, exeReal, cwdReal string, dev, ino uint64) (
 	p.CwdFile = cf
 	p.CwdDev, p.CwdIno, p.CwdPinned = cdev, cino, true
 	return "", ""
+}
+
+// exeReader returns a close-on-exec duplicate of the pinned exe fd for the
+// script check: it shares the pin's open file (the approved inode) but is
+// closed by release, independently of closePins, so it can be read without
+// holding b.mu. Duplicating does not touch the filesystem.
+func (p *pendingApproval) exeReader() (io.ReaderAt, func(), error) {
+	if p.ExeFile == nil {
+		return nil, nil, os.ErrClosed
+	}
+	fd, _, errno := syscall.Syscall(syscall.SYS_FCNTL, p.ExeFile.Fd(), syscall.F_DUPFD_CLOEXEC, 0)
+	if errno != 0 {
+		return nil, nil, errno
+	}
+	f := os.NewFile(fd, p.ExePath)
+	return f, func() { f.Close() }, nil
 }
 
 // pinExe opens exeReal read-only and fstats the fd to verify it is the file

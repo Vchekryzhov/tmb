@@ -211,7 +211,7 @@ TLS-рукопожатие не прошло: нет сертификата, ч�
 | `argv` | array of string | argv из запроса |
 | `nonce` | string | nonce целиком (до 128 символов; длиннее только у запроса, отклонённого `nonce_invalid`) |
 | `hash` | string | хеш точного запроса |
-| `reason` | string | стабильный код отказа (`shell_policy`, `token_consumed_replay`, `audit_unavailable` и другие) |
+| `reason` | string | стабильный код отказа (`shell_policy`, `executable_script`, `executable_unreadable`, `token_consumed_replay`, `audit_unavailable` и другие) |
 | `detail` | string | пояснение |
 
 ### `queued`

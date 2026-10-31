@@ -404,6 +404,57 @@ func (b *Broker) validateRequest(req *proto.Request) (exeReal, cwdReal string, d
 	return exeReal, cwdReal, dev, ino, "", ""
 }
 
+// scriptDeny refuses a #! script. Exec goes through the pinned O_CLOEXEC fd
+// (/proc/self/fd/N), so the kernel would hand the interpreter a path that is
+// already closed when it opens it. The first bytes are read from the pinned
+// inode (pread at offset 0 on a duplicate of the pin), not from the path, so
+// a swap between the check and the pin cannot slip a script through.
+// Returns ("", "") when the file is not a script.
+func (p *pendingApproval) scriptDeny() (string, string) {
+	r, release, err := p.exeReader()
+	return scriptCode(r, release, err, p.ExePath)
+}
+
+// scriptCode reads the first two bytes from r (an exeReader result) and
+// maps them to a deny code; it releases r.
+func scriptCode(r io.ReaderAt, release func(), err error, path string) (string, string) {
+	if err != nil {
+		return "executable_unreadable", path
+	}
+	defer release()
+	var magic [2]byte
+	n, err := r.ReadAt(magic[:], 0)
+	if err != nil && err != io.EOF {
+		return "executable_unreadable", path
+	}
+	if n == len(magic) && magic == [2]byte{'#', '!'} {
+		return "executable_script", path
+	}
+	return "", ""
+}
+
+// pendingScriptDeny runs the script check on the live pending approval for
+// hash. Under b.mu it only duplicates the pinned fd (a pending approval
+// leaves the map under the lock before its pins are closed, so the pin is
+// still open there); the read itself runs without the lock on the
+// duplicate, which keeps the approved inode open even if a concurrent claim
+// closes the pin meanwhile. A read stuck on a hung filesystem (NFS, FUSE)
+// then blocks only this claim, not every connection, the queue and reload.
+// ("", "") when there is no live approval (the claim then fails
+// no_pending_approval).
+func (b *Broker) pendingScriptDeny(hash string) (string, string) {
+	b.mu.Lock()
+	p, has := b.pending[hash]
+	if !has || time.Now().After(p.Expiry) {
+		b.mu.Unlock()
+		return "", ""
+	}
+	r, release, err := p.exeReader()
+	path := p.ExePath
+	b.mu.Unlock()
+	return scriptCode(r, release, err, path)
+}
+
 // --- approval -------------------------------------------------------------
 
 func (b *Broker) doApprove(req *proto.Request, id RequesterID, conn net.Conn) {
@@ -437,6 +488,11 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 		Requester: id,
 	}
 	if code, detail := pinApproval(pend, exeReal, cwdReal, dev, ino); code != "" {
+		b.deny(req, id, code, detail, conn)
+		return false
+	}
+	if code, detail := pend.scriptDeny(); code != "" {
+		pend.closePins()
 		b.deny(req, id, code, detail, conn)
 		return false
 	}
@@ -617,6 +673,13 @@ func (b *Broker) claimStage(req *proto.Request, id RequesterID, conn net.Conn) {
 	if p, has := b.peekPending(hash); has && !p.Requester.Equal(id) {
 		b.deny(req, id, "requester_mismatch",
 			fmt.Sprintf("approval was granted to requester %s, token not consumed", p.Requester.Key()), conn)
+		return
+	}
+
+	// the approved inode may have been rewritten in place into a script:
+	// refuse before consuming the token
+	if code, detail := b.pendingScriptDeny(hash); code != "" {
+		b.deny(req, id, code, detail+", token not consumed", conn)
 		return
 	}
 
