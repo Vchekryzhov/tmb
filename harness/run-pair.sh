@@ -497,10 +497,18 @@ docker exec "$HOST" cat /tmp/o7-console.log 2>/dev/null | sed 's/^/  | /'
 log "SCENARIO O7-B: openssl s_client WITHOUT a client cert -> TLS alert, handshake failed"
 
 HSF_BEFORE=$(broker_log_count '"event":"tls_handshake_failed"'); HSF_BEFORE=${HSF_BEFORE:-0}
-docker exec "$SBX" openssl s_client -connect "$SERVER_NAME:$TLS_PORT" -CAfile /certs/ca.crt </dev/null \
+# In TLS 1.3 the client finishes its side of the handshake before the server
+# checks the (missing) client cert, so the certificate_required alert arrives
+# only after s_client reports CONNECTED. Without -ign_eof, EOF on stdin races
+# that alert: s_client may close first and exit 0 with no alert in its output
+# (#87). -ign_eof keeps it reading until the server sends the alert and
+# closes; timeout bounds a broker that never closes.
+docker exec "$SBX" timeout 20 openssl s_client -ign_eof -connect "$SERVER_NAME:$TLS_PORT" -CAfile /certs/ca.crt </dev/null \
   >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
 cat "$OUT_FILE" "$ERR_FILE" >"$TD/sclient-o7b.all"
-if [ "$RUNC" -ne 0 ]; then
+if [ "$RUNC" -eq 124 ]; then
+  bad "O7-B: s_client timed out (rc=124): the server never sent an alert or closed"
+elif [ "$RUNC" -ne 0 ]; then
   ok "O7-B: s_client exited non-zero (rc=$RUNC, handshake failed)"
 else
   bad "O7-B: s_client exited 0 despite the failed handshake"
@@ -516,7 +524,13 @@ else
   bad "O7-B: expected 'certificate required' alert text not found"
 fi
 
-HSF_AFTER=$(broker_log_count '"event":"tls_handshake_failed"')
+# The broker writes the event after its side of the handshake fails, which
+# can land just after s_client exits: poll briefly instead of reading once.
+for _ in $(seq 1 50); do
+  HSF_AFTER=$(broker_log_count '"event":"tls_handshake_failed"')
+  [ "${HSF_AFTER:-0}" -gt "$HSF_BEFORE" ] && break
+  sleep 0.1
+done
 if [ "${HSF_AFTER:-0}" -gt "$HSF_BEFORE" ]; then
   ok "O7-B: JSONL tls_handshake_failed logged ($HSF_BEFORE -> $HSF_AFTER)"
   HSF_LINE=$(docker exec "$HOST" grep '"event":"tls_handshake_failed"' /var/log/tmb/broker.log | tail -1)
