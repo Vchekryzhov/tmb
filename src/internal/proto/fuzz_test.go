@@ -2,6 +2,7 @@ package proto
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -121,6 +122,48 @@ func FuzzDecodeRequest(f *testing.F) {
 		}
 		if back.Hash() != h || back.Type != req.Type || back.ClaimToken != req.ClaimToken {
 			t.Fatalf("re-encoded request differs: %+v vs %+v", back, req)
+		}
+	})
+}
+
+// FuzzParseApprovalPayload: any byte string either is refused with no
+// payload, or parses to a payload whose encoding is exactly those bytes, so
+// a signer that shows the parse result shows what it signs.
+func FuzzParseApprovalPayload(f *testing.F) {
+	good, err := samplePayload().Encode()
+	if err != nil {
+		f.Fatal(err)
+	}
+	tricky, err := trickyPayload().Encode()
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(good)
+	f.Add(tricky)
+	f.Add([]byte(PayloadPrefix))
+	f.Add([]byte(PayloadPrefix + "{}"))
+	f.Add(good[len(PayloadPrefix):])
+	for _, v := range invalidCases(f) {
+		raw, _ := base64.StdEncoding.DecodeString(v.Payload)
+		f.Add(raw)
+	}
+	f.Fuzz(func(t *testing.T, raw []byte) {
+		p, err := ParseApprovalPayload(raw)
+		if err != nil {
+			if p != nil {
+				t.Fatalf("error %v returned with a payload", err)
+			}
+			return
+		}
+		again, err := p.Encode()
+		if err != nil {
+			t.Fatalf("parsed payload does not encode: %v", err)
+		}
+		if !bytes.Equal(again, raw) {
+			t.Fatalf("parse/encode changed the bytes:\n%q\n%q", raw, again)
+		}
+		if ShortCode(raw) != ShortCode(again) {
+			t.Fatal("short code is not stable")
 		}
 	})
 }
