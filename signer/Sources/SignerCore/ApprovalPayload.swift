@@ -99,7 +99,7 @@ public struct ApprovalPayload: Sendable {
 
     /// Prefix plus canonical JSON. Used to prove a parse round-trips; the
     /// signer signs the received bytes, never this.
-    public func encoded() throws -> Data {
+    func encoded() throws -> Data {
         try check()
         return Self.prefix + Data(canonicalJSON())
     }

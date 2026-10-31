@@ -2,7 +2,7 @@
 # Build and test the signer package. With Xcode (CI runners) this is plain
 # `swift build` and `swift test`. With only the Command Line Tools, Swift
 # Testing ships outside the default search paths, so the framework and its
-# interop library are added explicitly.
+# interop library are added explicitly. Arguments go to `swift test`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -14,5 +14,5 @@ if [[ "$dev" == */CommandLineTools ]]; then
   extra=(-Xswiftc -F -Xswiftc "$fw" -Xlinker -rpath -Xlinker "$fw" -Xlinker -rpath -Xlinker "$lib")
 fi
 
-swift build "$@"
+swift build
 swift test ${extra[@]+"${extra[@]}"} "$@"
