@@ -3,7 +3,7 @@
 # harness/images/Dockerfile.opensbx) plus the tmb client taken from the tmb
 # package installed in the VM. No key and no certificate is baked in: the
 # sandbox makes its own key with `tmb keygen` (ADR 0005).
-FROM ghcr.io/anomalyco/opencode@sha256:6ebc13097f2381301220abe9d1b2a54f50cd1603a910dc1c66e93d8f2c4e8ebb
+FROM ghcr.io/anomalyco/opencode@sha256:f4cfe16d91efbbfca01a51c44094fba4cf82e15c7fa17de5f11f9059699b1e6e
 # The gateway resolves the workload uid/gid from /etc/passwd and refuses root.
 RUN adduser -D -u 1000 sandbox
 COPY tmb /usr/local/bin/tmb
