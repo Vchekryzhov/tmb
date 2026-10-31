@@ -95,7 +95,7 @@ GAP из [#15](https://github.com/Vchekryzhov/tmb/issues/15) закрыты: SEC
 
 ## Бейджи
 
-Бейджи в README и здесь это shields.io endpoint-файлы из [docs/badges](badges/): CI не имеет write-токенов и внешних сервисов, поэтому значения лежат в репозитории и обновляются коммитом.
+Бейджи в README и здесь это shields.io endpoint-файлы из [docs/badges](badges/): CI не пользуется внешними сервисами, поэтому значения лежат в репозитории и обновляются коммитом.
 
 [![tool-go](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-go.json)](../.go-version)
 [![tool-staticcheck](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-staticcheck.json)](../ci/tools/staticcheck/go.mod)
@@ -110,7 +110,7 @@ GAP из [#15](https://github.com/Vchekryzhov/tmb/issues/15) закрыты: SEC
 [![tool-hadolint](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVchekryzhov%2Ftmb%2Fmain%2Fdocs%2Fbadges%2Ftool-hadolint.json)](../ci/tools.lock)
 
 - `tool-*.json` выводятся из пинов (`.go-version`, `ci/tools.lock`, `ci/tools/*/go.mod`) командой `ci/run.sh badges tools`. `lint/pins` падает, если файлы отстали от пинов: после обновления пина команду нужно повторить и закоммитить результат.
-- `coverage`, `image-vulns`, `gosec`, `govulncheck`, `secrets` и `ci-results` обновляет job `badges`: после зелёного `ci-gate` на push в main она собирает результаты всех jobs, перегенерирует оба набора и коммитит `docs/badges` в main от имени `github-actions[bot]`. Это единственная job с `contents: write`; push токеном GITHUB_TOKEN не запускает workflow, поэтому цикла нет. Бейдж `ci-results` показывает SHA и номер прогона, из которого взяты цифры. Вручную то же самое: `gh run download <run-id> -D out/ci/run && ci/run.sh badges results out/ci/run`.
+- `coverage`, `image-vulns`, `gosec`, `govulncheck`, `secrets` и `ci-results` обновляет job `badges`: после зелёного `ci-gate` на push в main она собирает результаты всех jobs, перегенерирует оба набора и коммитит `docs/badges` в main от имени `github-actions[bot]`. Push идёт fine-grained PAT владельца из секрета `TMB_BADGES_PAT` окружения `badges` (окружение допускает только ветку main, поэтому PR-прогоны токен не видят); роль admin владельца обходит ruleset `main` (см. «Phase C»). `GITHUB_TOKEN` у job только на чтение. Токен попадает в git через credential helper из переменной окружения и не сохраняется в `.git/config`. Push PAT-ом запускает workflow, поэтому коммит помечен `[skip ci]`, а job пропускает свои же коммиты: цикла нет. Без секрета job падает с ошибкой, которая называет секрет: бейджи не устаревают молча, а `ci-gate` от этого не зависит. Бейдж `ci-results` показывает SHA и номер прогона, из которого взяты цифры. Вручную то же самое: `gh run download <run-id> -D out/ci/run && ci/run.sh badges results out/ci/run`.
 
 ## Исключения
 
@@ -126,7 +126,7 @@ Gate отвергает истёкшие и широкие записи (мас�
 
 ## Безопасность CI
 
-- `permissions: {}` на уровне workflow, `contents: read` у jobs; checkout без сохранённых credentials. Секретов и OIDC нет. В ci.yml единственный write-токен у job `badges` (push в main после зелёного gate): она коммитит только `docs/badges`, в PR не запускается и артефактов не загружает. Второй write-токен у job `publish` в release.yml: она запускается только на push тега `v*`, не делает checkout и не запускает код репозитория, а только проверяет SHA256SUMS и создаёт релиз через `gh release create --verify-tag`. `pull_request_target` и `workflow_run` не используются.
+- `permissions: {}` на уровне workflow, `contents: read` у jobs; checkout без сохранённых credentials. OIDC нет. В ci.yml write-токенов нет. Единственный секрет `TMB_BADGES_PAT` (fine-grained PAT владельца, только этот репозиторий, Contents: read and write) лежит в окружении `badges`, доступном только ветке main; его читает job `badges` (push в main после зелёного gate): она коммитит только `docs/badges`, в PR не запускается и артефактов не загружает. Второй write-токен у job `publish` в release.yml: она запускается только на push тега `v*`, не делает checkout и не запускает код репозитория, а только проверяет SHA256SUMS и создаёт релиз через `gh release create --verify-tag`. `pull_request_target` и `workflow_run` не используются.
 - Actions закреплены полным SHA. Инструменты: Go-утилиты собираются из отдельных модулей `ci/tools/<name>` с проверкой go.sum, бинарные проверяются по SHA-256 из [ci/tools.lock](../ci/tools.lock). Базовые образы закреплены digest.
 - Кеши отключены (`cache: false`, свежий кеш Trivy). Данные PR попадают в shell только через переменные окружения.
 - Стенды работают на одноразовых GitHub-hosted VM. Ключи CA и per-run ключи остаются во временных каталогах стенда. Отчёт с PEM-ключом удаляется до загрузки, проверка становится ERROR.
@@ -199,21 +199,49 @@ ci/run.sh vm
 
 ## Phase C
 
-Подготовлены [ruleset](../ci/main-protection/ruleset.json) для main и [скрипт](../ci/main-protection/apply.sh) владельца. Ruleset запрещает удаление ветки и force-push, требует PR и зелёный `ci-gate` от GitHub Actions. Изменения `.github/`, `ci/`, pins и стендовых образов закреплены за владельцем в [CODEOWNERS](../.github/CODEOWNERS).
+Подготовлены два ruleset для main и [скрипт](../ci/main-protection/apply.sh) владельца:
+
+- [main](../ci/main-protection/ruleset.json): PR обязателен, нужен зелёный `ci-gate` от GitHub Actions. Bypass у роли репозитория admin (`RepositoryRole`, `actor_id` 5, `bypass_mode: always`): так job `badges` пушит в main PAT-ом владельца.
+- [main-history](../ci/main-protection/ruleset-history.json): запрет удаления ветки и force-push без bypass, в том числе для admin. Отдельный ruleset нужен, чтобы bypass для бейджей не открывал переписывание истории.
+
+Bypass действует для любого действия владельца, не только для job `badges`: admin видит в GitHub кнопку слияния в обход правил, а `gh pr merge --admin` сливает красный PR. Сессии агента работают с токеном владельца, поэтому запрет `--admin` в [AGENTS.md](../AGENTS.md) остаётся в силе; без `--admin` красный PR не сливается.
+
+Изменения `.github/`, `ci/`, pins и стендовых образов закреплены за владельцем в [CODEOWNERS](../.github/CODEOWNERS).
 
 История доступности:
 
 - 2026-10-12: репозиторий был private, API rulesets отвечал 403 с требованием GitHub Pro.
 - 2026-10-16: репозиторий public, API rulesets отвечает (правил нет).
-- 2026-10-17: в настройках репозитория включены auto-merge и удаление ветки после слияния. Ruleset не включён: job `badges` пушит в `main` через `GITHUB_TOKEN`, а bypass для GitHub Actions в ruleset доступен только репозиториям организаций (API отвечает 422). Перед включением ruleset job `badges` нужно перевести на PAT владельца с bypass для роли admin или на PR. До тех пор зелёный `ci-gate` перед слиянием это правило в [AGENTS.md](../AGENTS.md), а не запрет GitHub.
+- 2026-10-17: в настройках репозитория включены auto-merge и удаление ветки после слияния. Ruleset не включён: job `badges` пушила в `main` через `GITHUB_TOKEN`, а bypass для GitHub Actions в ruleset доступен только репозиториям организаций (API отвечает 422).
+- 2026-10-31: владелец выбрал PAT с bypass для роли admin ([#85](https://github.com/Vchekryzhov/tmb/issues/85)); job `badges` переведена на секрет `TMB_BADGES_PAT` (см. «Бейджи»).
 
-Включение правил остаётся отдельным решением владельца:
+Шаги владельца, в этом порядке (иначе бейджи перестанут обновляться):
+
+1. Создать fine-grained PAT: Resource owner `Vchekryzhov`, Only select repositories → `tmb`, Repository permissions → Contents: Read and write (Metadata: Read добавится сам), срок не больше года.
+2. Создать окружение `badges`, доступное только ветке main, и положить туда секрет:
+
+```bash
+gh api -X PUT repos/Vchekryzhov/tmb/environments/badges -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'
+```
+
+```bash
+gh api -X POST repos/Vchekryzhov/tmb/environments/badges/deployment-branch-policies -f name=main -f type=branch
+```
+
+```bash
+gh secret set TMB_BADGES_PAT --env badges --repo Vchekryzhov/tmb
+```
+
+3. Слить PR с переводом job `badges` и убедиться, что после зелёного push в main job `badges` закоммитила бейджи с `[skip ci]`.
+4. Включить правила:
 
 ```bash
 ci/main-protection/apply.sh apply
 ```
 
-После включения нужно проверить на PR с намеренно падающим тестом, что слияние заблокировано. Пока правила не включены, красный `ci-gate` видим, но технически слияние не запрещает.
+5. Проверить на PR с намеренно падающим тестом, что `gh pr merge` без `--admin` отказывает, и что следующий зелёный push в main снова обновил бейджи (push PAT-ом прошёл через bypass). Ссылки на PR и run записать в [#85](https://github.com/Vchekryzhov/tmb/issues/85).
+
+Когда PAT истечёт, job `badges` упадёт на push с ошибкой авторизации: нужен новый токен в том же секрете. Пока правила не включены, красный `ci-gate` видим, но технически слияние не запрещает.
 
 ## Недоступные сервисы
 
