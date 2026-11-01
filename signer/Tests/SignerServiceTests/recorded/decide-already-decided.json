@@ -1,0 +1,9 @@
+{
+  "args": [
+    "--decide"
+  ],
+  "exit": 1,
+  "stderr": "tmb approve: DENIED: already_decided\n",
+  "stdin": "{\"item_id\":\"abababababababab\",\"item_hash\":\"abababababababababababababababababababababababababababababababab\",\"decision\":\"approve\",\"signature\":\"bm90LWEtcmVhbC1kZXItc2lnbmF0dXJl\",\"approver_key\":\"1111111111111111111111111111111111111111111111111111111111111111\"}",
+  "stdout": "{\"type\":\"denied\",\"reason\":\"already_decided\"}\n"
+}

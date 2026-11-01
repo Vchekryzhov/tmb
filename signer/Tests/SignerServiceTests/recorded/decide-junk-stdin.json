@@ -1,0 +1,9 @@
+{
+  "args": [
+    "--decide"
+  ],
+  "exit": 2,
+  "stderr": "tmb approve: decision on stdin: unknown field type\n",
+  "stdin": "{\"type\":\"decide\"}",
+  "stdout": ""
+}

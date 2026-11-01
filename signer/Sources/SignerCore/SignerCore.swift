@@ -34,6 +34,13 @@ public struct Denial: Equatable, Sendable {
     public let reason: DenyReason
     /// Text the app must show the person (a changed host key).
     public let warning: String?
+
+    public init(itemID: String, itemHash: String, reason: DenyReason, warning: String? = nil) {
+        self.itemID = itemID
+        self.itemHash = itemHash
+        self.reason = reason
+        self.warning = warning
+    }
 }
 
 public struct SignedApproval: Equatable, Sendable {

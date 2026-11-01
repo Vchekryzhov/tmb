@@ -1,0 +1,10 @@
+{
+  "args": [
+    "--list",
+    "--json"
+  ],
+  "exit": 0,
+  "stderr": "",
+  "stdin": "",
+  "stdout": "{\"type\":\"queue\",\"items\":[{\"id\":\"abababababababab\",\"hash\":\"abababababababababababababababababababababababababababababababab\",\"requester\":\"uid:1000\",\"executable\":\"/usr/bin/systemctl\",\"argv\":[\"systemctl\",\"restart\",\"nginx\"],\"cwd\":\"/srv/app\",\"uid\":0,\"env\":[\"LANG=C.UTF-8\",\"PATH=/usr/sbin:/usr/bin\"],\"nonce\":\"0123456789abcdef0123456789abcdef\",\"queued_at\":\"2026-10-31T12:00:00Z\",\"payload\":\"dG1iLWFwcHJvdmFsLXYxAHsiaG9zdF9pZCI6ImJ1aWxkLTAxIiwiaG9zdF9rZXkiOiIwZjBmMGYwZjBmMGYwZjBmMGYwZjBmMGYwZjBmMGYwZjBmMGYwZjBmMGYwZjBmMGYwZjBmMGYwZjBmMGYwZjBmIiwiaXRlbV9pZCI6ImFiYWJhYmFiYWJhYmFiYWIiLCJyZXF1ZXN0X2hhc2giOiJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiIiwiY2hhbGxlbmdlIjoiYzNjM2MzYzNjM2MzYzNjM2MzYzNjM2MzYzNjM2MzYzNjM2MzYzNjM2MzYzNjM2MzYzNjM2MzYzNjM2MzYzNjMyIsInJlcXVlc3RlciI6InVpZDoxMDAwIiwidWlkIjowLCJ1c2VyIjoicm9vdCIsImV4ZWN1dGFibGUiOiIvdXNyL2Jpbi9zeXN0ZW1jdGwiLCJleGVfZGV2IjoyMDQ5LCJleGVfaW5vIjoxMzEwNzcsImFyZ3YiOlsic3lzdGVtY3RsIiwicmVzdGFydCIsIm5naW54Il0sImN3ZCI6Ii9zcnYvYXBwIiwiZW52IjpbIkxBTkc9Qy5VVEYtOCIsIlBBVEg9L3Vzci9zYmluOi91c3IvYmluIl0sIm5vbmNlIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYiLCJxdWV1ZWRfYXQiOjE3OTM1MzQ0MDAwMDAsImRlYWRsaW5lIjoxNzkzNTM0NzAwMDAwLCJ0b2tlbl90dGxfc2Vjb25kcyI6NjB9\",\"short_code\":\"LVSJ-XUSG\",\"host_id\":\"build-01\",\"host_key\":\"0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f\",\"challenge\":\"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\",\"deadline\":\"2026-10-31T12:05:00Z\",\"token_ttl_seconds\":60}]}\n"
+}

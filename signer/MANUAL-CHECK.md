@@ -1,0 +1,100 @@
+# Ручная проверка подписанта
+
+Протокол живой проверки приложения в строке меню ([ADR 0006](../docs/adr/0006-trusted-signer-touch-id.md), [ADR 0007](../docs/adr/0007-signer-key-classes-threshold-host-identity.md), [#110](https://github.com/Vchekryzhov/tmb/issues/110)). Touch ID, Secure Enclave и GUI-сессии нет на раннерах CI, а агент не касается сенсора, поэтому эти пункты выполняет владелец на своём Mac и записывает результат в таблицу в конце. Автоматические тесты (`ci/run.sh signer`) покрывают разбор, показ, решение, транспорт на записанных ответах `tmb approve` и проверки целостности как функции; здесь проверяется то, что видно только вживую.
+
+Системный sudo и PAM подписант не трогает: он не читает и не пишет `/etc/pam.d`, не ставит `pam_tid` и не меняет `sudo_local`. Пункт М0 это проверяет.
+
+## Подготовка
+
+1. Сборка: `signer/Scripts/build-app.sh` (по умолчанию в `signer/.build/app/TMBSigner.app`, подпись ad hoc с hardened runtime). Проверка подписи: `signer/Scripts/check-entitlements.sh signer/.build/app/TMBSigner.app` печатает `OK`.
+2. Скопировать бандл, например в `~/Applications/`, и запустить двойным щелчком. В строке меню появляется `TMB !`: ключа и хостов ещё нет. Файлы приложения лежат в `~/Library/Application Support/TMB Signer/` (`config.json`, `pins.json`, `keys/`), пункт меню Open Config Folder открывает папку.
+3. Ключ: меню Create Key..., имя, например `mac-work`. Создание ключа лист Touch ID не показывает. Приложение копирует в буфер обмена запись для `approver_keys` и показывает её с отпечатком. Ту же запись печатает `TMBSigner.app/Contents/MacOS/TMBSigner --print-key` из Terminal.app.
+4. Linux-хост с установленным пакетом `tmb-broker` и клиентом `tmb`, пользователь одобряющего входит по SSH с Mac ключом без пароля (`ssh -o BatchMode=yes HOST true` проходит), его uid есть в `approver_uids`.
+5. Анроллмент на хосте: добавить запись из шага 3 в `approver_keys` в `/etc/tmb/config.json`, задать `host_id` (например `build-01`), для проверки М6 включить `"require_signed_decision": true`. Перечитать конфиг: `sudo systemctl reload tmb-broker` (SIGHUP). В журнале брокера появляется `reload`, а не `reload_failed`. Записать отпечаток ключа идентичности: `sudo tmb-broker identity` печатает `host_id=... host_key=...`.
+6. Конфиг подписанта `config.json`, затем меню Reload Config:
+
+   ```json
+   {"version":1,"poll_seconds":5,"window_timeout_seconds":120,"sheet_timeout_seconds":30,
+    "hosts":[{"name":"build","ssh":"viktor@build-01","host_id":"build-01"}]}
+   ```
+
+   Необязательные поля хоста: `port`, `tmb` (путь к клиенту на хосте), `socket` (сокет одобряющего, по умолчанию `/run/tmb/approve.sock`). Значок в строке меню становится `TMB`.
+7. Запрос на хосте от разрешённого запросчика, например `tmb exec --root -- /usr/bin/id -u`. Через `poll_seconds` открывается окно подписанта.
+
+## Пункты
+
+### М0. Системный sudo и PAM не тронуты
+
+До установки и после всех пунктов: `shasum -a 256 /etc/pam.d/sudo /etc/pam.d/sudo_local 2>/dev/null` и `ls -le /etc/pam.d`. Суммы и список совпадают. `sudo -k; sudo true` ведёт себя как до установки (пароль или Touch ID, как было настроено).
+
+### М1. Окно показывает всё, лист Touch ID на каждую подпись
+
+1. В окне: короткий код крупно, все поля payload (`host_id`, `host_key`, `item_id`, `request_hash`, `challenge`, `requester`, `uid`, `user`, `executable`, `exe_dev`, `exe_ino`, `cwd`, `nonce`, `queued_at`, `deadline` с UTC, `token_ttl_seconds`), каждый аргумент argv и каждая переменная env отдельной строкой с индексом и длиной. Короткий код совпадает с `short code` в `tmb approve --list` на хосте.
+2. При первом элементе с хоста окно пишет, что ключ идентичности закреплён. Сверить `host_key` в окне с `host_key` из `tmb-broker identity` (шаг 5): совпадают.
+3. Approve with Touch ID: системный лист Touch ID, в тексте `approve XXXX-XXXX on build-01` с тем же кодом и хостом. Касание: команда на хосте выполняется, в Recent меню строка `approve -> decided approve`.
+4. Сразу второй запрос: снова окно и снова лист Touch ID. Без нового касания подписи нет: лист не пропускается ни на втором, ни на последующих элементах.
+5. Два запроса одновременно: окна идут по одному, второе открывается только после ответа на первое.
+
+### М2. Отмена даёт deny
+
+1. В листе Touch ID нажать «Отменить»: окно закрывается, в Recent `deny (cancelled) -> decided deny`, запрос на хосте сразу получает отказ, не дожидаясь `approval_wait_seconds`.
+2. Кнопка Deny в окне и закрытие окна крестиком: так же `deny (cancelled)`, лист не появляется.
+3. Неудачная биометрия (чужой палец до блокировки или отмена после ошибок): `deny (biometryFailed)` или `deny (cancelled)`, не одобрение.
+4. В журнале брокера у этих решений событие `approval` с отказом и пустым `approver_keys`.
+
+### М3. Таймауты дают deny
+
+1. Лист: `"sheet_timeout_seconds": 10`, Reload Config, нажать Approve и не касаться сенсора. Через 10 с лист исчезает, в Recent `deny (timedOut) -> decided deny`.
+2. Окно: `"window_timeout_seconds": 10`, Reload Config, не нажимать ничего. Через 10 с окно закрывается, в Recent `deny (timedOut)`.
+
+### М4. Смена набора отпечатков ломает ключ
+
+Делать на отдельном тестовом ключе: после этого пункта ключ навсегда непригоден.
+
+1. Создать ключ `mac-test`, записать его в `approver_keys` хоста, указать `"key":"mac-test"` в `config.json`, Reload Config, одобрить один запрос: проходит.
+2. Системные настройки, Touch ID и пароль: добавить отпечаток.
+3. Новый запрос, Approve: лист не появляется или подпись не получается, в Recent `deny (keyUnusable)` (или `biometryFailed`), запрос получает отказ.
+4. Удалить добавленный отпечаток и повторить: ключ всё равно непригоден (`biometryCurrentSet` привязан к набору на момент создания).
+5. Убрать `mac-test` из `approver_keys` и из `config.json`, удалить `keys/mac-test.key`.
+
+### М5. Вне GUI-сессии отказ
+
+1. Включить «Удалённый вход» на Mac, зайти на Mac по SSH и запустить `~/Applications/TMBSigner.app/Contents/MacOS/TMBSigner --print-key`. Ожидание: `TMBSigner: refused: not a local graphic login session ...`, код выхода 3, лист Touch ID не появляется ни на Mac, ни где-либо ещё.
+2. То же без `--print-key`: отказ с кодом 3, приложение в строке меню не запускается.
+3. Целостность (агент проверил при сборке, повторить по желанию): скопировать бандл, изменить в копии `Contents/Info.plist` (`plutil -replace CFBundleName -string X`), запустить бинарник копии из Terminal.app. Ожидание: `refused: code integrity check failed`, код 4.
+4. Выключить «Удалённый вход», если он не нужен.
+
+### М6. Сквозной запуск на Linux-хосте с настоящим брокером
+
+1. Шаги 4-7 подготовки выполнены, на хосте `"require_signed_decision": true`.
+2. `tmb exec --root -- /usr/bin/id -u` на хосте, одобрить в окне касанием: команда печатает `0`.
+3. Журнал брокера (`log_path`): событие `queued` и `approval` с тем же `short_code`, что в окне; в `approval` `approver_keys` содержит отпечаток из шага 3 подготовки, `approver_key_names` его имя, есть `payload` и подпись.
+4. Неподписанное одобрение на хосте: новый запрос и `tmb approve --yes ID` под uid одобряющего. Ожидание: отказ `signature_required`, запрос продолжает ждать; затем отказ в окне подписанта снимает его.
+5. Смена ключа идентичности брокера (необязательно, на тестовом хосте): остановить брокер, переместить файл ключа идентичности из `state_dir`, запустить брокер (он создаст новый ключ), сделать запрос. Ожидание: окно не открывается, подписант показывает предупреждение о смене ключа хоста и отправляет `deny`; закрепление в `pins.json` не меняется. Возврат: Pinned Hosts, Forget, затем сверить новый `host_key` с `tmb-broker identity` при следующем первом показе.
+
+## Результаты
+
+Заполняет владелец. Результат: PASS, FAIL или «не проверено» с причиной.
+
+| № | Проверка | Ожидание | Результат | Дата, macOS, коммит | Заметки |
+|---|---|---|---|---|---|
+| М0 | sudo и PAM | суммы и список `/etc/pam.d` не изменились | | | |
+| М1.1 | окно | все поля payload, argv и env построчно, код совпадает с `tmb approve --list` | | | |
+| М1.2 | первый хост | предупреждение о закреплении, `host_key` равен `tmb-broker identity` | | | |
+| М1.3 | лист | код и хост в листе равны окну, касание даёт `decided approve` | | | |
+| М1.4 | лист на каждую подпись | второй элемент снова требует касания | | | |
+| М1.5 | по одному | одновременные элементы показываются по очереди | | | |
+| М2.1 | отмена листа | `deny (cancelled)`, отказ сразу | | | |
+| М2.2 | Deny и закрытие | `deny (cancelled)` без листа | | | |
+| М2.3 | ошибка биометрии | `deny`, не одобрение | | | |
+| М2.4 | журнал отказа | `approval` с отказом, пустой `approver_keys` | | | |
+| М3.1 | таймаут листа | `deny (timedOut)` через `sheet_timeout_seconds` | | | |
+| М3.2 | таймаут окна | `deny (timedOut)` через `window_timeout_seconds` | | | |
+| М4 | смена отпечатков | `deny (keyUnusable)`, ключ не оживает после возврата набора | | | |
+| М5.1 | по SSH | `refused: not a local graphic login session`, код 3, листа нет | | | |
+| М5.2 | запуск по SSH без аргументов | отказ, код 3 | | | |
+| М5.3 | изменённый бандл | `refused: code integrity check failed`, код 4 | PASS (агент, ad hoc сборка, CLT Swift 6.3.2) | 2026-11-01, macOS 26.5.2 | изменён `Info.plist` копии, `OSStatus -67030` |
+| М6.2 | сквозной | команда выполнилась после касания | | | |
+| М6.3 | журнал | `short_code`, отпечаток и имя ключа, подпись в `approval` | | | |
+| М6.4 | `require_signed_decision` | `tmb approve --yes` отклонён `signature_required` | | | |
+| М6.5 | смена ключа хоста | предупреждение и `deny`, закрепление не изменилось | | | |

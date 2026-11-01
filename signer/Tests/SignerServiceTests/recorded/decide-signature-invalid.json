@@ -1,0 +1,9 @@
+{
+  "args": [
+    "--decide"
+  ],
+  "exit": 125,
+  "stderr": "tmb approve: DENIED: signature_invalid\n",
+  "stdin": "{\"item_id\":\"abababababababab\",\"item_hash\":\"abababababababababababababababababababababababababababababababab\",\"decision\":\"approve\",\"signature\":\"bm90LWEtcmVhbC1kZXItc2lnbmF0dXJl\",\"approver_key\":\"1111111111111111111111111111111111111111111111111111111111111111\"}",
+  "stdout": "{\"type\":\"denied\",\"reason\":\"signature_invalid\"}\n"
+}

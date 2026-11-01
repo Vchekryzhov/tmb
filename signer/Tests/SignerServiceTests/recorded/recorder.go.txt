@@ -1,0 +1,96 @@
+// Recorder for the files in this directory, kept as text so it is neither
+// built nor tested by default. It runs the real `tmb approve` code
+// (cmdApprover) against the fake approver socket of approve_test.go, with
+// queue items built from the shared payload vectors, and stores args,
+// stdin, exit code, stdout and stderr. To regenerate the recordings:
+//
+//	cp signer/Tests/SignerServiceTests/recorded/recorder.go.txt src/cmd/tmb/zz_record_test.go
+//	cd src && TMB_RECORD_DIR=$PWD/../signer/Tests/SignerServiceTests/recorded go test ./cmd/tmb -run TestZZRecordForSigner -count=1
+//	rm src/cmd/tmb/zz_record_test.go
+package main
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"tmb-poc/internal/proto"
+)
+
+// Temporary recorder for signer/Tests/SignerAppTests/recorded (#110).
+func TestZZRecordForSigner(t *testing.T) {
+	out := os.Getenv("TMB_RECORD_DIR")
+	if out == "" {
+		t.Skip()
+	}
+	type fieldsT = struct {
+		HostID      string   `json:"host_id"`
+		HostKey     string   `json:"host_key"`
+		ItemID      string   `json:"item_id"`
+		RequestHash string   `json:"request_hash"`
+		Challenge   string   `json:"challenge"`
+		Requester   string   `json:"requester"`
+		UID         int      `json:"uid"`
+		Executable  string   `json:"executable"`
+		Cwd         string   `json:"cwd"`
+		Nonce       string   `json:"nonce"`
+		Argv        []string `json:"argv"`
+		Env         []string `json:"env"`
+	}
+	var vec struct {
+		Valid []struct {
+			Payload string  `json:"payload"`
+			Short   string  `json:"short_code"`
+			Fields  fieldsT `json:"fields"`
+		} `json:"valid"`
+	}
+	raw, _ := os.ReadFile("../../../signer/Tests/vectors/approval-v1.json")
+	if err := json.Unmarshal(raw, &vec); err != nil {
+		t.Fatal(err)
+	}
+	item := func(i int) proto.QueueItem {
+		v := vec.Valid[i]
+		f := v.Fields
+		return proto.QueueItem{ID: f.ItemID, Hash: f.RequestHash, Requester: f.Requester, Executable: f.Executable,
+			Argv: f.Argv, Cwd: f.Cwd, UID: f.UID, Env: f.Env, Nonce: f.Nonce, QueuedAt: "2026-10-31T12:00:00Z",
+			Payload: v.Payload, ShortCode: v.Short, HostID: f.HostID, HostKey: f.HostKey, Challenge: f.Challenge,
+			Deadline: "2026-10-31T12:05:00Z", TokenTTLSeconds: 60}
+	}
+	save := func(name, stdin string, args []string, code int, stdout, stderr string) {
+		b, _ := json.MarshalIndent(map[string]any{"args": args, "stdin": stdin, "exit": code, "stdout": stdout, "stderr": stderr}, "", "  ")
+		if err := os.WriteFile(filepath.Join(out, name+".json"), append(b, '\n'), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list := func(name string, f *fakeApprover) {
+		c, o, e := runApprove(t, "", "--list", "--json", "--socket", f.path)
+		save(name, "", []string{"--list", "--json"}, c, o, e)
+	}
+	list("list-empty", startFakeApprover(t))
+	list("list-sample", startFakeApprover(t, item(0)))
+	list("list-tricky", startFakeApprover(t, item(1)))
+
+	decide := func(name string, f *fakeApprover, in string) {
+		c, o, e := runApprove(t, in, "--decide", "--socket", f.path)
+		save(name, in, []string{"--decide"}, c, o, e)
+	}
+	it := item(0)
+	sig := base64.StdEncoding.EncodeToString([]byte("not-a-real-der-signature"))
+	key := "1111111111111111111111111111111111111111111111111111111111111111"
+	approve := `{"item_id":"` + it.ID + `","item_hash":"` + it.Hash + `","decision":"approve","signature":"` + sig + `","approver_key":"` + key + `"}`
+	deny := `{"item_id":"` + it.ID + `","item_hash":"` + it.Hash + `","decision":"deny"}`
+	f := startFakeApprover(t, it)
+	decide("decide-approve-decided", f, approve)
+	decide("decide-already-decided", f, approve)
+	decide("decide-deny-decided", startFakeApprover(t, it), deny)
+	g := startFakeApprover(t, it)
+	g.answer = &proto.Frame{Type: "denied", Reason: "signature_invalid"}
+	decide("decide-signature-invalid", g, approve)
+	h := startFakeApprover(t, it)
+	h.answer = &proto.Frame{Type: "recorded", Detail: "1 of 2"}
+	decide("decide-recorded", h, approve)
+	decide("decide-junk-stdin", startFakeApprover(t, it), `{"type":"decide"}`)
+	decide("decide-no-such-item", startFakeApprover(t), deny)
+}
