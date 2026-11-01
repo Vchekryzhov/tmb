@@ -77,14 +77,24 @@ public struct ProcessRunner: CommandRunner {
         p.terminationHandler = { _ in done.signal() }
         do { try p.run() } catch { throw CommandError.failed("cannot start \(executable): \(error.localizedDescription)") }
 
+        // The reads and the stdin write block, so each gets its own thread.
+        // On DispatchQueue.global() they waited for a pool thread, and on a
+        // loaded machine (parallel tests on a few cores, readers left behind
+        // by a descendant) the pool was full: the child never got its stdin
+        // and its output was never read before the drain deadline.
         let so = Sink(limit: maxOutput), se = Sink(limit: maxOutput)
         let readers = DispatchGroup()
         for (sink, pipe) in [(so, out), (se, err)] {
-            DispatchQueue.global().async(group: readers) { sink.drain(pipe.fileHandleForReading) }
+            let h = pipe.fileHandleForReading
+            readers.enter()
+            Thread.detachNewThread {
+                sink.drain(h)
+                readers.leave()
+            }
         }
         if let stdin {
             let h = inp.fileHandleForWriting
-            DispatchQueue.global().async {
+            Thread.detachNewThread {
                 try? h.write(contentsOf: stdin)
                 try? h.close()
             }

@@ -68,10 +68,24 @@ import Testing
     }
 
     @Test func aBodyThatOutlivesTheDeadlineIsCancelledOnce() throws {
+        // the body runs until it is cancelled, as a Touch ID sheet does: no
+        // race between a sleep and the timer
         let f = Flag()
-        let r = try SheetDeadline.run(after: 0.05, cancel: { f.hit() }) { () -> Int in
-            Thread.sleep(forTimeInterval: 0.3)
-            return 7
+        let cancelled = DispatchSemaphore(value: 0)
+        let r = try SheetDeadline.run(after: 0.05, cancel: { f.hit(); cancelled.signal() }) { () -> Int in
+            cancelled.wait(timeout: .now() + 30) == .success ? 7 : 0
+        }
+        #expect(r == 7)
+        #expect(f.count == 1)
+    }
+
+    @Test func theDeadlineFiresWhileTheDispatchPoolIsBusy() throws {
+        let f = Flag()
+        let cancelled = DispatchSemaphore(value: 0)
+        let r = try withSaturatedGlobalQueue {
+            try SheetDeadline.run(after: 0.05, cancel: { f.hit(); cancelled.signal() }) { () -> Int in
+                cancelled.wait(timeout: .now() + 5) == .success ? 7 : 0
+            }
         }
         #expect(r == 7)
         #expect(f.count == 1)

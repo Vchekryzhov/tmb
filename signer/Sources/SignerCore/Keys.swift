@@ -245,11 +245,15 @@ private final class ContextBox: @unchecked Sendable {
 /// `seconds` (nil: never). The signer uses it to cancel a Touch ID sheet
 /// nobody answers; the cancelled evaluation then fails inside `body`.
 public enum SheetDeadline {
+    /// A queue of its own: a private serial queue gets a thread even when
+    /// the global pool is busy, so the cancel is not late on a loaded Mac.
+    static let queue = DispatchQueue(label: "tmb.signer.sheet-deadline")
+
     public static func run<T>(after seconds: TimeInterval?, cancel: @escaping @Sendable () -> Void,
                               _ body: () throws -> T) throws -> T {
         guard let seconds else { return try body() }
         let timer = DispatchWorkItem(block: cancel)
-        DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: timer)
+        queue.asyncAfter(deadline: .now() + seconds, execute: timer)
         defer { timer.cancel() }
         return try body()
     }

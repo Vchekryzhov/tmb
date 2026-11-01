@@ -11,6 +11,16 @@ import Testing
         #expect(String(decoding: r.stderr, as: UTF8.self) == "err\n")
     }
 
+    @Test func aBusyDispatchPoolDoesNotStallTheRun() throws {
+        // CI runs suites in parallel on few cores: the global dispatch pool
+        // can be full of other work. The runner's own blocking reads and
+        // writes must not wait for a pool thread.
+        try withSaturatedGlobalQueue {
+            let r = try ProcessRunner(drainTimeout: 5).run("/bin/sh", ["-c", "cat; echo err >&2"], stdin: Data("hi\n".utf8))
+            #expect(r.status == 0 && r.stdout == Data("hi\n".utf8) && r.stderr == Data("err\n".utf8))
+        }
+    }
+
     @Test func noStdinIsEndOfFile() throws {
         let r = try ProcessRunner().run("/bin/cat", [], stdin: nil)
         #expect(r.status == 0 && r.stdout.isEmpty)
