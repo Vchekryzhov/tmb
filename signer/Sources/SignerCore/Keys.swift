@@ -175,6 +175,9 @@ public final class SecureEnclaveSigner: PayloadSigner {
 
     private let blob: Data
     private let spki: Data
+    /// When set, the Touch ID sheet is cancelled after this many seconds
+    /// (`LAContext.invalidate()` from a timer, so `appCancel`, a timeout).
+    public let sheetTimeout: TimeInterval?
 
     /// Creates a new key and writes its blob to `url` (refusing to overwrite).
     /// Creation does not prompt; the first signature does.
@@ -193,15 +196,16 @@ public final class SecureEnclaveSigner: PayloadSigner {
 
     /// Loads the key blob from an owner-only file. Reading the public key
     /// needs no authentication.
-    public convenience init(contentsOf url: URL) throws {
+    public convenience init(contentsOf url: URL, sheetTimeout: TimeInterval? = nil) throws {
         let blob = try PrivateFile.read(url)
         let key = try SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: blob)
-        self.init(blob: blob, spki: key.publicKey.derRepresentation)
+        self.init(blob: blob, spki: key.publicKey.derRepresentation, sheetTimeout: sheetTimeout)
     }
 
-    private init(blob: Data, spki: Data) {
+    private init(blob: Data, spki: Data, sheetTimeout: TimeInterval? = nil) {
         self.blob = blob
         self.spki = spki
+        self.sheetTimeout = sheetTimeout
     }
 
     public func publicKeySPKI() throws -> Data { spki }
@@ -211,11 +215,35 @@ public final class SecureEnclaveSigner: PayloadSigner {
         context.localizedReason = prompt.reason
         context.interactionNotAllowed = false
         defer { context.invalidate() }
+        let box = ContextBox(context)
         do {
-            let key = try SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: blob, authenticationContext: context)
-            return try key.signature(for: payload).derRepresentation
+            return try SheetDeadline.run(after: sheetTimeout, cancel: { box.context.invalidate() }) {
+                let key = try SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: blob, authenticationContext: context)
+                return try key.signature(for: payload).derRepresentation
+            }
         } catch {
             throw SigningError.classify(error)
         }
+    }
+}
+
+/// LAContext is documented thread-safe for `invalidate()`; the box only
+/// carries it to the timer.
+private final class ContextBox: @unchecked Sendable {
+    let context: LAContext
+    init(_ c: LAContext) { context = c }
+}
+
+/// Runs `body` and calls `cancel` once if it is still running after
+/// `seconds` (nil: never). The signer uses it to cancel a Touch ID sheet
+/// nobody answers; the cancelled evaluation then fails inside `body`.
+public enum SheetDeadline {
+    public static func run<T>(after seconds: TimeInterval?, cancel: @escaping @Sendable () -> Void,
+                              _ body: () throws -> T) throws -> T {
+        guard let seconds else { return try body() }
+        let timer = DispatchWorkItem(block: cancel)
+        DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: timer)
+        defer { timer.cancel() }
+        return try body()
     }
 }

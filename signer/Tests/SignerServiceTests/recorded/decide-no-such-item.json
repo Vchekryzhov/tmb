@@ -1,0 +1,9 @@
+{
+  "args": [
+    "--decide"
+  ],
+  "exit": 1,
+  "stderr": "tmb approve: DENIED: no_such_item\n",
+  "stdin": "{\"item_id\":\"abababababababab\",\"item_hash\":\"abababababababababababababababababababababababababababababababab\",\"decision\":\"deny\"}",
+  "stdout": "{\"type\":\"denied\",\"reason\":\"no_such_item\"}\n"
+}

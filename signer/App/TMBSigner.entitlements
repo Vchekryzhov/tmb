@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The signer app runs with the hardened runtime and no exceptions
+     (ADR 0007 R5). The Secure Enclave key is a blob in a file, so no
+     keychain access group is needed. ci/run.sh signer checks this file and
+     the signed bundle with signer/Scripts/check-entitlements.sh. -->
+<plist version="1.0">
+<dict/>
+</plist>

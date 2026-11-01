@@ -101,8 +101,9 @@ func TestSignerIsRequiredOnPullRequest(t *testing.T) {
 		if !ok || bt.AllowNotApplicable {
 			t.Errorf("%s: signer/build-test must be required without NOT_APPLICABLE, got %+v (present %v)", event, bt, ok)
 		}
-		if _, ok := checks["signer/entitlements"]; !ok {
-			t.Errorf("%s: signer/entitlements is not required", event)
+		// the app bundle exists since #110, so the entitlements check always runs on macOS
+		if en, ok := checks["signer/entitlements"]; !ok || en.AllowNotApplicable {
+			t.Errorf("%s: signer/entitlements must be required without NOT_APPLICABLE, got %+v (present %v)", event, en, ok)
 		}
 	}
 }

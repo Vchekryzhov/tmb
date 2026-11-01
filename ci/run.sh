@@ -759,14 +759,21 @@ cmd_signer() {
   "$ROOT/signer/Scripts/check-entitlements.sh" --self-test >"$S/entitlements.log" 2>&1
   rc=$?
   if [ $rc -ne 0 ]; then result signer/entitlements ERROR "checker self-test failed (rc=$rc)" "$S/entitlements.log"; return; fi
-  # Targets: every tracked entitlements file of the signer. The app (#110)
-  # is picked up through its entitlements file and adds its signed bundle here.
+  # Targets: every tracked entitlements file of the signer and the app
+  # bundle, built and signed (ad hoc, hardened runtime) by build-app.sh.
   local targets=() l
   while IFS= read -r l; do targets+=("$ROOT/$l"); done < <(cd "$ROOT" && git ls-files 'signer/*.entitlements')
   if [ ${#targets[@]} -eq 0 ]; then
-    result signer/entitlements NOT_APPLICABLE "checker self-test passed; signer/ has no entitlements file or app bundle yet (the app arrives in #110)" "$S/entitlements.log"
+    result signer/entitlements FAIL "signer/ has no tracked entitlements file (signer/App/TMBSigner.entitlements)" "$S/entitlements.log"
     return
   fi
+  log "app bundle (signer/Scripts/build-app.sh)"
+  if ! "$ROOT/signer/Scripts/build-app.sh" "$S/app" >>"$S/entitlements.log" 2>&1; then
+    tail -n 40 "$S/entitlements.log" >"$S/entitlements.tail"
+    result signer/entitlements FAIL "building or signing the app bundle failed" "$S/entitlements.tail"
+    return
+  fi
+  targets+=("$S/app/TMBSigner.app")
   "$ROOT/signer/Scripts/check-entitlements.sh" "${targets[@]}" >>"$S/entitlements.log" 2>&1
   by_rc signer/entitlements $? "$S/entitlements.log" "1"
 }

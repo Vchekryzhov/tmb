@@ -1,0 +1,10 @@
+{
+  "args": [
+    "--list",
+    "--json"
+  ],
+  "exit": 0,
+  "stderr": "",
+  "stdin": "",
+  "stdout": "{\"type\":\"queue\",\"items\":[]}\n"
+}
