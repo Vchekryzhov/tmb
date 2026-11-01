@@ -141,6 +141,19 @@ import Testing
         #expect(w.poll(host).show.count == 1)
     }
 
+    @Test func anotherPayloadVersionIsReportedOnceAndNotAnswered() throws {
+        let v2 = Data("tmb-approval-v2\u{0}{}".utf8).base64EncodedString()
+        let out = #"{"type":"queue","items":[{"id":"abababababababab","hash":"\#(itemHash)","payload":"\#(v2)"}]}"#
+        let list = CommandResult(status: 0, stdout: Data(out.utf8), stderr: Data())
+        let r = ScriptedRunner([.success(list), .success(list)])
+        let w = workflow(r)
+        let rep = w.poll(host)
+        #expect(rep.show.isEmpty && rep.denied.isEmpty)
+        #expect(rep.skipped.count == 1 && rep.skipped[0].contains("tmb-approval-v2"))
+        #expect(w.poll(host).skipped.isEmpty)
+        #expect(r.calls.count == 2) // two listings, no decide
+    }
+
     @Test func aProtocolErrorDoesNotBringTheItemBackEveryPoll() throws {
         // the client refused our message (exit 2) or answered with something
         // that is not its machine output: retrying would only ask for

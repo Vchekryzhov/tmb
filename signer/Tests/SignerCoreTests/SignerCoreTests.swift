@@ -120,7 +120,7 @@ import Testing
 
     @Test func invalidPayloadsDeny() throws {
         let v = try Vectors.load()
-        for c in v.invalid {
+        for c in v.invalid where c.name != "other version prefix" {
             let e = QueueEntry(id: entry.id, hash: entry.hash, payload: c.payload)
             guard case .deny(let d) = core(SoftwareSigner()).review(e), case .invalidPayload = d.reason else {
                 Issue.record("\(c.name) not denied"); continue
@@ -129,6 +129,21 @@ import Testing
         }
         let notBase64 = QueueEntry(id: entry.id, hash: entry.hash, payload: "%%%")
         guard case .deny = core(SoftwareSigner()).review(notBase64) else { Issue.record("base64"); return }
+    }
+
+    @Test func anotherPayloadVersionIsSkippedNotDenied() throws {
+        // a broker newer than this signer: not an undisplayable payload but
+        // a version this signer does not speak; answering deny would make one
+        // stale signer refuse every request
+        let v = try Vectors.load()
+        let c = try #require(v.invalid.first { $0.name == "other version prefix" })
+        let e = QueueEntry(id: entry.id, hash: entry.hash, payload: c.payload)
+        guard case .skip(let note) = core(SoftwareSigner()).review(e) else { Issue.record("not skipped"); return }
+        #expect(note.contains("tmb-approval-v2"))
+        for bad in ["tmb-approval-v\u{0}{}", "tmb-approval-vx\u{0}{}", "tmb-approval-v2{}", "tmb-approval-v1\u{0}[]"] {
+            let e = QueueEntry(id: entry.id, hash: entry.hash, payload: Data(bad.utf8).base64EncodedString())
+            guard case .deny = core(SoftwareSigner()).review(e) else { Issue.record("\(bad) not denied"); continue }
+        }
     }
 
     @Test func aPayloadForAnotherQueueItemDenies() throws {

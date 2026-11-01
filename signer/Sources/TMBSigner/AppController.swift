@@ -81,6 +81,7 @@ import SignerService
         for (host, r) in reports {
             if let e = r.error { note("\(host.name): \(e)") }
             if !r.unsigned.isEmpty { note("\(host.name): \(r.unsigned.count) item(s) without payload, not answered") }
+            for s in r.skipped { note("\(host.name): \(s)") }
             for d in r.denied {
                 if case .deny(let x) = d.decision {
                     note("\(host.name): denied \(x.itemID) before showing: \(x.reason) -> \(describe(d.outcome))")

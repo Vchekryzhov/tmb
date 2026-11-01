@@ -24,6 +24,9 @@ public struct PollReport: Sendable {
     public var denied: [SentDecision] = []
     /// Ids of items without a payload (broker without signer support).
     public var unsigned: [String] = []
+    /// Items not answered because their payload is another format version,
+    /// one note each, reported once while the host lists the item.
+    public var skipped: [String] = []
     public var error: TransportError?
 }
 
@@ -80,6 +83,9 @@ public final class SignerWorkflow: @unchecked Sendable {
             switch core.review(e) {
             case .show(let p): rep.show.append(ShownItem(id: k, host: host, approval: p))
             case .deny(let d): rep.denied.append(send(host, .deny(d), key: k))
+            case .skip(let note):
+                rep.skipped.append(note)
+                lock.withLock { open.remove(k); answered.insert(k) }
             }
         }
         return rep
