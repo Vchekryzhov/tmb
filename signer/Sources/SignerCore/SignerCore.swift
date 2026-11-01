@@ -14,7 +14,7 @@ public struct QueueEntry: Equatable, Sendable {
     }
 }
 
-/// Why the signer denies (ADR 0006 В7). Every one is an unsigned `deny`.
+/// Why the signer denies (ADR 0006 V7). Every one is an unsigned `deny`.
 public enum DenyReason: Equatable, Sendable {
     case invalidPayload(String)
     case undisplayable(field: String)
@@ -104,6 +104,9 @@ public struct PendingApproval: Sendable {
 public enum Review: Sendable {
     case show(PendingApproval)
     case deny(Denial)
+    /// Not answered at all: the payload is another version of the approval
+    /// format, meant for a newer signer. The note says which.
+    case skip(String)
 }
 
 /// What the person did in the window.
@@ -125,7 +128,7 @@ public struct SignerCore: Sendable {
     let preSignCheck: @Sendable () -> SigningError?
 
     /// `preSignCheck` runs right before each signature: the app passes its
-    /// `SecCodeCheckValidity` and GUI-session checks (ADR 0007 Р5); a
+    /// `SecCodeCheckValidity` and GUI-session checks (ADR 0007 R5); a
     /// non-nil result denies without touching the key.
     public init(signer: any PayloadSigner, hosts: HostTrust, limits: DisplayLimits = .standard,
                 preSignCheck: @escaping @Sendable () -> SigningError? = { nil }) {
@@ -140,6 +143,11 @@ public struct SignerCore: Sendable {
             .deny(Denial(itemID: e.id, itemHash: e.hash, reason: r, warning: warning))
         }
         guard let raw = Data(base64Encoded: e.payload) else { return deny(.invalidPayload("payload is not base64")) }
+        if let other = ApprovalPayload.otherVersion(raw) {
+            // a version mismatch is not an undisplayable payload (ADR 0006
+            // V7): denying it would make a stale signer refuse every request
+            return .skip("item \(DisplayText(e.id).shown): payload format \(other), this signer speaks tmb-approval-v1; not answered")
+        }
         let p: ApprovalPayload
         do { p = try ApprovalPayload.parse(raw) } catch { return deny(.invalidPayload(String(describing: error))) }
         guard Array(p.itemID.utf8) == Array(e.id.utf8), Array(p.requestHash.utf8) == Array(e.hash.utf8) else {

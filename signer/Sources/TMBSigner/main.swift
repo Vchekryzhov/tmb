@@ -3,7 +3,7 @@ import Foundation
 import SignerCore
 import SignerService
 
-// The trusted signer menu bar app (ADR 0006, ADR 0007 Р5). It refuses to
+// The trusted signer menu bar app (ADR 0006, ADR 0007 R5). It refuses to
 // start outside the person's local graphic session and when its own code
 // signature is not intact; both checks run again before every signature.
 
@@ -12,6 +12,7 @@ func refuse(_ what: String, _ code: Int32) -> Never {
     exit(code)
 }
 
+BrokenPipe.ignore()
 if let e = GUISession.check() {
     refuse("not a local graphic login session (\(e)); the signer runs only in the Mac's own GUI session", 3)
 }

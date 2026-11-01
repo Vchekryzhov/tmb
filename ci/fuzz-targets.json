@@ -12,6 +12,10 @@
     {
       "package": "tmb-poc/internal/proto",
       "name": "FuzzParseApprovalPayload"
+    },
+    {
+      "package": "tmb-poc/cmd/tmb",
+      "name": "FuzzReadDecision"
     }
   ]
 }

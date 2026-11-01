@@ -8,7 +8,7 @@ public struct PayloadError: Error, Equatable, CustomStringConvertible {
     init(_ d: String) { description = "approval payload: " + d }
 }
 
-/// The approval payload (ADR 0006, В12): the exact bytes a broker builds per
+/// The approval payload (ADR 0006, V12): the exact bytes a broker builds per
 /// queue item and a signer shows and signs. The Go side is
 /// `src/internal/proto/payload.go`; both follow the same canonical form and
 /// field rules and are tested against signer/Tests/vectors/approval-v1.json.
@@ -47,6 +47,20 @@ public struct ApprovalPayload: Sendable {
         "uid", "user", "executable", "exe_dev", "exe_ino", "argv", "cwd", "env",
         "nonce", "queued_at", "deadline", "token_ttl_seconds",
     ]
+
+    /// The format name of payload bytes that carry another version of the
+    /// approval format (`tmb-approval-v<digits>` then NUL, not v1), nil
+    /// otherwise. Such bytes are not undisplayable but meant for a newer
+    /// signer; the core skips them instead of denying.
+    public static func otherVersion(_ raw: Data) -> String? {
+        let bytes = [UInt8](raw)
+        let stem = [UInt8]("tmb-approval-v".utf8)
+        guard bytes.starts(with: stem), !bytes.starts(with: [UInt8](prefix)) else { return nil }
+        var i = stem.count
+        while i < bytes.count, i < stem.count + 9, (0x30...0x39).contains(bytes[i]) { i += 1 }
+        guard i > stem.count, i < bytes.count, bytes[i] == 0 else { return nil }
+        return String(decoding: bytes[..<i], as: UTF8.self)
+    }
 
     /// Parses payload bytes strictly: the prefix, one JSON object with
     /// exactly the known fields, the field rules, and re-encoding must give

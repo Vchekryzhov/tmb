@@ -51,14 +51,14 @@ type Config struct {
 	// public keys whose signature over a payload counts as a decision; with
 	// require_signed_decision an unsigned approve is refused.
 	// required_signatures (default 1) is how many signatures by different
-	// keys approve an item (ADR 0007, Р2). All four reload on SIGHUP.
+	// keys approve an item (ADR 0007, R2). All four reload on SIGHUP.
 	HostID                string        `json:"host_id"`
 	ApproverKeys          []ApproverKey `json:"approver_keys"`
 	RequireSignedDecision bool          `json:"require_signed_decision"`
 	RequiredSignatures    int           `json:"required_signatures"`
 }
 
-// ApproverKey is one approver_keys entry (ADR 0007, Р1): a name for the
+// ApproverKey is one approver_keys entry (ADR 0007, R1): a name for the
 // journal, the key class and the base64 DER SubjectPublicKeyInfo of an
 // ECDSA P-256 key. A signed decide names the key by its fingerprint
 // (SHA-256 of that SPKI, ADR 0005).
@@ -68,7 +68,7 @@ type ApproverKey struct {
 	PublicKey string `json:"public_key"`
 }
 
-// Approver key classes (ADR 0007, Р1). Only mac-se is implemented; ios-se
+// Approver key classes (ADR 0007, R1). Only mac-se is implemented; ios-se
 // and u2f are reserved, and a config that lists them is refused.
 const (
 	KeyClassMacSE = "mac-se"
@@ -83,7 +83,8 @@ type approverKey struct {
 }
 
 // parseApproverKeys checks approver_keys and indexes them by fingerprint:
-// every class is implemented, every name and every key appears once.
+// only the implemented class (mac-se) is accepted, a reserved or unknown
+// class is an error, and every name and every key appears once.
 func parseApproverKeys(entries []ApproverKey) (map[string]approverKey, error) {
 	out := map[string]approverKey{}
 	names := map[string]bool{}
@@ -111,7 +112,25 @@ func parseApproverKeys(entries []ApproverKey) (map[string]approverKey, error) {
 	return out, nil
 }
 
-// checkThreshold applies the ADR 0007 Р2 rules to required_signatures
+// defaultRequiredSignatures is required_signatures when the config leaves
+// it out.
+const defaultRequiredSignatures = 1
+
+// hostname is os.Hostname; tests replace it.
+var hostname = os.Hostname
+
+// defaultHostID is host_id when the config leaves it out: the host name. A
+// host name that cannot be read is an error (the broker does not start, a
+// reload fails), never an empty host_id.
+func defaultHostID() (string, error) {
+	h, err := hostname()
+	if err != nil || h == "" {
+		return "", fmt.Errorf("config: host_id is empty and the host name is unknown (%v)", err)
+	}
+	return h, nil
+}
+
+// checkThreshold applies the ADR 0007 R2 rules to required_signatures
 // (0 means the default 1): a threshold above 1 counts signatures, so it
 // needs require_signed_decision, and with signed decisions required the
 // threshold must be reachable with the listed keys.
@@ -120,13 +139,23 @@ func checkThreshold(c *Config, keys int) error {
 		return fmt.Errorf("config: required_signatures %d is negative", c.RequiredSignatures)
 	}
 	if c.RequiredSignatures == 0 {
-		c.RequiredSignatures = 1
+		c.RequiredSignatures = defaultRequiredSignatures
 	}
 	if c.RequiredSignatures > 1 && !c.RequireSignedDecision {
 		return fmt.Errorf("config: required_signatures %d needs require_signed_decision: an unsigned approve would bypass the threshold", c.RequiredSignatures)
 	}
 	if c.RequireSignedDecision && c.RequiredSignatures > keys {
 		return fmt.Errorf("config: require_signed_decision with required_signatures %d needs at least %d approver_keys entries, have %d: no approve could ever be accepted", c.RequiredSignatures, c.RequiredSignatures, keys)
+	}
+	return nil
+}
+
+// checkSignedMode refuses require_signed_decision with an approval mode
+// other than the queue: the bench modes approve without any signature, so
+// the setting would be silently ignored.
+func checkSignedMode(c *Config, mode string) error {
+	if c.RequireSignedDecision && mode != ModeQueue {
+		return fmt.Errorf("config: require_signed_decision needs approval mode %s, the broker runs %s: that mode approves without a signature", ModeQueue, mode)
 	}
 	return nil
 }
@@ -173,9 +202,9 @@ func loadConfig(path string) (*Config, error) {
 		}
 	}
 	if c.HostID == "" {
-		h, err := os.Hostname()
-		if err != nil || h == "" {
-			return nil, fmt.Errorf("config: host_id is empty and the host name is unknown (%v)", err)
+		h, err := defaultHostID()
+		if err != nil {
+			return nil, err
 		}
 		c.HostID = h
 	}

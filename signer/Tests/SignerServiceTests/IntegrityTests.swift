@@ -4,7 +4,7 @@ import Testing
 @testable import SignerCore
 @testable import SignerService
 
-/// The pre-sign checks of ADR 0007 Р5 as decisions over what Security
+/// The pre-sign checks of ADR 0007 R5 as decisions over what Security
 /// reports: the live calls only gather these inputs.
 @Suite struct IntegrityTests {
     let runtime: UInt32 = 0x10000

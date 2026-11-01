@@ -64,12 +64,14 @@ type decisionProof struct {
 
 // approvalOutcome is the result of one approval interaction: the verdict,
 // the deny reason, the approver (its key in queue mode, mode:<mode> for the
-// bench modes) and the decision proof (nil when there is none).
+// bench modes), the decision proof (nil when there is none) and the
+// environment the approver was shown, which exec uses as is.
 type approvalOutcome struct {
 	granted  bool
 	reason   string
 	approver string
 	proof    *decisionProof
+	env      []string
 }
 
 type queueEntry struct {
@@ -91,7 +93,7 @@ type queueEntry struct {
 }
 
 // signatureRule is the threshold and the approver keys a decision is
-// counted against (ADR 0007, Р2): the policy at the time of the decide or
+// counted against (ADR 0007, R2): the policy at the time of the decide or
 // list, so a reload applies to items already waiting. A recorded signature
 // counts only while its key is still in keys: a key removed by a reload no
 // longer helps any item reach the threshold.
@@ -230,17 +232,33 @@ func (q *approvalQueue) clock() time.Time {
 
 // decide is vote with a threshold of one signature.
 func (q *approvalQueue) decide(id, hash string, d queueDecision) (deny, detail string) {
-	r := q.vote(id, hash, d, signatureRule{required: 1})
+	r := q.vote(id, hash, d, signatureRule{required: 1}, voteHooks{})
 	return r.deny, r.detail
 }
 
 // voteResult is what one vote did: refused it (deny), recorded a signature
-// short of the threshold (recorded > 0: the signatures that count now), or
-// decided the item (all zero).
+// short of the threshold (recorded > 0: the signatures that count now),
+// found the policy changed since the decide was read (stale: nothing done,
+// read the policy again), or decided the item (all zero).
 type voteResult struct {
 	deny, detail string
 	recorded     int
 	shortCode    string // of the item's payload, when recorded
+	stale        bool
+}
+
+// voteHooks tie a vote to the broker around it; both run under the queue
+// lock and may be nil.
+type voteHooks struct {
+	// current reports whether the policy the decide was checked against is
+	// still the broker's: Reload swaps the policy under the queue lock, so
+	// a vote never counts against a policy that was already replaced.
+	current func() bool
+	// record journals a signature recorded short of the threshold, with
+	// the count it brings; an error leaves the item as it was (no
+	// signature without its record) and the vote is refused with
+	// audit_unavailable.
+	record func(recorded int, shortCode string) error
 }
 
 // vote applies one decision to a waiting item. The hash must match what the
@@ -256,10 +274,13 @@ type voteResult struct {
 // decides only under a threshold of one (signature_required otherwise). A
 // refused or recorded decision leaves the item waiting; the delivered
 // decision carries the item's proof.
-func (q *approvalQueue) vote(id, hash string, d queueDecision, rule signatureRule) voteResult {
+func (q *approvalQueue) vote(id, hash string, d queueDecision, rule signatureRule, h voteHooks) voteResult {
 	refuse := func(deny, detail string) voteResult { return voteResult{deny: deny, detail: detail} }
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if h.current != nil && !h.current() {
+		return voteResult{stale: true}
+	}
 	now := q.now()
 	for k, t := range q.decided {
 		if now.Sub(t) > decidedMemory {
@@ -302,11 +323,16 @@ func (q *approvalQueue) vote(id, hash string, d queueDecision, rule signatureRul
 				return refuse("signature_duplicate", fmt.Sprintf("item %s already has a signature by key %s (%s): the next one must come from another key", id, s.key.name, s.key.fp))
 			}
 		}
-		e.sigs = append(e.sigs, *v)
-		sigs = rule.counted(e.sigs)
+		sigs = rule.counted(append(e.sigs[:len(e.sigs):len(e.sigs)], *v))
 		if len(sigs) < rule.required {
-			return voteResult{recorded: len(sigs), shortCode: proto.ShortCode(e.payload)}
+			code := proto.ShortCode(e.payload)
+			if h.record != nil && h.record(len(sigs), code) != nil {
+				return refuse("audit_unavailable", auditUnavailableDetail+": the signature was not recorded")
+			}
+			e.sigs = append(e.sigs, *v)
+			return voteResult{recorded: len(sigs), shortCode: code}
 		}
+		e.sigs = append(e.sigs, *v)
 	}
 	d.proof = e.proof(sigs...)
 	q.remove(id)
@@ -361,7 +387,7 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 	wait := pol.wait // fixed for this item: a reload does not move it
 	env := b.buildEnv(req)
 	p := &proto.ApprovalPayload{
-		HostID:      pol.hostID(),
+		HostID:      pol.cfg.HostID, // empty only in code: the payload is then refused
 		HostKey:     b.hostKey,
 		ItemID:      proto.TokenID(hash),
 		RequestHash: hash,
@@ -449,7 +475,7 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 		b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))
 		return out
 	}
-	out := approvalOutcome{approver: d.approver.Key(), proof: d.proof}
+	out := approvalOutcome{approver: d.approver.Key(), proof: d.proof, env: env}
 	switch {
 	case stopWatch(conn, hangup):
 		b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))
@@ -504,6 +530,10 @@ func stopWatch(conn net.Conn, w *hangupWatch) bool {
 	// socket. Inspect it without consuming bytes, after joining the reader.
 	return socketReadReady(conn)
 }
+
+// beforeVote is a test seam: it runs in serveDecide between reading the
+// policy and the vote.
+var beforeVote = func() {}
 
 // --- approver socket ----------------------------------------------------------
 
@@ -613,10 +643,13 @@ func (b *Broker) serveApprover(conn net.Conn, id RequesterID) {
 // require_signed_decision an unsigned approve is refused
 // (signature_required); an unsigned deny is always accepted, a deny grants
 // nothing. The queue counts the signature against the current
-// required_signatures and approver_keys. It answers decided; recorded with
-// "N of M signatures" and signature_recorded in the journal when a valid
-// signature is short of the threshold; or denied with decision_rejected in
-// the journal.
+// required_signatures and approver_keys: the checks and the vote run
+// against one policy, and a reload in between makes the decide be checked
+// again under the new one. It answers decided; recorded with "N of M
+// signatures" and signature_recorded in the journal when a valid signature
+// is short of the threshold (audit_unavailable, nothing recorded, if that
+// event cannot be written); or denied with decision_rejected in the
+// journal.
 func (b *Broker) serveDecide(conn net.Conn, id RequesterID, req *proto.Request) {
 	var granted bool
 	switch req.Decision {
@@ -627,51 +660,71 @@ func (b *Broker) serveDecide(conn net.Conn, id RequesterID, req *proto.Request) 
 		proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: "bad_request", Detail: fmt.Sprintf("decision %q, want approve or deny", req.Decision)})
 		return
 	}
-	pol := b.pol.Load()
-	d := queueDecision{granted: granted, approver: id}
-	var deny, detail string
-	switch {
-	case req.Signature != "" || req.ApproverKey != "":
-		k, known := pol.keys[req.ApproverKey]
-		sig, err := base64.StdEncoding.DecodeString(req.Signature)
-		switch {
-		case !known:
-			deny, detail = "approver_key_unknown", fmt.Sprintf("approver_key %q is not in approver_keys", req.ApproverKey)
-		case err != nil || len(sig) == 0:
-			deny, detail = "signature_invalid", "the signature is not base64 DER"
-		default:
-			d.vote = &approverSignature{key: k, der: sig, b64: req.Signature}
+	var r voteResult
+	var rule signatureRule
+	for {
+		pol := b.pol.Load()
+		d, deny, detail := checkDecide(pol, req, granted, id)
+		if deny != "" {
+			r = voteResult{deny: deny, detail: detail}
+			break
 		}
-	case granted && pol.cfg.RequireSignedDecision:
-		deny, detail = "signature_required", "require_signed_decision is on: an approve must be signed by a key in approver_keys"
-	}
-	if deny == "" {
-		rule := pol.signatureRule()
-		r := b.queue.vote(req.ItemID, req.ItemHash, d, rule)
-		deny, detail = r.deny, r.detail
-		if r.recorded > 0 {
-			ev := approverLogFields(id)
-			ev["item"] = req.ItemID
-			ev["short_code"] = r.shortCode
-			ev["approver_key"] = d.vote.key.fp
-			ev["approver_key_class"] = d.vote.key.class
-			ev["approver_key_name"] = d.vote.key.name
-			ev["signature"] = d.vote.b64
-			ev["signatures"] = r.recorded
-			ev["signatures_required"] = rule.required
-			b.log.Event("signature_recorded", ev)
-			proto.WriteFrame(conn, &proto.Frame{Type: "recorded", Detail: fmt.Sprintf("%d of %d signatures", r.recorded, rule.required)})
-			return
+		beforeVote()
+		rule = pol.signatureRule()
+		r = b.queue.vote(req.ItemID, req.ItemHash, d, rule, voteHooks{
+			current: func() bool { return b.pol.Load() == pol },
+			record: func(n int, code string) error {
+				ev := approverLogFields(id)
+				ev["item"] = req.ItemID
+				ev["short_code"] = code
+				ev["approver_key"] = d.vote.key.fp
+				ev["approver_key_class"] = d.vote.key.class
+				ev["approver_key_name"] = d.vote.key.name
+				ev["signature"] = d.vote.b64
+				ev["signatures"] = n
+				ev["signatures_required"] = rule.required
+				return b.log.Event("signature_recorded", ev)
+			},
+		})
+		if !r.stale {
+			break
 		}
+		// a reload swapped the policy: check the decide again under it
 	}
-	if deny != "" {
+	if r.recorded > 0 {
+		proto.WriteFrame(conn, &proto.Frame{Type: "recorded", Detail: fmt.Sprintf("%d of %d signatures", r.recorded, rule.required)})
+		return
+	}
+	if r.deny != "" {
 		ev := approverLogFields(id)
 		ev["item"] = req.ItemID
-		ev["reason"] = deny
+		ev["reason"] = r.deny
 		ev["approver_key"] = req.ApproverKey
 		b.log.Event("decision_rejected", ev)
-		proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: deny, Detail: detail})
+		proto.WriteFrame(conn, &proto.Frame{Type: "denied", Reason: r.deny, Detail: r.detail})
 		return
 	}
 	proto.WriteFrame(conn, &proto.Frame{Type: "decided", Detail: req.Decision})
+}
+
+// checkDecide checks a decide against one policy before the vote: the key
+// a signed decide names, the shape of its signature, and
+// require_signed_decision for an unsigned approve.
+func checkDecide(pol *policy, req *proto.Request, granted bool, id RequesterID) (d queueDecision, deny, detail string) {
+	d = queueDecision{granted: granted, approver: id}
+	switch {
+	case req.Signature != "" || req.ApproverKey != "":
+		k, known := pol.keys[req.ApproverKey]
+		sig, err := proto.DecodeSignature(req.Signature)
+		switch {
+		case !known:
+			return d, "approver_key_unknown", fmt.Sprintf("approver_key %q is not in approver_keys", req.ApproverKey)
+		case err != nil:
+			return d, "signature_invalid", err.Error()
+		}
+		d.vote = &approverSignature{key: k, der: sig, b64: req.Signature}
+	case granted && pol.cfg.RequireSignedDecision:
+		return d, "signature_required", "require_signed_decision is on: an approve must be signed by a key in approver_keys"
+	}
+	return d, "", ""
 }

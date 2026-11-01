@@ -107,7 +107,7 @@ func TestThresholdSameKeyTwiceAndDeny(t *testing.T) {
 		t.Errorf("%d signature_recorded events, want 1", n)
 	}
 	// an unsigned approve never counts towards a threshold above one
-	if r := b.queue.vote(item.ID, item.Hash, queueDecision{granted: true, approver: human()}, b.pol.Load().signatureRule()); r.deny != "signature_required" {
+	if r := b.queue.vote(item.ID, item.Hash, queueDecision{granted: true, approver: human()}, b.pol.Load().signatureRule(), voteHooks{}); r.deny != "signature_required" {
 		t.Errorf("unsigned vote under threshold 2: %+v, want signature_required", r)
 	}
 

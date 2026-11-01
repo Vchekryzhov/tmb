@@ -20,7 +20,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -129,6 +128,12 @@ func cmdApprover(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 type approverClient struct{ path string }
 
+// approverIOTimeout bounds one approver exchange after connect: a broker
+// that accepts and never answers ends in a transport error instead of
+// hanging the approver (or the signer that runs it) forever. The broker
+// answers a decide at once, so the bound is generous.
+var approverIOTimeout = 60 * time.Second
+
 // roundtrip sends one approver message and returns the single answer frame.
 func (c approverClient) roundtrip(req *proto.Request) (*proto.Frame, error) {
 	f, _, err := c.roundtripRaw(req)
@@ -144,6 +149,7 @@ func (c approverClient) roundtripRaw(req *proto.Request) (*proto.Frame, []byte, 
 		return nil, nil, &transportErr{fmt.Errorf("approver socket %s: %w", c.path, err)}
 	}
 	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(approverIOTimeout))
 	if err := proto.WriteFrame(conn, req); err != nil {
 		return nil, nil, &transportErr{err}
 	}
@@ -269,8 +275,8 @@ func readDecision(r io.Reader) (*proto.Request, error) {
 		return nil, errors.New("signature and approver_key go together")
 	}
 	if hasSig {
-		if der, err := base64.StdEncoding.Strict().DecodeString(req.Signature); err != nil || len(der) == 0 {
-			return nil, errors.New("signature must be non-empty standard base64")
+		if _, err := proto.DecodeSignature(req.Signature); err != nil {
+			return nil, err
 		}
 		if !isLowerHex(req.ApproverKey, 64) {
 			return nil, errors.New("approver_key must be 64 lowercase hex characters")

@@ -1,6 +1,6 @@
 # Схема журнала брокера
 
-Журнал брокера (`log_path` в конфиге, на хосте обычно `/var/log/tmb/broker.log`) это JSONL: одно событие на строку, объект JSON с ключами в алфавитном порядке. Документ перечисляет все события, которые пишет `tmb-broker`, и все их поля с типами. Регистр событий в коде (`src/cmd/tmb-broker/audit.go`) и этот документ сверяет Go-тест `TestAuditSchemaDoc`; `TestAuditSchemaCode` сверяет регистр с тем, что код реально пишет. Событие или поле не из документа, как и документированное поле, которого код не пишет, роняют тест.
+Журнал брокера (`log_path` в конфиге; пакет ставит `/var/log/tmb/journal.jsonl`, стенды пишут в `/var/log/tmb/broker.log`) это JSONL: одно событие на строку, объект JSON с ключами в алфавитном порядке. Документ перечисляет все события, которые пишет `tmb-broker`, и все их поля с типами. Регистр событий в коде (`src/cmd/tmb-broker/audit.go`) и этот документ сверяет Go-тест `TestAuditSchemaDoc`; `TestAuditSchemaCode` сверяет регистр с тем, что код реально пишет. Событие или поле не из документа, как и документированное поле, которого код не пишет, роняют тест.
 
 Текущая версия схемы: `3`.
 
@@ -215,7 +215,7 @@ TLS-рукопожатие не прошло: нет сертификата, ч�
 | `argv` | array of string | argv из запроса |
 | `nonce` | string | nonce целиком (до 128 символов; длиннее только у запроса, отклонённого `nonce_invalid`) |
 | `hash` | string | хеш точного запроса |
-| `reason` | string | стабильный код отказа (`shell_policy`, `executable_script`, `executable_unreadable`, `token_consumed_replay`, `audit_unavailable` и другие) |
+| `reason` | string | стабильный код отказа (`shell_policy`, `executable_script`, `executable_unreadable`, `token_consumed_replay`, `audit_unavailable`, `approval_payload_invalid` и другие). `approval_payload_invalid`: брокер не смог построить payload одобрения (путь не UTF-8, нет ключа идентичности или `host_id`), запрос отклонён до очереди при любом `require_signed_decision` (ADR 0007, Р9) |
 | `detail` | string | пояснение |
 
 ### `queued`
@@ -278,12 +278,12 @@ TLS-рукопожатие не прошло: нет сертификата, ч�
 | `approver_uid` | integer | uid одобряющего |
 | `approver_pid` | integer | pid одобряющего |
 | `item` | string | id элемента из решения |
-| `reason` | string | `no_such_item`, `already_decided`, `decision_mismatch`, `approver_is_requester`, `decision_expired`, `signature_required`, `signature_invalid`, `signature_duplicate` (ключ уже подписал этот элемент, счёт подписей не меняется) или `approver_key_unknown` |
+| `reason` | string | `no_such_item`, `already_decided`, `decision_mismatch`, `approver_is_requester`, `decision_expired`, `signature_required`, `signature_invalid` (подпись не проверяется над payload элемента, у одобрения и у отказа одинаково, или поле `signature` не канонический base64 длиной до 128 символов), `signature_duplicate` (ключ уже подписал этот элемент, счёт подписей не меняется), `approver_key_unknown` или `audit_unavailable` (событие `signature_recorded` не записано, подпись не засчитана) |
 | `approver_key` | string | `approver_key` из решения как пришёл (отпечаток ключа); пустая строка у неподписанного решения |
 
 ### `signature_recorded`
 
-Подписанное одобрение принято, но подписей разными ключами меньше `required_signatures` (ADR 0007, Р2): элемент остаётся в очереди, одобряющий получает кадр `recorded`. Решение по элементу и все подписи, давшие порог, потом пишет `approval`.
+Подписанное одобрение принято, но подписей разными ключами меньше `required_signatures` (ADR 0007, Р2): элемент остаётся в очереди, одобряющий получает кадр `recorded`. Решение по элементу и все подписи, давшие порог, потом пишет `approval`. Подпись засчитывается только после записи этого события: если запись не удалась, одобряющий получает `audit_unavailable`, а элемент остаётся с прежним счётом.
 
 | Поле | Тип | Описание |
 |---|---|---|
@@ -327,7 +327,7 @@ TLS-рукопожатие не прошло: нет сертификата, ч�
 | `nonce` | string | nonce целиком (до 128 символов; длиннее только у запроса, отклонённого `nonce_invalid`) |
 | `hash` | string | хеш точного запроса |
 | `short_code` | string | короткий код payload; только режим `queue`, если запрос встал в очередь |
-| `payload` | string | payload одобрения, base64; только режим `queue`, если запрос встал в очередь. По нему и открытым ключам подписи перепроверяются после факта |
+| `payload` | string | payload одобрения, base64; только режим `queue`, если запрос встал в очередь. По нему и открытым ключам подписи перепроверяются после факта. Payload содержит итоговое окружение процесса, в том числе значения `fixed_env` из конфига: журнал хранит их в base64, поэтому секреты в `fixed_env` не кладут. Открытых ключей одобряющих в журнале нет (только отпечатки), так что для перепроверки после смены ключей храните историю конфига с `approver_keys` |
 | `signed` | boolean | решение пришло с принятой подписью; только режим `queue`, если запрос встал в очередь |
 | `approver_keys` | array of string | отпечатки ключей принятых подписей (у одобрения все засчитанные подписи порога в порядке поступления, у отказа подпись отказа); пустой у неподписанного решения и без решения (таймаут); только режим `queue`, если запрос встал в очередь |
 | `approver_key_classes` | array of string | классы этих ключей, в том же порядке |

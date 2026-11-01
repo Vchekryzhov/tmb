@@ -262,6 +262,36 @@ func TestSignedDecideRejections(t *testing.T) {
 	}
 }
 
+// A signed deny is verified like a signed approve: a deny naming a listed
+// key with a signature that does not verify is refused
+// (signature_invalid) and never journaled as signed by that key; the item
+// keeps waiting. Without the check a forged deny would put the key
+// holder's name on a decision they never took.
+func TestForgedSignedDenyRefused(t *testing.T) {
+	alice, mallory := newFakeSigner(t, "alice"), newFakeSigner(t, "mallory")
+	for _, required := range []bool{true, false} {
+		b := newSignedBroker(t, required, alice)
+		item, done := queueRequest(t, b, testReq(t, "forged-deny"), UIDRequester(4242, 7))
+		forged := alice.decide(t, item, "deny")
+		forged.Signature = mallory.sign(t, item)
+		if f := approverDo(t, b, human(), forged); f.Type != "denied" || f.Reason != "signature_invalid" {
+			t.Fatalf("require_signed_decision=%v: forged signed deny: %+v, want denied signature_invalid", required, f)
+		}
+		if n := len(b.queue.list(signatureRule{})); n != 1 {
+			t.Fatalf("require_signed_decision=%v: %d items queued, want the item still waiting", required, n)
+		}
+		if len(logEvents(t, b, "approval")) != 0 {
+			t.Fatalf("require_signed_decision=%v: the forged deny decided the item", required)
+		}
+		if f := approverDo(t, b, human(), alice.decide(t, item, "deny")); f.Type != "decided" {
+			t.Fatalf("genuine signed deny: %+v", f)
+		}
+		if f := <-done; f.Reason != "approval_denied_by_human" {
+			t.Fatalf("requester got %+v", f)
+		}
+	}
+}
+
 // One signature decides one item once: replayed on the decided item it is
 // already_decided, replayed on the same request queued again (a new
 // challenge) it does not verify.
@@ -381,7 +411,71 @@ func TestPayloadUnbuildableRefusedBeforeQueue(t *testing.T) {
 	if f := approveDo(t, b, req, UIDRequester(4242, 7)); f.Reason != "approval_payload_invalid" {
 		t.Errorf("no identity key: %+v, want approval_payload_invalid", f)
 	}
+	// a policy without host_id (loadConfig always sets one) is not given
+	// a host name behind its back: nothing is queued
+	b.hostKey = testHostKey
+	cfg := *b.conf()
+	cfg.HostID = ""
+	b.pol.Store(newPolicy(&cfg, b.tokenTTL()))
+	if f := approveDo(t, b, testReq(t, "no-host-id"), UIDRequester(4242, 7)); f.Reason != "approval_payload_invalid" {
+		t.Errorf("no host_id: %+v, want approval_payload_invalid", f)
+	}
 	if n := len(b.queue.list(signatureRule{})); n != 0 {
 		t.Errorf("%d items queued", n)
 	}
+}
+
+// The process runs with the environment the approver was shown and signed
+// (the payload env), not one rebuilt from the config at claim time: a
+// SIGHUP that changes fixed_env while the item waits, or between the
+// decision and the claim, does not change what runs.
+func TestExecEnvIsTheSignedEnv(t *testing.T) {
+	envExe, err := filepath.EvalSymlinks("/usr/bin/env")
+	if err != nil {
+		t.Skipf("no /usr/bin/env: %v", err)
+	}
+	signer := newFakeSigner(t, "mac")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	conf := func(mark string) map[string]any {
+		return reloadConfig(dir, map[string]any{
+			"approver_keys":           []ApproverKey{signer.entry()},
+			"require_signed_decision": true,
+			"fixed_env":               map[string]string{"PATH": "/usr/bin:/bin", "TMB_MARK": mark},
+		})
+	}
+	writeJSONConfig(t, path, conf("signed"))
+	b := reloadBroker(t, path, ModeQueue)
+	req := &proto.Request{Executable: envExe, Argv: []string{envExe}, Cwd: "/tmp", Env: map[string]string{"LANG": "C"}, Nonce: "signed-env"}
+	item, done := queueRequest(t, b, req, UIDRequester(4242, 7))
+	if strings.Join(item.Env, " ") != "LANG=C PATH=/usr/bin:/bin TMB_MARK=signed" {
+		t.Fatalf("item env %v", item.Env)
+	}
+
+	writeJSONConfig(t, path, conf("reloaded-before-decide"))
+	b.Reload(path)
+	if f := approverDo(t, b, human(), signer.decide(t, item, "approve")); f.Type != "decided" {
+		t.Fatalf("decide: %+v", f)
+	}
+	if f := <-done; f.Type != "approved" {
+		t.Fatalf("requester got %+v", f)
+	}
+	writeJSONConfig(t, path, conf("reloaded-before-claim"))
+	b.Reload(path)
+
+	res := claimStream(t, b, claimOfToken(req, item.ID), UIDRequester(4242, 8))
+	if res.exit.Type != "exit" {
+		t.Fatalf("claim: %+v", res.exit)
+	}
+	if got := res.stdout.String(); got != "LANG=C\nPATH=/usr/bin:/bin\nTMB_MARK=signed\n" {
+		t.Errorf("the process ran with\n%s\nwant the signed env", got)
+	}
+}
+
+// claimOfToken is req as a claim with the approval token.
+func claimOfToken(req *proto.Request, token string) *proto.Request {
+	c := *req
+	c.Type = "claim"
+	c.ClaimToken = token
+	return &c
 }

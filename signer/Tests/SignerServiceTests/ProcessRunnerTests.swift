@@ -28,6 +28,21 @@ import Testing
         }
     }
 
+    @Test func aDescendantHoldingTheOutputDoesNotHangTheRun() {
+        // the child exits at once; the background sleep keeps its stdout open
+        let start = Date()
+        #expect(throws: CommandError.self) {
+            try ProcessRunner(timeout: 5, drainTimeout: 0.3).run("/bin/sh", ["-c", "sleep 10 & exit 0"], stdin: nil)
+        }
+        #expect(Date().timeIntervalSince(start) < 4)
+    }
+
+    @Test func aChildThatIgnoresStdinDoesNotKillTheApp() throws {
+        // writing to a pipe nobody reads raises SIGPIPE unless it is ignored
+        let r = try ProcessRunner().run("/usr/bin/true", [], stdin: Data(count: 4 << 20))
+        #expect(r.status == 0)
+    }
+
     @Test func aMissingProgramFails() {
         #expect(throws: CommandError.self) { try ProcessRunner().run("/nonexistent/ssh", [], stdin: nil) }
     }

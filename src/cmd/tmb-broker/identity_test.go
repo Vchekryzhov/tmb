@@ -30,6 +30,7 @@ func newTestBroker(t *testing.T) *Broker {
 		AllowedEnvKeys:       []string{"LANG"},
 		FixedEnv:             map[string]string{"PATH": "/usr/bin:/bin"},
 		AllowedCwdRoots:      []string{"/"},
+		HostID:               "test-host",
 	}
 	b := NewBroker(cfg, log, claims, ModeMockApprove, 30*time.Second)
 	b.hostKey = testHostKey

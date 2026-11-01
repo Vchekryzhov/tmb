@@ -50,6 +50,10 @@ type pendingApproval struct {
 	CwdFile   *os.File // O_DIRECTORY fd held on CwdDev/CwdIno until exec (linux); nil once closed
 	CwdPinned bool
 	Requester RequesterID
+	// Env is the environment the approval covered (the payload env in
+	// queue mode, the prompt's in manual): exec runs with it, never with
+	// one rebuilt from a config reloaded since. nil means none was fixed.
+	Env []string
 }
 
 // closePins releases the pinned exe and cwd fds (idempotent). Every path
@@ -84,7 +88,7 @@ type Broker struct {
 	console io.Writer     // broker console output (manual approval)
 
 	queue *approvalQueue // queue mode: requests waiting for an approver
-	// hostKey is the fingerprint of the broker identity key (ADR 0007, Р6),
+	// hostKey is the fingerprint of the broker identity key (ADR 0007, R6),
 	// the host_key of every approval payload. Empty refuses every queued
 	// request (approval_payload_invalid).
 	hostKey string
@@ -554,6 +558,7 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 
 	hash := req.Hash()
 	pend.Hash = hash
+	pend.Env = out.env
 	pend.Expiry = time.Now().Add(ttl)
 	b.mu.Lock()
 	if old, exists := b.pending[hash]; exists {
@@ -586,13 +591,15 @@ func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeR
 	if b.mode == ModeQueue {
 		return b.queueApproval(req, id, exeReal, cwdReal, dev, ino, conn)
 	}
-	granted, reason := b.benchApproval(req, id, exeReal, cwdReal, dev, ino)
-	return approvalOutcome{granted: granted, reason: reason, approver: "mode:" + b.mode}
+	env := b.buildEnv(req)
+	granted, reason := b.benchApproval(req, id, exeReal, cwdReal, dev, ino, env)
+	return approvalOutcome{granted: granted, reason: reason, approver: "mode:" + b.mode, env: env}
 }
 
 // benchApproval is the approval of the bench modes: the broker decides on
-// its own (mock-*) or asks its console (manual).
-func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64) (bool, string) {
+// its own (mock-*) or asks its console (manual), showing env: the
+// environment the process will get.
+func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64, env []string) (bool, string) {
 	switch b.mode {
 	case ModeMockApprove:
 		return true, ""
@@ -606,7 +613,7 @@ func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 		b.mu.Lock() // serialize prompts so they never interleave
 		defer b.mu.Unlock()
 		// the environment the process will actually get, not the request's
-		printManualPrompt(b.console, req, id, exeReal, cwdReal, dev, ino, b.buildEnv(req))
+		printManualPrompt(b.console, req, id, exeReal, cwdReal, dev, ino, env)
 		line, err := b.stdin.ReadString('\n')
 		if err != nil && line == "" {
 			// stdin closed (detached broker) -> fail closed

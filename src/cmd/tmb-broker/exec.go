@@ -23,8 +23,9 @@ import (
 //     (on linux the exec target is /proc/self/fd/N pinned to the inode
 //     approved by the human; off-linux it is the absolute realpath)
 //   - argv is the request's argv verbatim
-//   - env is rebuilt by the broker from the fixed env + allowlisted keys;
-//     the child NEVER inherits the broker env or the request env wholesale
+//   - env is the one built by the broker at approval time from the fixed
+//     env + allowlisted keys (the payload env the approver signed); the
+//     child NEVER inherits the broker env or the request env wholesale
 //   - stdin is /dev/null; only fds 0,1,2 exist in the child (Go opens all
 //     fds O_CLOEXEC / SOCK_CLOEXEC and ExtraFiles is nil, so the client
 //     socket cannot leak into the child; the pinned exe fd is O_CLOEXEC
@@ -47,7 +48,12 @@ func (b *Broker) execute(req *proto.Request, p *pendingApproval, tokenID string,
 	exeTarget, viaFd := p.execTarget()
 	cwdTarget, cwdViaFd := p.cwdTarget(cwdReal)
 
-	env := b.buildEnv(req)
+	// the environment the approval covered (signed in the payload in queue
+	// mode): a reload since then does not change what the process gets
+	env := p.Env
+	if env == nil {
+		env = b.buildEnv(req)
+	}
 
 	devNull, err := os.OpenFile("/dev/null", os.O_RDONLY, 0)
 	if err != nil {

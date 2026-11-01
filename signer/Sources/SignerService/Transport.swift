@@ -58,6 +58,18 @@ public enum TransportError: Error, Equatable, CustomStringConvertible {
     /// `tmb approve` printed something that is not its machine output.
     case badOutput(String)
 
+    /// The answer was refused by `tmb approve` itself (exit 2: our message
+    /// does not parse for it) or is not its machine output: a protocol
+    /// mismatch between this signer and the client on the host, which a
+    /// retry of the same message would only repeat.
+    public var isProtocolError: Bool {
+        switch self {
+        case .badOutput: return true
+        case .remote(let code, _): return code == 2
+        default: return false
+        }
+    }
+
     public var description: String {
         switch self {
         case .badEndpoint(let s): return "bad host entry: " + s

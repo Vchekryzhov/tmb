@@ -218,6 +218,8 @@ func TestApproveDecideRefusesJunkWithoutBroker(t *testing.T) {
 		"empty signature":     obj(`,"decision":"approve","signature":"","approver_key":"` + testKey + `"`),
 		"signature not b64":   obj(`,"decision":"approve","signature":"not base64!","approver_key":"` + testKey + `"`),
 		"signature url b64":   obj(`,"decision":"approve","signature":"__8=","approver_key":"` + testKey + `"`),
+		"signature with CRLF": obj(`,"decision":"approve","signature":"MEUC\r\nIQDx","approver_key":"` + testKey + `"`),
+		"signature too long":  obj(`,"decision":"approve","signature":"` + strings.Repeat("A", 132) + `","approver_key":"` + testKey + `"`),
 		"short key":           obj(`,"decision":"approve","signature":"` + testSig + `","approver_key":"abc"`),
 		"oversized":           obj(`,"decision":"deny"`) + strings.Repeat(" ", maxDecisionInput),
 		"control in key name": obj(`,"decision":"deny","\u001b[2A":"x"`),

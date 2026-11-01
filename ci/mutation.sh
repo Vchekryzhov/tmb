@@ -21,6 +21,7 @@ MUTANTS=(
   "M7-signature-check|cmd/tmb-broker/queue.go|if v != nil && (e.payload == nil \|\| !proto.VerifyPayloadSignature(v.key.pub, e.payload, v.der)) {|if v != nil && e.payload == nil {|a signed decide is accepted without verifying the signature"
   "M8-signed-required|cmd/tmb-broker/queue.go|case granted && pol.cfg.RequireSignedDecision:|case false:|an unsigned approve passes require_signed_decision"
   "M9-approver-key-lookup|cmd/tmb-broker/queue.go|case !known:|case !known && false:|a decide signed by a key outside approver_keys is not refused as unknown"
+  "M10-signed-deny-check|cmd/tmb-broker/queue.go|if v != nil && (e.payload == nil \|\| !proto.VerifyPayloadSignature(v.key.pub, e.payload, v.der)) {|if v != nil && d.granted && (e.payload == nil \|\| !proto.VerifyPayloadSignature(v.key.pub, e.payload, v.der)) {|a signed deny is accepted (and journaled as signed) without verifying the signature"
 )
 
 # copy src/ plus the files outside it that tests read: docs/ (audit-schema.md)
