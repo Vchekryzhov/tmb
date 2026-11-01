@@ -95,9 +95,16 @@ public struct ApproverKeyEntry: Equatable, Sendable {
     /// One JSON object, keys in the documented order, '/' not escaped.
     public var json: String {
         func q(_ s: String) -> String {
-            let e = JSONEncoder()
-            e.outputFormatting = [.withoutEscapingSlashes]
-            return String(decoding: try! e.encode(s), as: UTF8.self)
+            var out = "\""
+            for u in s.unicodeScalars {
+                switch u {
+                case "\"": out += "\\\""
+                case "\\": out += "\\\\"
+                case _ where u.value < 0x20: out += String(format: "\\u%04x", u.value)
+                default: out.unicodeScalars.append(u)
+                }
+            }
+            return out + "\""
         }
         return "{\"name\":\(q(name)),\"class\":\(q(keyClass)),\"public_key\":\(q(publicKey))}"
     }

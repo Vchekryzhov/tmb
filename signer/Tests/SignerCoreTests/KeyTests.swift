@@ -46,6 +46,10 @@ func mode(_ url: URL) throws -> Int {
         #expect(e.json.hasPrefix(#"{"name":"mac-work","class":"mac-se","public_key":""#))
         #expect(!e.json.contains(#"\/"#))
         #expect(e.fingerprint == "4b3da683ea9a36074542b569f1b41f49cf5a0391bc8f96a305455c4f900001ca")
+        // a quote or a backslash in the name stays valid JSON
+        let q = try ApproverKeyEntry(name: #"a"b\c"#, publicKeySPKI: spki)
+        let back = try JSONSerialization.jsonObject(with: Data(q.json.utf8)) as! [String: String]
+        #expect(back["name"] == #"a"b\c"#)
     }
 
     @Test func refusesABadNameOrKey() {
