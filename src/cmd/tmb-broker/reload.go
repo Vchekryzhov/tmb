@@ -29,15 +29,16 @@ func newPolicy(cfg *Config, ttl time.Duration) *policy {
 	if wait <= 0 {
 		wait = 300 * time.Second
 	}
-	// loadConfig has validated the keys; a Config built in code with a bad
-	// entry gets no keys, which only ever refuses signed decisions
+	// loadConfig has validated the keys, so this cannot fail for a loaded
+	// config; a Config built in code with a bad entry gets no keys, which
+	// only ever refuses signed decisions
 	keys, err := parseApproverKeys(cfg.ApproverKeys)
 	if err != nil {
 		keys = nil
 	}
 	required := cfg.RequiredSignatures
 	if required < 1 {
-		required = 1
+		required = defaultRequiredSignatures
 	}
 	return &policy{cfg: cfg, ttl: ttl, wait: wait, keys: keys, required: required}
 }
@@ -45,16 +46,6 @@ func newPolicy(cfg *Config, ttl time.Duration) *policy {
 // signatureRule is what a signature is counted against now.
 func (p *policy) signatureRule() signatureRule {
 	return signatureRule{required: p.required, keys: p.keys}
-}
-
-// hostID is host_id; loadConfig defaults it to the host name, and a policy
-// built in code without one falls back to the same.
-func (p *policy) hostID() string {
-	if p.cfg.HostID != "" {
-		return p.cfg.HostID
-	}
-	h, _ := os.Hostname()
-	return h
 }
 
 func (b *Broker) conf() *Config               { return b.pol.Load().cfg }

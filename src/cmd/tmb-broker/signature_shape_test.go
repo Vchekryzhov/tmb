@@ -33,6 +33,9 @@ func TestSignatureFieldShape(t *testing.T) {
 		"longer than limit": base64.StdEncoding.EncodeToString(append(der, make([]byte, 100)...)),
 		"unpadded":          trimmed,
 	} {
+		if sig == good.Signature {
+			continue // "unpadded" when the DER length needs no padding
+		}
 		r := *good
 		r.Signature = sig
 		if f := approverDo(t, b, human(), &r); f.Type != "denied" || f.Reason != "signature_invalid" {

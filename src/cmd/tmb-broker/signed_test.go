@@ -411,6 +411,15 @@ func TestPayloadUnbuildableRefusedBeforeQueue(t *testing.T) {
 	if f := approveDo(t, b, req, UIDRequester(4242, 7)); f.Reason != "approval_payload_invalid" {
 		t.Errorf("no identity key: %+v, want approval_payload_invalid", f)
 	}
+	// a policy without host_id (loadConfig always sets one) is not given
+	// a host name behind its back: nothing is queued
+	b.hostKey = testHostKey
+	cfg := *b.conf()
+	cfg.HostID = ""
+	b.pol.Store(newPolicy(&cfg, b.tokenTTL()))
+	if f := approveDo(t, b, testReq(t, "no-host-id"), UIDRequester(4242, 7)); f.Reason != "approval_payload_invalid" {
+		t.Errorf("no host_id: %+v, want approval_payload_invalid", f)
+	}
 	if n := len(b.queue.list(signatureRule{})); n != 0 {
 		t.Errorf("%d items queued", n)
 	}

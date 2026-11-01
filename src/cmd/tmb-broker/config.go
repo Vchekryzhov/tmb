@@ -111,6 +111,24 @@ func parseApproverKeys(entries []ApproverKey) (map[string]approverKey, error) {
 	return out, nil
 }
 
+// defaultRequiredSignatures is required_signatures when the config leaves
+// it out.
+const defaultRequiredSignatures = 1
+
+// hostname is os.Hostname; tests replace it.
+var hostname = os.Hostname
+
+// defaultHostID is host_id when the config leaves it out: the host name. A
+// host name that cannot be read is an error (the broker does not start, a
+// reload fails), never an empty host_id.
+func defaultHostID() (string, error) {
+	h, err := hostname()
+	if err != nil || h == "" {
+		return "", fmt.Errorf("config: host_id is empty and the host name is unknown (%v)", err)
+	}
+	return h, nil
+}
+
 // checkThreshold applies the ADR 0007 Р2 rules to required_signatures
 // (0 means the default 1): a threshold above 1 counts signatures, so it
 // needs require_signed_decision, and with signed decisions required the
@@ -120,7 +138,7 @@ func checkThreshold(c *Config, keys int) error {
 		return fmt.Errorf("config: required_signatures %d is negative", c.RequiredSignatures)
 	}
 	if c.RequiredSignatures == 0 {
-		c.RequiredSignatures = 1
+		c.RequiredSignatures = defaultRequiredSignatures
 	}
 	if c.RequiredSignatures > 1 && !c.RequireSignedDecision {
 		return fmt.Errorf("config: required_signatures %d needs require_signed_decision: an unsigned approve would bypass the threshold", c.RequiredSignatures)
@@ -183,9 +201,9 @@ func loadConfig(path string) (*Config, error) {
 		}
 	}
 	if c.HostID == "" {
-		h, err := os.Hostname()
-		if err != nil || h == "" {
-			return nil, fmt.Errorf("config: host_id is empty and the host name is unknown (%v)", err)
+		h, err := defaultHostID()
+		if err != nil {
+			return nil, err
 		}
 		c.HostID = h
 	}

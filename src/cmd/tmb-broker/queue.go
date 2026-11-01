@@ -387,7 +387,7 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 	wait := pol.wait // fixed for this item: a reload does not move it
 	env := b.buildEnv(req)
 	p := &proto.ApprovalPayload{
-		HostID:      pol.hostID(),
+		HostID:      pol.cfg.HostID, // empty only in code: the payload is then refused
 		HostKey:     b.hostKey,
 		ItemID:      proto.TokenID(hash),
 		RequestHash: hash,
