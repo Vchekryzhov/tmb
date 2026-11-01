@@ -211,10 +211,6 @@ func (b *Broker) Reload(path string) {
 // queue counts either wholly before the reload or wholly after it
 // (serveDecide re-checks a decide whose policy was replaced).
 func (b *Broker) storePolicy(p *policy) {
-	if b.queue == nil {
-		b.pol.Store(p)
-		return
-	}
 	b.queue.mu.Lock()
 	defer b.queue.mu.Unlock()
 	b.pol.Store(p)
