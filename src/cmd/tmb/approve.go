@@ -128,6 +128,12 @@ func cmdApprover(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 type approverClient struct{ path string }
 
+// approverIOTimeout bounds one approver exchange after connect: a broker
+// that accepts and never answers ends in a transport error instead of
+// hanging the approver (or the signer that runs it) forever. The broker
+// answers a decide at once, so the bound is generous.
+var approverIOTimeout = 60 * time.Second
+
 // roundtrip sends one approver message and returns the single answer frame.
 func (c approverClient) roundtrip(req *proto.Request) (*proto.Frame, error) {
 	f, _, err := c.roundtripRaw(req)
@@ -143,6 +149,7 @@ func (c approverClient) roundtripRaw(req *proto.Request) (*proto.Frame, []byte, 
 		return nil, nil, &transportErr{fmt.Errorf("approver socket %s: %w", c.path, err)}
 	}
 	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(approverIOTimeout))
 	if err := proto.WriteFrame(conn, req); err != nil {
 		return nil, nil, &transportErr{err}
 	}
