@@ -48,8 +48,9 @@ C4Context
 | Песочница OpenShell, TCP endpoint с mTLS-идентичностью | [ADR 0003](docs/adr/0003-sandbox-transport-tcp-mtls.md) | принято |
 | Одобряющий как отдельная роль, очередь одобрений вместо консоли | [ADR 0004](docs/adr/0004-approver-role-and-approval-queue.md) | принято, реализовано в майлстоуне A |
 | Идентичность песочницы по открытому ключу, короткоживущие сертификаты | [ADR 0005](docs/adr/0005-requester-identity-by-public-key.md) | принято, реализация в майлстоуне B ([#39](https://github.com/Vchekryzhov/tmb/issues/39)) |
-| Доверенный подписант с Touch ID: подписанное решение проверяет брокер | [ADR 0006](docs/adr/0006-trusted-signer-touch-id.md) | принято, реализация в будущем этапе ([#2](https://github.com/Vchekryzhov/tmb/issues/2)) |
-| Подписант: классы ключей, порог подписей, короткий код, ключ идентичности брокера | [ADR 0007](docs/adr/0007-signer-key-classes-threshold-host-identity.md) | принято, решения диспетчера ждут подтверждения владельца, реализация в [#99](https://github.com/Vchekryzhov/tmb/issues/99) |
+| Доверенный подписант с Touch ID: подписанное решение проверяет брокер | [ADR 0006](docs/adr/0006-trusted-signer-touch-id.md) | принято, реализовано на этапе подписанта ([#99](https://github.com/Vchekryzhov/tmb/issues/99)) |
+| Подписант: классы ключей, порог подписей, короткий код, ключ идентичности брокера | [ADR 0007](docs/adr/0007-signer-key-classes-threshold-host-identity.md) | принято, реализовано в [#99](https://github.com/Vchekryzhov/tmb/issues/99); решения диспетчера Р3, Р6, Р7, Р8 ждут подтверждения владельца |
+| Этап подписанта: подписанное решение в брокере, порог подписей, `tmb approve` в машинном режиме, приложение в строке меню macOS | [#99](https://github.com/Vchekryzhov/tmb/issues/99), часть [#2](https://github.com/Vchekryzhov/tmb/issues/2) | реализован: N=272/272 ([лог](harness/last-run.log)), pair=112/112 ([лог](harness/last-pair-run.log)); полный прогон с OpenShell-ригом после N31–N37 не повторялся; ручная проверка Touch ID ([MANUAL-CHECK](signer/MANUAL-CHECK.md)) ждёт владельца |
 | OpenShell-майлстоун: реестр O0–O9 на живой связке | [#5](https://github.com/Vchekryzhov/tmb/issues/5), [вердикт](VERDICT-OPENSHELL.md) | доказан: N=77/77, pair=59/59, OpenShell=65/65 |
 | Майлстоун A «политика и харденинг»: очередь одобрений, корни cwd, политика окружения, fd каталога, сборщик claim-файлов | [#27](https://github.com/Vchekryzhov/tmb/issues/27), [вердикт](VERDICT-A.md) | доказан: N=159/159, pair=67/67, OpenShell=65/65 |
 | CI: переносимые проверки на каждый PR, единый статус `ci-gate` | [docs/ci.md](docs/ci.md) | фаза A действует, фазы B и C ждут |
@@ -128,7 +129,7 @@ OpenCode используется в базовом образе стенда, �
 - Скрипты с `#!` не запускаются: брокер исполняет закреплённый дескриптор файла (`/proc/self/fd/N`), а интерпретатор получает этот путь уже закрытым. Первые байты брокер читает через тот же закреплённый дескриптор, а не по пути, поэтому подмена пути между проверкой и закреплением ничего не даёт. Такой запрос отклоняется до показа одобрения с причиной `executable_script` и повторно при claim до погашения токена, если одобренный файл переписали на месте; файл, который не читается, отклоняется с `executable_unreadable`. Скрипт запускается явным вызовом интерпретатора: `tmb exec --root -- /usr/bin/python3 /path/script.py`.
 - Политика запроса отсекает лишнее до человека: cwd только внутри `allowed_cwd_roots` по realpath, ключи `fixed_env` не переопределяются, `PATH` только фиксированный, значения окружения в одну строку и не длиннее 4 KiB.
 - Одобряет отдельная роль: запрос ждёт в очереди не дольше `approval_wait_seconds`, человек из `approver_uids` решает командой `tmb approve` через сокет хоста; по TLS одобрение невозможно.
-- Решение может быть подписано ([ADR 0006](docs/adr/0006-trusted-signer-touch-id.md), [ADR 0007](docs/adr/0007-signer-key-classes-threshold-host-identity.md)): брокер строит для элемента очереди payload одобрения с `host_id`, отпечатком своего ключа идентичности (создаётся в `state_dir` при первом старте, печатается при старте и командой `tmb-broker identity`), challenge и сроками, а `decide` с подписью принимает, только если ключ есть в `approver_keys` и подпись сходится с этими байтами до крайнего срока. С `require_signed_decision` неподписанное одобрение отклоняется (`signature_required`), неподписанный отказ принимается. Токен живёт не дольше подписанного TTL. `required_signatures` (по умолчанию 1) задаёт порог подписей разными ключами: до порога брокер отвечает `recorded` с числом подписей и пишет `signature_recorded`, повторная подпись тем же ключом отклоняется (`signature_duplicate`), первый `deny` снимает элемент. Записи `approver_keys` с классом `mac-se` (`ios-se` и `u2f` зарезервированы), порог и требование подписи применяются по SIGHUP; порог больше 1 без `require_signed_decision` или больше числа ключей это ошибка конфига.
+- Решение может быть подписано ([ADR 0006](docs/adr/0006-trusted-signer-touch-id.md), [ADR 0007](docs/adr/0007-signer-key-classes-threshold-host-identity.md)): брокер строит для элемента очереди payload одобрения с `host_id`, отпечатком своего ключа идентичности (создаётся в `state_dir` при первом старте, печатается при старте и командой `tmb-broker identity`), challenge и сроками, а `decide` с подписью принимает, только если ключ есть в `approver_keys` и подпись сходится с этими байтами до крайнего срока. С `require_signed_decision` неподписанное одобрение отклоняется (`signature_required`), неподписанный отказ принимается. Токен живёт не дольше подписанного TTL. `required_signatures` (по умолчанию 1) задаёт порог подписей разными ключами: до порога брокер отвечает `recorded` с числом подписей и пишет `signature_recorded`, повторная подпись тем же ключом отклоняется (`signature_duplicate`), первый `deny` снимает элемент. Записи `approver_keys` с классом `mac-se` (`ios-se` и `u2f` зарезервированы), порог и требование подписи применяются по SIGHUP; порог больше 1 без `require_signed_decision` или больше числа ключей это ошибка конфига. Анроллмент ключа, сверка ключа идентичности и порядок включения описаны ниже, в разделе «Доверенный подписант с Touch ID».
 - Конфиг перечитывается по SIGHUP (`systemctl reload`) без рестарта: allowlist, `approver_uids`, политика cwd и окружения, TTL и TLS-файлы меняются одним атомарным снимком, новые соединения получают новый сертификат брокера, открытые доживают со старым. Невалидный конфиг даёт `reload_failed` и оставляет действующий; сокеты, `tls_addr`, `state_dir`, `log_path`, `pid_file` и `approval_default` применяются только при старте (`reload_ignored_field`). Очередь и pending-одобрения переживают reload, элемент очереди хранит идентичность и не перепроверяется: запрос, который уже ждёт, выполнится после одобрения, даже если песочницу за это время удалили из allowlist; новое соединение, в том числе отдельный claim, проверяется по allowlist заново.
 - Журнал (JSONL, `log_path`) пишется с `fsync` на каждое событие до ответа клиенту, каждое событие несёт версию схемы `schema` (сейчас `3`), события и поля описаны в [docs/audit-schema.md](docs/audit-schema.md). Ошибка записи, `fsync` или reopen закрывает приём: новые соединения получают `audit_unavailable`, ничего не запускается, уже запущенная команда дорабатывает, а её `exec_exit` уходит в stderr брокера. SIGHUP открывает файл журнала заново по пути (ротация logrotate) и этим же выводит из состояния «журнал недоступен».
 
@@ -154,9 +155,11 @@ sequenceDiagram
     end
 ```
 
-### Будущий этап: подписант с Touch ID
+### Доверенный подписант с Touch ID
 
-Черновик дизайна в [docs/design/trusted-signer.md](docs/design/trusted-signer.md), задача [#2](https://github.com/Vchekryzhov/tmb/issues/2). Выбран вариант А: брокер строит байты одобрения, подписант на Mac показывает их и после касания Touch ID подписывает ключом Secure Enclave, брокер проверяет подпись и только потом выдаёт токен. Ключ не покидает Secure Enclave, а без касания подписи нет. Остаточный риск: root на Mac управляет показом и числом подписей за касание, поэтому может подменить байты между показом и подписью; защита от этого это второе устройство (например, iPhone) и политика брокера.
+Решения в [ADR 0006](docs/adr/0006-trusted-signer-touch-id.md) и [ADR 0007](docs/adr/0007-signer-key-classes-threshold-host-identity.md), дизайн и модель угроз в [docs/design/trusted-signer.md](docs/design/trusted-signer.md), этап реализации [#99](https://github.com/Vchekryzhov/tmb/issues/99). Подписант это приложение в строке меню macOS (папка `signer/`, Swift): оно по SSH забирает очередь одобрений с хоста, показывает каждый элемент целиком и после касания Touch ID подписывает ключом Secure Enclave ровно те байты, которые построил брокер. Брокер проверяет подпись над своими байтами и только потом выдаёт токен. Ключ не покидает Secure Enclave, без касания подписи нет, а отмена, таймаут и ошибка биометрии дают явный неподписанный `deny`.
+
+Это подписанное решение по элементу очереди, а не автономное подписанное разрешение без очереди: тот вариант (Г) остаётся за [#3](https://github.com/Vchekryzhov/tmb/issues/3). Остаточный риск: root на Mac управляет показом и числом подписей за касание, поэтому может подменить байты между показом и подписью; против этого порог подписей и в будущем второе устройство (iPhone).
 
 ```mermaid
 sequenceDiagram
@@ -176,6 +179,38 @@ sequenceDiagram
     A->>B: claim, запуск
     Note over B: Без валидной подписи decide отклоняется
 ```
+
+#### Сборка и ручная проверка
+
+Приложение собирается без Xcode-проекта: `signer/Scripts/build-app.sh [OUTDIR]` (по умолчанию `signer/.build/app/TMBSigner.app`) делает `swift build -c release` и подписывает бандл ad hoc с hardened runtime и `signer/App/TMBSigner.entitlements`; своя identity задаётся через `TMB_SIGNER_IDENTITY`. `signer/Scripts/check-entitlements.sh signer/.build/app/TMBSigner.app` проверяет подпись и отсутствие debug-entitlements. Тесты ядра и транспорта: `signer/Scripts/test.sh` или `ci/run.sh signer` (обязательная проверка PR, см. [docs/ci.md](docs/ci.md)). Приложение отказывается работать вне локальной GUI-сессии (код 3) и с нарушенной подписью кода (код 4). Touch ID, Secure Enclave и GUI-сессии на раннерах нет, поэтому живое поведение проверяет владелец по протоколу [signer/MANUAL-CHECK.md](signer/MANUAL-CHECK.md) и записывает результаты в его таблицу.
+
+#### Анроллмент ключа одобряющего
+
+1. В приложении меню Create Key...: ключ создаётся в Secure Enclave и хранится блобом в `~/Library/Application Support/TMB Signer/keys/`. Приложение копирует в буфер обмена запись для `approver_keys` вида `{"name":"mac-work","class":"mac-se","public_key":"<base64 DER SPKI>"}` и показывает отпечаток ключа. Ту же запись печатает `TMBSigner.app/Contents/MacOS/TMBSigner --print-key [NAME]` из Terminal.app.
+2. На хосте добавить запись в `approver_keys` в `/etc/tmb/config.json` и задать `host_id` (пустой означает имя хоста ОС). Действующий класс один, `mac-se`; `ios-se` и `u2f` зарезервированы, и конфиг с ними не применяется.
+3. Перечитать конфиг: `sudo systemctl reload tmb-broker` (SIGHUP). В журнале появляется `reload`; негодный конфиг даёт `reload_failed`, и действует прежний.
+4. Пользователь одобряющего на хосте входит с Mac по SSH ключом без пароля, его uid есть в `approver_uids`. В `config.json` подписанта описывается хост (`ssh`, `host_id`, при необходимости `port`, `tmb`, `socket`), формат в шаге 6 подготовки MANUAL-CHECK.
+
+Отзыв ключа это удаление записи из `approver_keys` и SIGHUP. Новый набор отпечатков Touch ID делает ключ непригодным: нужен новый ключ и новый анроллмент.
+
+#### Ключ идентичности брокера
+
+При первом старте брокер создаёт ключ P-256 `state_dir/identity.key` с правами только владельца; файл с чужими правами или владельцем это ошибка старта. Отпечаток ключа идёт в payload полем `host_key`, печатается при старте строкой `tmb-broker: identity host_id=... host_key=...` и командой `sudo tmb-broker identity` (две строки, `host_id` и `host_key`). Перечитывание конфига ключ не меняет, TLS-сертификат брокера с ним не связан. Подписант закрепляет пару `host_id` и `host_key` при первом элементе с хоста (TOFU, как `known_hosts`) и пишет об этом в окне: сверьте `host_key` в окне с выводом `tmb-broker identity`. Если у известного хоста отпечаток сменился, подписант отказывает, предупреждает и отправляет `deny`; закрепление меняется только явным Forget в меню Pinned Hosts.
+
+#### Порог подписей и включение `require_signed_decision`
+
+- `required_signatures` (по умолчанию 1) задаёт, сколько подписей разными ключами из `approver_keys` нужно для одобрения. До порога ответ одобряющему `recorded` с числом подписей, в журнале `signature_recorded`; повтор тем же ключом отклоняется (`signature_duplicate`); первый `deny` снимает элемент. Порог считает ключи, а не людей: два ключа `mac-se` одного человека набирают порог 2.
+- Пока `require_signed_decision` выключен, брокер принимает и подписанные, и неподписанные решения. Это период перехода: в журнале у события `approval` поле `signed` и массив `approver_keys` показывают, какие решения уже приходят с подписью (схема журнала `3`, [docs/audit-schema.md](docs/audit-schema.md)).
+- Когда все одобряющие подписывают, включить `"require_signed_decision": true` и сделать SIGHUP. После этого неподписанное одобрение, в том числе `tmb approve --yes` на хосте, отклоняется кодом `signature_required`, а неподписанный отказ по-прежнему принимается. Аварийного неподписанного пути нет намеренно (ADR 0006, В9).
+- Ошибки конфига: порог больше 1 без `require_signed_decision`, `require_signed_decision` при пороге больше числа ключей.
+
+#### Машинный режим `tmb approve`
+
+Подписант ходит на хост по SSH и вызывает `tmb approve` в машинном режиме; тот же режим годится для своего подписанта или стенда.
+
+- `tmb approve --list --json [--socket PATH]` печатает одну строку `{"type":"queue","items":[...]}`. Элементы передаются как их прислал брокер: `payload` (base64 точных байтов для подписи), `short_code`, `host_id`, `host_key`, `challenge`, `deadline`, `token_ttl_seconds`, а при подписанном режиме `signatures_required` и `signatures`.
+- `tmb approve --decide [--socket PATH]` читает со stdin один JSON-объект `{"item_id","item_hash","decision"}` и вместе либо без них `signature` (base64 DER ECDSA P-256 над SHA-256 всего payload) и `approver_key` (отпечаток SPKI). Ответ брокера печатается одной строкой (`decided`, `recorded` или `denied` с причиной). Коды выхода: 0 принято, 1 элемента нет или уже решён, 2 ошибка использования или негодный stdin, 3 транспорт, 125 прочий отказ брокера (`signature_invalid`, `signature_required`, `approver_key_unknown`, `decision_expired` и другие).
+- В человеческом выводе `tmb approve --list` у элемента есть строка `short code: XXXX-XXXX`: тот же код показывают окно подписанта, лист Touch ID и события `queued` и `approval`. Код помогает сверить показы глазами, доказательство даёт только подпись.
 
 ### Fail-closed
 
@@ -200,7 +235,7 @@ sequenceDiagram
 Сценарные проверки идут только в одноразовых непривилегированных контейнерах; Go-тесты запускаются отдельно, без привилегий хоста.
 Запрещены `--privileged`, проброс `docker.sock` и монтирование чувствительных путей хоста.
 
-Полный прогон (N-серия, docker-pair и OpenShell-риг), суммарный вердикт в `harness/last-full-run.log`:
+Полный прогон (N-серия, docker-pair и OpenShell-риг), суммарный вердикт в `harness/last-full-run.log`. Сейчас этот лог от 2026-10-18 (N=195/195, pair=112/112, OpenShell=65/65) и предшествует сценариям подписанта N31–N37: свежие цифры N-серии и docker-pair лежат в `harness/last-run.log` и `harness/last-pair-run.log`, а OpenShell-риг на этапе подписанта не запускался.
 
 ```bash
 bash harness/run-all.sh
@@ -235,6 +270,9 @@ ci/run.sh dist
 - [ADR 0005](docs/adr/0005-requester-identity-by-public-key.md): идентичность песочницы по открытому ключу.
 - [ADR 0006](docs/adr/0006-trusted-signer-touch-id.md): доверенный подписант с Touch ID, подписанное решение проверяет брокер.
 - [ADR 0007](docs/adr/0007-signer-key-classes-threshold-host-identity.md): классы ключей подписанта, порог подписей, короткий код, ключ идентичности брокера.
+- [docs/design/trusted-signer.md](docs/design/trusted-signer.md): черновик дизайна подписанта, факты платформы, варианты А–Г, модель угроз.
+- [signer/MANUAL-CHECK.md](signer/MANUAL-CHECK.md): ручная проверка подписанта на Mac (Touch ID, отмена, таймауты, отказ вне GUI-сессии, сквозной запуск).
+- [docs/audit-schema.md](docs/audit-schema.md): события журнала и их поля.
 - [VERDICT-OPENSHELL.md](VERDICT-OPENSHELL.md): вердикт OpenShell-майлстоуна, реестр O0–O9, отклонения от спеки, остаточные риски.
 - [VERDICT-A.md](VERDICT-A.md): вердикт майлстоуна A, реестр N13–N22 и PAIR-APPROVE, отклонения от спеки, остаточные риски.
 - [docs/alternatives.md](docs/alternatives.md): чем TMB отличается от FreeIPA, JIT-доступа и approval-плагина sudo.
@@ -248,6 +286,6 @@ ci/run.sh dist
 
 - [#4](https://github.com/Vchekryzhov/tmb/issues/4): зонтик этапа после #5: майлстоун A [#27](https://github.com/Vchekryzhov/tmb/issues/27) доказан ([вердикт](VERDICT-A.md)), майлстоун B [#39](https://github.com/Vchekryzhov/tmb/issues/39) в работе: идентичность по ключу, CA, reload, журнал, пакеты, пруф на VM.
 - [#13](https://github.com/Vchekryzhov/tmb/issues/13), [#14](https://github.com/Vchekryzhov/tmb/issues/14), [#15](https://github.com/Vchekryzhov/tmb/issues/15): спека CI, внедрение и известные GAP.
-- [#2](https://github.com/Vchekryzhov/tmb/issues/2): доверенный подписант с Touch ID, будущий этап; решения приняты, [ADR 0006](docs/adr/0006-trusted-signer-touch-id.md).
-- [#3](https://github.com/Vchekryzhov/tmb/issues/3): remote-одобрение, будущий этап.
+- [#2](https://github.com/Vchekryzhov/tmb/issues/2): доверенный подписант с Touch ID, решения в [ADR 0006](docs/adr/0006-trusted-signer-touch-id.md) и [ADR 0007](docs/adr/0007-signer-key-classes-threshold-host-identity.md); этап реализации [#99](https://github.com/Vchekryzhov/tmb/issues/99) готов, ручная проверка ждёт владельца.
+- [#3](https://github.com/Vchekryzhov/tmb/issues/3): remote-одобрение, будущий этап: канал Mac к брокеру без SSH, доказательство владения ключом идентичности брокера, автономное подписанное разрешение (вариант Г).
 - Ветки экспериментов: `prototype/sudo-integration`, [`prototype/tmb-broker`](https://github.com/Vchekryzhov/tmb/tree/prototype/tmb-broker/prototype/tmb-broker).
