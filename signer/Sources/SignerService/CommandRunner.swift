@@ -21,16 +21,29 @@ public protocol CommandRunner: Sendable {
     func run(_ executable: String, _ arguments: [String], stdin: Data?) throws -> CommandResult
 }
 
+/// Ignores SIGPIPE for the whole process, once: writing stdin to a child
+/// that exited (or closed it) must be an EPIPE error, not the end of the app.
+public enum BrokenPipe {
+    private static let ignored: Void = { signal(SIGPIPE, SIG_IGN) }()
+    public static func ignore() { _ = ignored }
+}
+
 /// The production runner: a child process with its own pipes, killed when
 /// it outlives `timeout`. Output past `maxOutput` bytes per stream is cut
-/// off and the run fails, so a misbehaving host cannot fill memory.
+/// off and the run fails, so a misbehaving host cannot fill memory. Once
+/// the child is gone its output must close within `drainTimeout`: a
+/// descendant that keeps the pipes open (an ssh multiplexer, a background
+/// job) fails the run instead of hanging it; the reader threads are left
+/// to end when the descendant does.
 public struct ProcessRunner: CommandRunner {
     public let timeout: TimeInterval
     public let maxOutput: Int
+    public let drainTimeout: TimeInterval
 
-    public init(timeout: TimeInterval = 30, maxOutput: Int = 16 << 20) {
+    public init(timeout: TimeInterval = 30, maxOutput: Int = 16 << 20, drainTimeout: TimeInterval = 2) {
         self.timeout = timeout
         self.maxOutput = maxOutput
+        self.drainTimeout = drainTimeout
     }
 
     final class Sink: @unchecked Sendable {
@@ -52,6 +65,7 @@ public struct ProcessRunner: CommandRunner {
     }
 
     public func run(_ executable: String, _ arguments: [String], stdin: Data?) throws -> CommandResult {
+        BrokenPipe.ignore()
         let p = Process()
         p.executableURL = URL(fileURLWithPath: executable)
         p.arguments = arguments
@@ -78,10 +92,12 @@ public struct ProcessRunner: CommandRunner {
         if done.wait(timeout: .now() + timeout) == .timedOut {
             p.terminate()
             if done.wait(timeout: .now() + 2) == .timedOut { kill(p.processIdentifier, SIGKILL); done.wait() }
-            readers.wait()
+            _ = readers.wait(timeout: .now() + drainTimeout)
             throw CommandError.timedOut
         }
-        readers.wait()
+        if readers.wait(timeout: .now() + drainTimeout) == .timedOut {
+            throw CommandError.failed("\(executable) exited but its output stayed open past \(drainTimeout)s")
+        }
         if so.overflow || se.overflow { throw CommandError.failed("output larger than \(maxOutput) bytes") }
         return CommandResult(status: p.terminationStatus, stdout: so.value, stderr: se.value)
     }

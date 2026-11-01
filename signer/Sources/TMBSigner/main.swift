@@ -12,6 +12,7 @@ func refuse(_ what: String, _ code: Int32) -> Never {
     exit(code)
 }
 
+BrokenPipe.ignore()
 if let e = GUISession.check() {
     refuse("not a local graphic login session (\(e)); the signer runs only in the Mac's own GUI session", 3)
 }
