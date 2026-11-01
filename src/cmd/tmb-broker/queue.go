@@ -64,12 +64,14 @@ type decisionProof struct {
 
 // approvalOutcome is the result of one approval interaction: the verdict,
 // the deny reason, the approver (its key in queue mode, mode:<mode> for the
-// bench modes) and the decision proof (nil when there is none).
+// bench modes), the decision proof (nil when there is none) and the
+// environment the approver was shown, which exec uses as is.
 type approvalOutcome struct {
 	granted  bool
 	reason   string
 	approver string
 	proof    *decisionProof
+	env      []string
 }
 
 type queueEntry struct {
@@ -449,7 +451,7 @@ func (b *Broker) queueApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 		b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))
 		return out
 	}
-	out := approvalOutcome{approver: d.approver.Key(), proof: d.proof}
+	out := approvalOutcome{approver: d.approver.Key(), proof: d.proof, env: env}
 	switch {
 	case stopWatch(conn, hangup):
 		b.log.Event("request_abandoned", queueEvent(id, item.ID, wait))

@@ -385,3 +385,58 @@ func TestPayloadUnbuildableRefusedBeforeQueue(t *testing.T) {
 		t.Errorf("%d items queued", n)
 	}
 }
+
+// The process runs with the environment the approver was shown and signed
+// (the payload env), not one rebuilt from the config at claim time: a
+// SIGHUP that changes fixed_env while the item waits, or between the
+// decision and the claim, does not change what runs.
+func TestExecEnvIsTheSignedEnv(t *testing.T) {
+	envExe, err := filepath.EvalSymlinks("/usr/bin/env")
+	if err != nil {
+		t.Skipf("no /usr/bin/env: %v", err)
+	}
+	signer := newFakeSigner(t, "mac")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	conf := func(mark string) map[string]any {
+		return reloadConfig(dir, map[string]any{
+			"approver_keys":           []ApproverKey{signer.entry()},
+			"require_signed_decision": true,
+			"fixed_env":               map[string]string{"PATH": "/usr/bin:/bin", "TMB_MARK": mark},
+		})
+	}
+	writeJSONConfig(t, path, conf("signed"))
+	b := reloadBroker(t, path, ModeQueue)
+	req := &proto.Request{Executable: envExe, Argv: []string{envExe}, Cwd: "/tmp", Env: map[string]string{"LANG": "C"}, Nonce: "signed-env"}
+	item, done := queueRequest(t, b, req, UIDRequester(4242, 7))
+	if strings.Join(item.Env, " ") != "LANG=C PATH=/usr/bin:/bin TMB_MARK=signed" {
+		t.Fatalf("item env %v", item.Env)
+	}
+
+	writeJSONConfig(t, path, conf("reloaded-before-decide"))
+	b.Reload(path)
+	if f := approverDo(t, b, human(), signer.decide(t, item, "approve")); f.Type != "decided" {
+		t.Fatalf("decide: %+v", f)
+	}
+	if f := <-done; f.Type != "approved" {
+		t.Fatalf("requester got %+v", f)
+	}
+	writeJSONConfig(t, path, conf("reloaded-before-claim"))
+	b.Reload(path)
+
+	res := claimStream(t, b, claimOfToken(req, item.ID), UIDRequester(4242, 8))
+	if res.exit.Type != "exit" {
+		t.Fatalf("claim: %+v", res.exit)
+	}
+	if got := res.stdout.String(); got != "LANG=C\nPATH=/usr/bin:/bin\nTMB_MARK=signed\n" {
+		t.Errorf("the process ran with\n%s\nwant the signed env", got)
+	}
+}
+
+// claimOfToken is req as a claim with the approval token.
+func claimOfToken(req *proto.Request, token string) *proto.Request {
+	c := *req
+	c.Type = "claim"
+	c.ClaimToken = token
+	return &c
+}
