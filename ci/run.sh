@@ -751,8 +751,20 @@ cmd_signer() {
   n=$(sed -n 's/.*Test run with \([0-9][0-9]*\) tests\{0,1\} .*passed.*/\1/p' "$S/build-test.log" | tail -1)
   sv=$(sed -n 's/.*\(Swift version [^ ]*\).*/\1/p' "$S/toolchain.txt" | head -1)
   tail -n 40 "$S/build-test.log" >"$S/build-test.tail"
+  # every @Suite of both test targets must report "Suite <name> passed": a
+  # target that stops building into the run, or a suite dropped from it, is
+  # not hidden behind a total count above zero
+  local t s missing="" suites
+  for t in SignerCoreTests SignerServiceTests; do
+    suites=$(grep -rhoE '@Suite.*struct [A-Za-z0-9_]+' "$ROOT/signer/Tests/$t" | sed 's/.* //')
+    [ -n "$suites" ] || missing="$missing $t(no suites)"
+    for s in $suites; do
+      grep -qE "Suite $s passed" "$S/build-test.log" || missing="$missing $t/$s"
+    done
+  done
   if [ $rc -ne 0 ]; then result signer/build-test FAIL "swift build or swift test failed (rc=$rc)" "$S/build-test.tail"
   elif [ -z "$n" ] || [ "$n" = 0 ]; then result signer/build-test FAIL "no passing Swift Testing run found in the log" "$S/build-test.tail"
+  elif [ -n "$missing" ]; then result signer/build-test FAIL "suites without a pass in the log:$missing" "$S/build-test.tail"
   else result signer/build-test PASS "$n tests passed ($sv)" "$S/toolchain.txt"; fi
 
   log "entitlements and hardened runtime (signer/Scripts/check-entitlements.sh)"
