@@ -19,6 +19,7 @@ import SignerService
     private var polling = false
     private var pollTimer: Timer?
     private var recent: [String] = []
+    private var reloadGate = ReloadGate()
     private let pollQueue = DispatchQueue(label: "tmb.signer.poll")
     private let signQueue = DispatchQueue(label: "tmb.signer.sign")
 
@@ -32,7 +33,27 @@ import SignerService
 
     // MARK: setup
 
+    /// Busy while a window is open, items wait for one or a poll is in
+    /// flight: all of them belong to the running workflow and its core.
+    private var busy: Bool { current != nil || !waiting.isEmpty || polling }
+
+    /// Reload Config and Create Key: replace the workflow now, or once the
+    /// open approvals are answered (ReloadGate), so no item is orphaned,
+    /// shown twice or signed by a core that did not review it.
     func reload() {
+        guard reloadGate.request(busy: busy) else {
+            note("reload held until the open approvals are answered")
+            updateTitle()
+            return
+        }
+        performReload()
+    }
+
+    private func reloadIfIdle() {
+        if !busy, reloadGate.becameIdle() { performReload() }
+    }
+
+    private func performReload() {
         pollTimer?.invalidate()
         workflow = nil
         problem = nil
@@ -68,7 +89,7 @@ import SignerService
     // MARK: polling
 
     func pollNow() {
-        guard let wf = workflow, let hosts = config?.hosts, !polling else { return }
+        guard let wf = workflow, let hosts = config?.hosts, !polling, !reloadGate.pending else { return }
         polling = true
         pollQueue.async {
             let reports = hosts.map { ($0, wf.poll($0)) }
@@ -91,6 +112,7 @@ import SignerService
             waiting += r.show
         }
         showNext()
+        reloadIfIdle()
         updateTitle()
     }
 
@@ -124,6 +146,7 @@ import SignerService
         wc.finish()
         current = nil
         showNext()
+        reloadIfIdle()
         updateTitle()
     }
 
@@ -156,6 +179,7 @@ import SignerService
             menu.addItem(i)
         }
         if let p = problem { info("Problem: \(p)") }
+        if reloadGate.pending { info("Reload held until the open approvals are answered") }
         info("Key: \(keyName ?? "none")")
         info("Hosts: " + (config?.hosts.map(\.name).joined(separator: ", ") ?? "none"))
         info("Waiting: \(waiting.count + (current == nil ? 0 : 1))")
