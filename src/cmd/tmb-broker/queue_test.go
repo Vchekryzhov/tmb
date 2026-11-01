@@ -60,7 +60,7 @@ func queueRequest(t *testing.T, b *Broker, req *proto.Request, id RequesterID) (
 	}()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		for _, it := range b.queue.list() {
+		for _, it := range b.queue.list(signatureRule{}) {
 			if it.Nonce == req.Nonce {
 				return it, out
 			}
@@ -112,7 +112,7 @@ func TestQueueApprovalByApprover(t *testing.T) {
 	if f := approverDo(t, b, approver, &proto.Request{Type: "decide", ItemID: item.ID, ItemHash: item.Hash, Decision: "deny"}); f.Reason != "already_decided" {
 		t.Fatalf("second decision: %+v, want already_decided", f)
 	}
-	if len(b.queue.list()) != 0 {
+	if len(b.queue.list(signatureRule{})) != 0 {
 		t.Errorf("decided item still queued")
 	}
 	log := logText(t, b)
@@ -156,7 +156,7 @@ func TestApproverMessagesRejected(t *testing.T) {
 			t.Errorf("%s: got %+v, want denied %s", tc.name, f, tc.reason)
 		}
 	}
-	if len(b.queue.list()) != 1 {
+	if len(b.queue.list(signatureRule{})) != 1 {
 		t.Fatalf("rejected messages changed the queue")
 	}
 	if !lineHasBoth(logText(t, b), `"event":"approver_denied"`, `"approver_uid":4242`) {
@@ -273,7 +273,7 @@ func TestQueueOrderAndDecidedMemory(t *testing.T) {
 		}
 	}
 	var got []string
-	for _, it := range q.list() {
+	for _, it := range q.list(signatureRule{}) {
 		got = append(got, it.ID)
 	}
 	if strings.Join(got, ",") != "c,a,b" {

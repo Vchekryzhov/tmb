@@ -239,7 +239,7 @@ func TestSignedDecideRejections(t *testing.T) {
 	}
 	setClock(b, 0)
 
-	if n := len(b.queue.list()); n != 2 {
+	if n := len(b.queue.list(signatureRule{})); n != 2 {
 		t.Fatalf("%d items queued after the rejections, want both still waiting", n)
 	}
 	select {
@@ -381,7 +381,7 @@ func TestPayloadUnbuildableRefusedBeforeQueue(t *testing.T) {
 	if f := approveDo(t, b, req, UIDRequester(4242, 7)); f.Reason != "approval_payload_invalid" {
 		t.Errorf("no identity key: %+v, want approval_payload_invalid", f)
 	}
-	if n := len(b.queue.list()); n != 0 {
+	if n := len(b.queue.list(signatureRule{})); n != 0 {
 		t.Errorf("%d items queued", n)
 	}
 }

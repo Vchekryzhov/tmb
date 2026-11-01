@@ -64,7 +64,7 @@ func TestQueueWaitTimesOut(t *testing.T) {
 	if !strings.Contains(frames[0].Detail, "at most") {
 		t.Errorf("waiting frame detail %q", frames[0].Detail)
 	}
-	if len(b.queue.list()) != 0 {
+	if len(b.queue.list(signatureRule{})) != 0 {
 		t.Errorf("timed-out item still queued")
 	}
 	if !strings.Contains(logText(t, b), `"event":"approval_timeout"`) {
@@ -77,18 +77,18 @@ func TestQueueRequesterHangupWithdraws(t *testing.T) {
 	hangup := make(chan struct{})
 	done := approveFrames(b, testReq(t, "queue-abandon"), UIDRequester(4242, 1), hangup)
 	deadline := time.Now().Add(2 * time.Second)
-	for len(b.queue.list()) == 0 && time.Now().Before(deadline) {
+	for len(b.queue.list(signatureRule{})) == 0 && time.Now().Before(deadline) {
 		time.Sleep(2 * time.Millisecond)
 	}
-	if len(b.queue.list()) != 1 {
+	if len(b.queue.list(signatureRule{})) != 1 {
 		t.Fatal("request never queued")
 	}
 	close(hangup)
 	<-done
-	for len(b.queue.list()) != 0 && time.Now().Before(deadline) {
+	for len(b.queue.list(signatureRule{})) != 0 && time.Now().Before(deadline) {
 		time.Sleep(2 * time.Millisecond)
 	}
-	if len(b.queue.list()) != 0 {
+	if len(b.queue.list(signatureRule{})) != 0 {
 		t.Fatal("abandoned request still queued")
 	}
 	for !strings.Contains(logText(t, b), `"event":"request_abandoned"`) && time.Now().Before(deadline) {
@@ -115,7 +115,7 @@ func TestQueueIsNotAMutex(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("second request blocked behind the first")
 	}
-	if items := b.queue.list(); len(items) != 1 || items[0].ID != first.ID {
+	if items := b.queue.list(signatureRule{}); len(items) != 1 || items[0].ID != first.ID {
 		t.Fatalf("queue %+v, want only the first", items)
 	}
 	approverDo(t, b, human, &proto.Request{Type: "decide", ItemID: first.ID, ItemHash: first.Hash, Decision: "approve"})

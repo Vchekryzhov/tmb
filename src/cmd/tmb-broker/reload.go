@@ -20,6 +20,8 @@ type policy struct {
 	ttl  time.Duration          // token: approval -> claim
 	wait time.Duration          // queue: enqueue -> decision (approval_wait_seconds)
 	keys map[string]approverKey // approver_keys by fingerprint
+	// required is required_signatures, at least 1
+	required int
 }
 
 func newPolicy(cfg *Config, ttl time.Duration) *policy {
@@ -33,7 +35,16 @@ func newPolicy(cfg *Config, ttl time.Duration) *policy {
 	if err != nil {
 		keys = nil
 	}
-	return &policy{cfg: cfg, ttl: ttl, wait: wait, keys: keys}
+	required := cfg.RequiredSignatures
+	if required < 1 {
+		required = 1
+	}
+	return &policy{cfg: cfg, ttl: ttl, wait: wait, keys: keys, required: required}
+}
+
+// signatureRule is what a signature is counted against now.
+func (p *policy) signatureRule() signatureRule {
+	return signatureRule{required: p.required, keys: p.keys}
 }
 
 // hostID is host_id; loadConfig defaults it to the host name, and a policy
