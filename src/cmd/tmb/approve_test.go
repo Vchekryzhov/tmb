@@ -25,6 +25,9 @@ type fakeApprover struct {
 	path      string
 	listener  net.Listener
 	decisions []proto.Request
+	requests  int             // messages received
+	rawQueue  json.RawMessage // when set, list gets this frame verbatim
+	answer    *proto.Frame    // when set, decide gets this frame
 }
 
 func startFakeApprover(t *testing.T, items ...proto.QueueItem) *fakeApprover {
@@ -69,6 +72,16 @@ func (f *fakeApprover) serve(c net.Conn) {
 	_ = json.Unmarshal(raw, &req)
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.requests++
+	switch {
+	case f.rawQueue != nil && req.Type == "list":
+		proto.WriteFrame(c, f.rawQueue)
+		return
+	case f.answer != nil && req.Type == "decide":
+		f.decisions = append(f.decisions, req)
+		proto.WriteFrame(c, f.answer)
+		return
+	}
 	if f.denyAll != "" {
 		proto.WriteFrame(c, &proto.Frame{Type: "denied", Reason: f.denyAll, Detail: "from the fake"})
 		return

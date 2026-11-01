@@ -23,7 +23,7 @@ ci/run.sh tools
 ci/run.sh local
 ```
 
-`tools` собирает `tmbci` и закреплённые инструменты в `out/ci/bin`. `local` прогоняет lint, тесты, самопроверку CI, покрытие, gosec/govulncheck, сборку и короткий fuzz. Отдельные проверки: `ci/run.sh lint`, `test <метка> [race]`, `coverage [base-ref]`, `coverage-merge`, `security`, `build`, `dist`, `package`, `fuzz short|long`, `secrets range|full`, `harness`, `vm`, `images`, `images-opensbx`, `manifest`, `stress`, `mutation`, `bench`. Полный список выводит `ci/run.sh` без аргументов.
+`tools` собирает `tmbci` и закреплённые инструменты в `out/ci/bin`. `local` прогоняет lint, тесты, самопроверку CI, покрытие, gosec/govulncheck, сборку, короткий fuzz и подписант (на macOS, иначе NOT_APPLICABLE). Отдельные проверки: `ci/run.sh lint`, `test <метка> [race]`, `coverage [base-ref]`, `coverage-merge`, `security`, `build`, `dist`, `package`, `fuzz short|long`, `secrets range|full`, `harness`, `vm`, `images`, `images-opensbx`, `manifest`, `signer`, `stress`, `mutation`, `bench`. Полный список выводит `ci/run.sh` без аргументов.
 
 Каждая проверка пишет `out/ci/results/<check>.json`. В файле есть статус (PASS, FAIL, ERROR, NOT_RUN, UNAVAILABLE или NOT_APPLICABLE), проверенный SHA, номер запуска, версии инструментов и сводка. Отчёты лежат в `out/ci/reports/`. Красная проверка воспроизводится той же командой, что указана в шаге workflow.
 
@@ -46,6 +46,7 @@ ci/run.sh local
 | --- | --- | --- |
 | lint | gofmt, go vet и Staticcheck (продукт под linux и darwin, находки через исключения), stdlib-only и `go mod tidy -diff`, согласованность pins, `bash -n`, ShellCheck, actionlint, zizmor, Hadolint, исключения, локальные ссылки | 15 мин |
 | test | Go 1.27.3 и 1.26.10 × Linux amd64/arm64 и macOS arm64; `-count=1`, timeout, JSON + JUnit; race detector на Linux | 20 мин |
+| signer | подписант на Swift (`signer/`) на macOS 15 с закреплённым Xcode: `swift build` и `swift test` через `signer/Scripts/test.sh` (векторы из того же файла, что у Go), проверка entitlements и hardened runtime (см. «Подписант») | 20 мин |
 | ci-selftest | тесты `tmbci`, включая негативные и позитивные фикстуры gate | 10 мин |
 | coverage | профиль всего модуля, сравнение с merge-base, diff coverage, цели | 20 мин |
 | coverage-merged | объединение Go-test профиля из `coverage` с интеграционным профилем стендов из `harness` (см. «Интеграционное покрытие») | 5 мин |
@@ -61,6 +62,15 @@ ci/run.sh local
 | nightly | повторные перемешанные тесты под race, mutation checks, benchmarks, внешние ссылки | 55 мин |
 
 Mac-брокер собирается только как часть тестов: привилегированный брокер на Mac не заявлен и не публикуется. Диагностические артефакты хранятся 14 дней, отчёты плановых security-аудитов 30 дней. Репозиторий public, поэтому артефакты Actions может скачать любой авторизованный пользователь GitHub. В них нет секретов: Gitleaks редактирует значения, PEM-ключи блокируют загрузку. Но логи стендов, SBOM и fuzz-входы публичны. В registry ничего не публикуется; в GitHub Releases публикует только release.yml по тегу `v*` (см. «Пакеты и релиз»).
+
+## Подписант
+
+Job `signer` обязательна для всех событий ci.yml, в том числе для `pull_request` ([ADR 0007](adr/0007-signer-key-classes-threshold-host-identity.md), Р8): красная сборка подписанта блокирует любой PR, даже не трогающий `signer/`. Она идёт на `macos-15` с Xcode, закреплённым через `DEVELOPER_DIR` (см. «Updating pins»), и запускает `ci/run.sh signer`. Локально та же команда работает на Mac, в том числе только с Command Line Tools (`signer/Scripts/test.sh` сам добавляет пути Swift Testing); вне macOS обе проверки пишут NOT_APPLICABLE.
+
+- `signer/build-test`: `swift build` и `swift test` пакета `SignerCore`. Тесты читают общие векторы `signer/Tests/vectors/approval-v1.json`, те же, что тесты Go в `src/internal/proto`. Проверка зелёная, только если Swift Testing сообщил о прошедшем прогоне с ненулевым числом тестов. Тест с настоящим Secure Enclave (`TMB_SIGNER_SE_TEST`) выключен: у раннеров нет Secure Enclave.
+- `signer/entitlements`: `signer/Scripts/check-entitlements.sh` (Р5 ADR 0007: hardened runtime без debug-entitlements). Сначала самопроверка на одноразовых ad-hoc подписанных копиях `/usr/bin/true`: чистый hardened runtime проходит, `get-task-allow` и бинарник без hardened runtime отклоняются; провал самопроверки это ERROR. Затем проверяются все отслеживаемые файлы `signer/**/*.entitlements` (ни один из запрещённых ключей не равен `true`: `get-task-allow`, `cs.debugger`, `cs.disable-library-validation`, `cs.allow-dyld-environment-variables`, `cs.allow-unsigned-executable-memory`, `cs.disable-executable-page-protection`, `cs.allow-jit`). Подписанный бинарник или бандл скрипт проверяет так же по встроенным entitlements, а ещё требует валидную подпись и флаг `runtime`. Пока в `signer/` есть только библиотека без приложения и без файла entitlements, проверка пишет NOT_APPLICABLE с причиной, и gate это допускает. Приложение ([#110](https://github.com/Vchekryzhov/tmb/issues/110)) добавляет свой файл entitlements (он подхватывается сам) и путь к собранному бандлу в `cmd_signer`, а в [ci/required-checks.json](../ci/required-checks.json) снимает `allow_not_applicable` у `signer/entitlements`.
+
+Самопроверка CI (`TestGateNeedsMatchRequiredJobs` в `ci/internal/gate`) сверяет `needs` у `ci-gate` с jobs из required-checks.json, а `TestSignerIsRequiredOnPullRequest` требует обе проверки подписанта для всех событий ci.yml.
 
 ## Пороги
 
@@ -169,7 +179,8 @@ Job `package` в ci.yml вызывает [package.yml](../.github/workflows/pack
 1. Go: [.go-version](../.go-version), `GO_PRIMARY` и матрица в `ci.yml`, строка `go` в `ci/tools/*/go.mod`, `golang:<версия>-alpine@sha256:…` в `harness/images/Dockerfile.*` и в `harness/run-pair.sh`/`run-openshell.sh`. Рассогласование ловит `lint/pins`.
 2. Бинарные инструменты: версия, URL и SHA-256 в `ci/tools.lock`. SHA-256 сверяется с upstream checksum-файлом или digest ассета в GitHub. `latest` и `master` не допускаются. Каждый инструмент закреплён ровно одной строкой на linux/amd64, linux/arm64 и darwin/arm64, все три одной версии, и URL называет эту версию: иначе `lint/pins` красный.
    nfpm (сборка deb и rpm) обновляется так: выбрать релиз [goreleaser/nfpm](https://github.com/goreleaser/nfpm/releases) старше 14 дней; заменить версию в трёх строках `nfpm` в `ci/tools.lock` и в их URL (`nfpm_<версия>_Linux_x86_64.tar.gz`, `_Linux_arm64`, `_Darwin_arm64`); SHA-256 взять из `checksums.txt` релиза и сверить с digest ассета (`gh api repos/goreleaser/nfpm/releases/tags/v<версия> --jq '.assets[] | .name + " " + .digest'`); выполнить `ci/run.sh badges tools` и закоммитить `docs/badges/tool-nfpm.json`; прогнать `ci/run.sh package` (новый nfpm может поменять байты пакетов, но две сборки одного коммита обязаны совпасть). Рассогласование строк, версии в URL или бейджа ловит `lint/pins`.
-3. Выдержка 14 дней нарушается только ради совместимости или исправления подтверждённой уязвимости, с причиной в коммите. Так сделано для Staticcheck 2026.2.2 (поддержка export data Go 1.27.2) и для `golang.org/x/tools` v0.51.0 в модуле gosec: gosec v2.29.0 со старым x/tools не загружал пакеты Go 1.27.2.
+3. Xcode для job `signer`: `DEVELOPER_DIR` в `ci.yml` указывает на явный путь `/Applications/Xcode_X.Y.app/Contents/Developer` из списка образа [macos-15](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md), не на `Xcode.app` (это ссылка на Xcode по умолчанию, которую образ меняет). `xcode-select -s` и setup-xcode не используются: переменная выбирает Xcode без sudo. Другую форму ловит `lint/pins`. Если образ удалил закреплённую версию, `ci/run.sh signer` пишет ERROR, и job красная: версия обновляется вручную на одну из оставшихся.
+4. Выдержка 14 дней нарушается только ради совместимости или исправления подтверждённой уязвимости, с причиной в коммите. Так сделано для Staticcheck 2026.2.2 (поддержка export data Go 1.27.2) и для `golang.org/x/tools` v0.51.0 в модуле gosec: gosec v2.29.0 со старым x/tools не загружал пакеты Go 1.27.2.
 
 ## Phase B
 

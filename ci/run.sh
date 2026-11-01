@@ -15,6 +15,7 @@
 #   ci/run.sh images                build harness images, Trivy vulns/misconfig, SBOM and licenses
 #   ci/run.sh images-opensbx        OpenShell sandbox image (arm64 Docker host only): Trivy vulns, SBOM, licenses
 #   ci/run.sh manifest              security manifest against executed tests and scenarios
+#   ci/run.sh signer                Swift signer (macOS only, NOT_APPLICABLE elsewhere): build, tests, entitlements and hardened runtime
 #   ci/run.sh stress                repeated shuffled security tests under the race detector
 #   ci/run.sh mutation              security mutation checks in a temporary copy
 #   ci/run.sh bench                 benchmark report (no numeric gate)
@@ -24,7 +25,7 @@
 #   ci/run.sh vm                    VM proof (local only, Lima on a Mac): harness/run-vm.sh, last-vm-run.log verified
 #   ci/run.sh dist                  release files in out/dist: deb/rpm, tmb tar.gz, CycloneDX SBOMs, SHA256SUMS (version: TMB_VERSION or git)
 #   ci/run.sh package               dist + a second build compared byte for byte + deb/rpm install tests in containers
-#   ci/run.sh local                 lint + test + ci-selftest + coverage + security + build + fuzz short
+#   ci/run.sh local                 lint + test + ci-selftest + coverage + security + build + fuzz short + signer
 #
 # Every check writes out/ci/results/<check>.json (see tmbci). A check that
 # cannot run records ERROR; nothing is skipped silently.
@@ -715,6 +716,61 @@ cmd_manifest() {
   "$BIN/tmbci" "${args[@]}"
 }
 
+# Swift signer (signer/, ADR 0007 R5 and R8). Apple frameworks only, so it
+# builds on macOS; elsewhere both checks are NOT_APPLICABLE. CI pins Xcode
+# through DEVELOPER_DIR in the signer job.
+cmd_signer() {
+  need_tmbci
+  local S=$REPORTS/signer c
+  rm -rf "$S"; mkdir -p "$S"
+  if [ "$(uname -s)" != Darwin ]; then
+    for c in signer/build-test signer/entitlements; do
+      result "$c" NOT_APPLICABLE "the signer is Swift with Apple frameworks and builds only on macOS"
+    done
+    return
+  fi
+  if [ -n "${DEVELOPER_DIR:-}" ] && [ ! -d "$DEVELOPER_DIR" ]; then
+    for c in signer/build-test signer/entitlements; do
+      result "$c" ERROR "pinned Xcode $DEVELOPER_DIR is not installed on this machine (runner image changed?)"
+    done
+    return
+  fi
+  {
+    echo "developer dir: ${DEVELOPER_DIR:-$(xcode-select -p 2>&1)}"
+    xcodebuild -version 2>/dev/null || echo "xcodebuild: not available (Command Line Tools only)"
+    swift --version 2>&1
+    sw_vers 2>&1
+  } >"$S/toolchain.txt"
+  cat "$S/toolchain.txt"
+
+  log "swift build + swift test (signer/Scripts/test.sh)"
+  # the opt-in Secure Enclave test stays off: CI runners have no Secure Enclave
+  env -u TMB_SIGNER_SE_TEST "$ROOT/signer/Scripts/test.sh" >"$S/build-test.log" 2>&1
+  local rc=$? n sv
+  # Swift Testing prints "Test run with N tests in M suites passed"; zero tests is not a pass
+  n=$(sed -n 's/.*Test run with \([0-9][0-9]*\) tests\{0,1\} .*passed.*/\1/p' "$S/build-test.log" | tail -1)
+  sv=$(sed -n 's/.*\(Swift version [^ ]*\).*/\1/p' "$S/toolchain.txt" | head -1)
+  tail -n 40 "$S/build-test.log" >"$S/build-test.tail"
+  if [ $rc -ne 0 ]; then result signer/build-test FAIL "swift build or swift test failed (rc=$rc)" "$S/build-test.tail"
+  elif [ -z "$n" ] || [ "$n" = 0 ]; then result signer/build-test FAIL "no passing Swift Testing run found in the log" "$S/build-test.tail"
+  else result signer/build-test PASS "$n tests passed ($sv)" "$S/toolchain.txt"; fi
+
+  log "entitlements and hardened runtime (signer/Scripts/check-entitlements.sh)"
+  "$ROOT/signer/Scripts/check-entitlements.sh" --self-test >"$S/entitlements.log" 2>&1
+  rc=$?
+  if [ $rc -ne 0 ]; then result signer/entitlements ERROR "checker self-test failed (rc=$rc)" "$S/entitlements.log"; return; fi
+  # Targets: every tracked entitlements file of the signer. The app (#110)
+  # is picked up through its entitlements file and adds its signed bundle here.
+  local targets=() l
+  while IFS= read -r l; do targets+=("$ROOT/$l"); done < <(cd "$ROOT" && git ls-files 'signer/*.entitlements')
+  if [ ${#targets[@]} -eq 0 ]; then
+    result signer/entitlements NOT_APPLICABLE "checker self-test passed; signer/ has no entitlements file or app bundle yet (the app arrives in #110)" "$S/entitlements.log"
+    return
+  fi
+  "$ROOT/signer/Scripts/check-entitlements.sh" "${targets[@]}" >>"$S/entitlements.log" 2>&1
+  by_rc signer/entitlements $? "$S/entitlements.log" "1"
+}
+
 cmd_stress() {
   need_tmbci
   local T=$REPORTS/stress
@@ -820,7 +876,7 @@ cmd_gate() {
 }
 
 cmd_local() {
-  cmd_lint; cmd_test "$(go env GOOS)-$(go env GOARCH)-local"; cmd_ci_selftest; cmd_coverage; cmd_security; cmd_build; cmd_fuzz short
+  cmd_lint; cmd_test "$(go env GOOS)-$(go env GOARCH)-local"; cmd_ci_selftest; cmd_coverage; cmd_security; cmd_build; cmd_fuzz short; cmd_signer
   echo; echo "results in $RESULTS"; grep -h '"status"' "$RESULTS"/*.json | sort | uniq -c
 }
 
@@ -857,6 +913,7 @@ case "$cmd" in
   images) cmd_images ;;
   images-opensbx) cmd_images_opensbx ;;
   manifest) cmd_manifest ;;
+  signer) cmd_signer ;;
   stress) cmd_stress ;;
   mutation) cmd_mutation ;;
   bench) cmd_bench ;;
@@ -866,6 +923,6 @@ case "$cmd" in
   openshell) cmd_openshell ;;
   vm) cmd_vm ;;
   local) cmd_local ;;
-  *) rm -f "$MARK"; sed -n '2,30p' "$0"; exit 2 ;;
+  *) rm -f "$MARK"; sed -n '2,31p' "$0"; exit 2 ;;
 esac
 worst_of_run
