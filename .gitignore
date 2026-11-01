@@ -6,3 +6,6 @@ out/
 /src/cmd/tmb-broker/tmb-broker
 .omo/
 .githooks/
+# signer (SwiftPM) build output
+signer/.build/
+signer/.swiftpm/

@@ -22,7 +22,7 @@ func TestRequesterCannotApproveOwnRequest(t *testing.T) {
 	if f.Type != "denied" || f.Reason != "approver_is_requester" {
 		t.Fatalf("self decision = %+v, want denied approver_is_requester", f)
 	}
-	if len(b.queue.list()) != 1 {
+	if len(b.queue.list(signatureRule{})) != 1 {
 		t.Fatal("a refused self decision removed the item from the queue")
 	}
 	if !lineHasBoth(logText(t, b), `"event":"decision_rejected"`, `"approver_uid":4242`) {
@@ -46,7 +46,8 @@ func TestHangupWinsOverRacingDecision(t *testing.T) {
 	result := make(chan bool, 1)
 	go func() {
 		defer server.Close()
-		result <- b.approveStage(req, id, server)
+		_, ok := b.approveStage(req, id, server)
+		result <- ok
 	}()
 	if f, err := proto.ReadFrame(client); err != nil || f.Type != "waiting" {
 		t.Fatalf("first frame %+v, %v; want waiting", f, err)
@@ -96,7 +97,7 @@ func TestQueueFullKeepsListInOneFrame(t *testing.T) {
 	errc := make(chan error, 1)
 	go func() {
 		defer server.Close()
-		errc <- proto.WriteFrame(server, &proto.Frame{Type: "queue", Items: q.list()})
+		errc <- proto.WriteFrame(server, &proto.Frame{Type: "queue", Items: q.list(signatureRule{})})
 	}()
 	if _, err := proto.ReadFrame(client); err != nil {
 		t.Fatalf("list frame: %v", err)
@@ -104,7 +105,7 @@ func TestQueueFullKeepsListInOneFrame(t *testing.T) {
 	if err := <-errc; err != nil {
 		t.Fatalf("write list: %v", err)
 	}
-	for _, it := range q.list() {
+	for _, it := range q.list(signatureRule{}) {
 		q.withdraw(it.ID)
 	}
 	if q.size != 0 {

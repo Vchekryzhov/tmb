@@ -17,8 +17,11 @@ import (
 // reader sees either the old policy or the new one, never a mix.
 type policy struct {
 	cfg  *Config
-	ttl  time.Duration // token: approval -> claim
-	wait time.Duration // queue: enqueue -> decision (approval_wait_seconds)
+	ttl  time.Duration          // token: approval -> claim
+	wait time.Duration          // queue: enqueue -> decision (approval_wait_seconds)
+	keys map[string]approverKey // approver_keys by fingerprint
+	// required is required_signatures, at least 1
+	required int
 }
 
 func newPolicy(cfg *Config, ttl time.Duration) *policy {
@@ -26,7 +29,23 @@ func newPolicy(cfg *Config, ttl time.Duration) *policy {
 	if wait <= 0 {
 		wait = 300 * time.Second
 	}
-	return &policy{cfg: cfg, ttl: ttl, wait: wait}
+	// loadConfig has validated the keys, so this cannot fail for a loaded
+	// config; a Config built in code with a bad entry gets no keys, which
+	// only ever refuses signed decisions
+	keys, err := parseApproverKeys(cfg.ApproverKeys)
+	if err != nil {
+		keys = nil
+	}
+	required := cfg.RequiredSignatures
+	if required < 1 {
+		required = defaultRequiredSignatures
+	}
+	return &policy{cfg: cfg, ttl: ttl, wait: wait, keys: keys, required: required}
+}
+
+// signatureRule is what a signature is counted against now.
+func (p *policy) signatureRule() signatureRule {
+	return signatureRule{required: p.required, keys: p.keys}
 }
 
 func (b *Broker) conf() *Config               { return b.pol.Load().cfg }
@@ -129,6 +148,9 @@ func (b *Broker) Reload(path string) {
 	// config says, and before this reload's events, so they land in the new
 	// file; a failed reopen makes the journal unavailable (log.go)
 	_ = b.log.Reopen()
+	if err == nil {
+		err = checkSignedMode(next, b.mode)
+	}
 	if err != nil {
 		b.reloadFailed(err)
 		return
@@ -172,7 +194,7 @@ func (b *Broker) Reload(path string) {
 		fmt.Fprintf(os.Stderr, "tmb-broker: reload: %s changed, ignored until restart\n", f.field)
 		b.log.Event("reload_ignored_field", map[string]any{"field": f.field, "running": f.running, "config": f.config})
 	}
-	b.pol.Store(newPolicy(next, ttl))
+	b.storePolicy(newPolicy(next, ttl))
 	if nextTLS != nil {
 		b.tlsCfg.Store(nextTLS)
 	}
@@ -183,6 +205,15 @@ func (b *Broker) Reload(path string) {
 		ignored = []string{}
 	}
 	b.log.Event("reload", map[string]any{"pid": os.Getpid(), "changed": changed, "ignored": ignored})
+}
+
+// storePolicy swaps the policy under the queue lock, so a vote in the
+// queue counts either wholly before the reload or wholly after it
+// (serveDecide re-checks a decide whose policy was replaced).
+func (b *Broker) storePolicy(p *policy) {
+	b.queue.mu.Lock()
+	defer b.queue.mu.Unlock()
+	b.pol.Store(p)
 }
 
 func (b *Broker) reloadFailed(err error) {

@@ -9,6 +9,7 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -49,6 +50,10 @@ type pendingApproval struct {
 	CwdFile   *os.File // O_DIRECTORY fd held on CwdDev/CwdIno until exec (linux); nil once closed
 	CwdPinned bool
 	Requester RequesterID
+	// Env is the environment the approval covered (the payload env in
+	// queue mode, the prompt's in manual): exec runs with it, never with
+	// one rebuilt from a config reloaded since. nil means none was fixed.
+	Env []string
 }
 
 // closePins releases the pinned exe and cwd fds (idempotent). Every path
@@ -83,6 +88,10 @@ type Broker struct {
 	console io.Writer     // broker console output (manual approval)
 
 	queue *approvalQueue // queue mode: requests waiting for an approver
+	// hostKey is the fingerprint of the broker identity key (ADR 0007, R6),
+	// the host_key of every approval payload. Empty refuses every queued
+	// request (approval_payload_invalid).
+	hostKey string
 }
 
 func NewBroker(cfg *Config, log *Logger, claims *ClaimStore, mode string, ttl time.Duration) *Broker {
@@ -261,13 +270,14 @@ func (b *Broker) serveRequest(conn net.Conn, id RequesterID, transport string) {
 		b.doClaim(req, id, conn)
 	case "exec":
 		// approve + claim + exec from the SAME in-memory request object
-		if !b.approveStage(req, id, conn) {
+		ttl, ok := b.approveStage(req, id, conn)
+		if !ok {
 			return
 		}
 		hash := req.Hash()
 		proto.WriteFrame(conn, &proto.Frame{Type: "approved",
 			Token:  proto.TokenID(hash),
-			Detail: fmt.Sprintf("one-shot token, ttl=%s", b.tokenTTL())})
+			Detail: fmt.Sprintf("one-shot token, ttl=%s", ttl)})
 		req.ClaimToken = proto.TokenID(hash) // broker-side binding
 		b.claimStage(req, id, conn)
 	default:
@@ -458,22 +468,24 @@ func (b *Broker) pendingScriptDeny(hash string) (string, string) {
 // --- approval -------------------------------------------------------------
 
 func (b *Broker) doApprove(req *proto.Request, id RequesterID, conn net.Conn) {
-	if !b.approveStage(req, id, conn) {
+	ttl, ok := b.approveStage(req, id, conn)
+	if !ok {
 		return
 	}
 	proto.WriteFrame(conn, &proto.Frame{Type: "approved",
 		Token:  proto.TokenID(req.Hash()),
-		Detail: fmt.Sprintf("one-shot token, ttl=%s", b.tokenTTL())})
+		Detail: fmt.Sprintf("one-shot token, ttl=%s", ttl)})
 }
 
 // approveStage validates, runs the approval interaction, and on grant stores
-// a pending approval bound to the requester identity. Returns false when a
-// deny frame has been sent.
-func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn) bool {
+// a pending approval bound to the requester identity. It returns the token
+// TTL actually granted (never longer than the TTL signed in the approval
+// payload), or false when a deny frame has been sent.
+func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn) (time.Duration, bool) {
 	exeReal, cwdReal, dev, ino, deny, detail := b.validateRequest(req)
 	if deny != "" {
 		b.deny(req, id, deny, detail, conn)
-		return false
+		return 0, false
 	}
 
 	// pin the identities for exec time BEFORE the approver sees the request:
@@ -489,40 +501,65 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 	}
 	if code, detail := pinApproval(pend, exeReal, cwdReal, dev, ino); code != "" {
 		b.deny(req, id, code, detail, conn)
-		return false
+		return 0, false
 	}
 	if code, detail := pend.scriptDeny(); code != "" {
 		pend.closePins()
 		b.deny(req, id, code, detail, conn)
-		return false
+		return 0, false
 	}
 
-	granted, reason, approver := b.runApprovalInteraction(req, id, exeReal, cwdReal, pend.ExeDev, pend.ExeIno, conn)
+	out := b.runApprovalInteraction(req, id, exeReal, cwdReal, pend.ExeDev, pend.ExeIno, conn)
+	granted := out.granted
 	aev := id.LogFields()
 	aev["mode"] = b.mode
 	// the approver's identity in queue mode, mode:<mode> for bench modes
-	aev["approver"] = approver
+	aev["approver"] = out.approver
 	aev["decision"] = decision(granted)
 	aev["result"] = boolRes(granted)
-	aev["reason"] = reason
+	aev["reason"] = out.reason
 	aev["executable"] = req.Executable
 	aev["argv"] = req.Argv
 	aev["nonce"] = logNonce(req.Nonce)
 	aev["hash"] = req.Hash()
+	ttl := b.tokenTTL()
+	if p := out.proof; p != nil {
+		// the decision proof (ADR 0006): the signatures can be re-verified
+		// over the payload with the public keys after the fact
+		fps, classes, names, sigs := []string{}, []string{}, []string{}, []string{}
+		for _, s := range p.signatures {
+			fps = append(fps, s.key.fp)
+			classes = append(classes, s.key.class)
+			names = append(names, s.key.name)
+			sigs = append(sigs, s.b64)
+		}
+		aev["short_code"] = p.shortCode
+		aev["payload"] = base64.StdEncoding.EncodeToString(p.payload)
+		aev["signed"] = len(sigs) > 0
+		aev["approver_keys"] = fps
+		aev["approver_key_classes"] = classes
+		aev["approver_key_names"] = names
+		aev["signatures"] = sigs
+		// never a token that outlives the TTL the approver signed
+		if p.tokenTTL > 0 && p.tokenTTL < ttl {
+			ttl = p.tokenTTL
+		}
+	}
 	if b.log.Event("approval", aev) != nil {
 		pend.closePins()
 		b.deny(req, id, "audit_unavailable", auditUnavailableDetail, conn)
-		return false
+		return 0, false
 	}
 	if !granted {
 		pend.closePins()
-		b.deny(req, id, reason, "nothing was executed", conn)
-		return false
+		b.deny(req, id, out.reason, "nothing was executed", conn)
+		return 0, false
 	}
 
 	hash := req.Hash()
 	pend.Hash = hash
-	pend.Expiry = time.Now().Add(b.tokenTTL())
+	pend.Env = out.env
+	pend.Expiry = time.Now().Add(ttl)
 	b.mu.Lock()
 	if old, exists := b.pending[hash]; exists {
 		old.closePins() // re-approve replaces the pending: drop the old pin
@@ -532,7 +569,7 @@ func (b *Broker) approveStage(req *proto.Request, id RequesterID, conn net.Conn)
 	// an approval nobody claims must not hold its exe and cwd fds until the
 	// next request for the same hash: drop it when it expires
 	time.AfterFunc(time.Until(pend.Expiry), func() { b.dropIfExpired(hash, pend) })
-	return true
+	return ttl, true
 }
 
 // dropIfExpired removes pend from the pending table and closes its pins if
@@ -550,17 +587,19 @@ func (b *Broker) dropIfExpired(hash string, pend *pendingApproval) {
 // runApprovalInteraction performs the mode-specific approval. manual prints
 // the exact request to the broker console and reads y/n from stdin; mock
 // modes are deterministic stand-ins for tests.
-func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64, conn net.Conn) (bool, string, string) {
+func (b *Broker) runApprovalInteraction(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64, conn net.Conn) approvalOutcome {
 	if b.mode == ModeQueue {
-		return b.queueApproval(req, id, exeReal, cwdReal, conn)
+		return b.queueApproval(req, id, exeReal, cwdReal, dev, ino, conn)
 	}
-	granted, reason := b.benchApproval(req, id, exeReal, cwdReal, dev, ino)
-	return granted, reason, "mode:" + b.mode
+	env := b.buildEnv(req)
+	granted, reason := b.benchApproval(req, id, exeReal, cwdReal, dev, ino, env)
+	return approvalOutcome{granted: granted, reason: reason, approver: "mode:" + b.mode, env: env}
 }
 
 // benchApproval is the approval of the bench modes: the broker decides on
-// its own (mock-*) or asks its console (manual).
-func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64) (bool, string) {
+// its own (mock-*) or asks its console (manual), showing env: the
+// environment the process will get.
+func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal, cwdReal string, dev, ino uint64, env []string) (bool, string) {
 	switch b.mode {
 	case ModeMockApprove:
 		return true, ""
@@ -574,7 +613,7 @@ func (b *Broker) benchApproval(req *proto.Request, id RequesterID, exeReal, cwdR
 		b.mu.Lock() // serialize prompts so they never interleave
 		defer b.mu.Unlock()
 		// the environment the process will actually get, not the request's
-		printManualPrompt(b.console, req, id, exeReal, cwdReal, dev, ino, b.buildEnv(req))
+		printManualPrompt(b.console, req, id, exeReal, cwdReal, dev, ino, env)
 		line, err := b.stdin.ReadString('\n')
 		if err != nil && line == "" {
 			// stdin closed (detached broker) -> fail closed

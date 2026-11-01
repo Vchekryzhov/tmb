@@ -56,6 +56,12 @@
         "check": "test/darwin-arm64-go1.26.10"
       },
       {
+        "check": "signer/build-test"
+      },
+      {
+        "check": "signer/entitlements"
+      },
+      {
         "check": "ci/selftest"
       },
       {
@@ -160,6 +166,7 @@
     "jobs": [
       "lint",
       "test",
+      "signer",
       "ci-selftest",
       "coverage",
       "security",
@@ -231,6 +238,12 @@
         "check": "test/darwin-arm64-go1.26.10"
       },
       {
+        "check": "signer/build-test"
+      },
+      {
+        "check": "signer/entitlements"
+      },
+      {
         "check": "ci/selftest"
       },
       {
@@ -335,6 +348,7 @@
     "jobs": [
       "lint",
       "test",
+      "signer",
       "ci-selftest",
       "coverage",
       "security",
@@ -406,6 +420,12 @@
         "check": "test/darwin-arm64-go1.26.10"
       },
       {
+        "check": "signer/build-test"
+      },
+      {
+        "check": "signer/entitlements"
+      },
+      {
         "check": "ci/selftest"
       },
       {
@@ -510,6 +530,7 @@
     "jobs": [
       "lint",
       "test",
+      "signer",
       "ci-selftest",
       "coverage",
       "security",
@@ -579,6 +600,12 @@
       },
       {
         "check": "test/darwin-arm64-go1.26.10"
+      },
+      {
+        "check": "signer/build-test"
+      },
+      {
+        "check": "signer/entitlements"
       },
       {
         "check": "ci/selftest"
@@ -691,6 +718,7 @@
     "jobs": [
       "lint",
       "test",
+      "signer",
       "ci-selftest",
       "coverage",
       "security",
@@ -763,6 +791,12 @@
         "check": "test/darwin-arm64-go1.26.10"
       },
       {
+        "check": "signer/build-test"
+      },
+      {
+        "check": "signer/entitlements"
+      },
+      {
         "check": "ci/selftest"
       },
       {
@@ -873,6 +907,7 @@
     "jobs": [
       "lint",
       "test",
+      "signer",
       "ci-selftest",
       "coverage",
       "security",

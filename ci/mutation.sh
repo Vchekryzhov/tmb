@@ -18,11 +18,17 @@ MUTANTS=(
   "M4-requester-binding|cmd/tmb-broker/broker.go|has && !p.Requester.Equal(id) {|has && false {|another requester may redeem an approval"
   "M5-request-binding|cmd/tmb-broker/broker.go|if req.ClaimToken != tokenID {|if false {|token no longer binds to the exact request"
   "M6-one-shot|cmd/tmb-broker/store.go|os.O_CREATE\|os.O_EXCL\|os.O_WRONLY, 0o600|os.O_CREATE\|os.O_TRUNC\|os.O_WRONLY, 0o600|claim file no longer exclusive: replay possible"
+  "M7-signature-check|cmd/tmb-broker/queue.go|if v != nil && (e.payload == nil \|\| !proto.VerifyPayloadSignature(v.key.pub, e.payload, v.der)) {|if v != nil && e.payload == nil {|a signed decide is accepted without verifying the signature"
+  "M8-signed-required|cmd/tmb-broker/queue.go|case granted && pol.cfg.RequireSignedDecision:|case false:|an unsigned approve passes require_signed_decision"
+  "M9-approver-key-lookup|cmd/tmb-broker/queue.go|case !known:|case !known && false:|a decide signed by a key outside approver_keys is not refused as unknown"
+  "M10-signed-deny-check|cmd/tmb-broker/queue.go|if v != nil && (e.payload == nil \|\| !proto.VerifyPayloadSignature(v.key.pub, e.payload, v.der)) {|if v != nil && d.granted && (e.payload == nil \|\| !proto.VerifyPayloadSignature(v.key.pub, e.payload, v.der)) {|a signed deny is accepted (and journaled as signed) without verifying the signature"
 )
 
-# copy src/ plus docs/, which some tests read (audit-schema.md)
+# copy src/ plus the files outside it that tests read: docs/ (audit-schema.md)
+# and signer/Tests/vectors (approval payload vectors shared with the Swift side)
 copy_tree() {
-  cp -R "$ROOT/src" "$1/src" && cp -R "$ROOT/docs" "$1/docs"
+  cp -R "$ROOT/src" "$1/src" && cp -R "$ROOT/docs" "$1/docs" &&
+    mkdir -p "$1/signer/Tests" && cp -R "$ROOT/signer/Tests/vectors" "$1/signer/Tests/vectors"
 }
 
 # control: the unmutated copy must pass, otherwise every mutant would read

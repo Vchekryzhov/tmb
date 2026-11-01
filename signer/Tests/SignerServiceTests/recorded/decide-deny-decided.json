@@ -1,0 +1,9 @@
+{
+  "args": [
+    "--decide"
+  ],
+  "exit": 0,
+  "stderr": "",
+  "stdin": "{\"item_id\":\"abababababababab\",\"item_hash\":\"abababababababababababababababababababababababababababababababab\",\"decision\":\"deny\"}",
+  "stdout": "{\"type\":\"decided\",\"detail\":\"deny\"}\n"
+}

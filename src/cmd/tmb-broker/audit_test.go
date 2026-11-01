@@ -615,6 +615,38 @@ tls_handshake_failed error:string remote:string
 tls_listen addr:string
 tls_no_client_cert remote:string
 `,
+	3: `
+* event:string schema:integer ts:string
+approval approver:string approver_key_classes:array_of_string approver_key_names:array_of_string approver_keys:array_of_string argv:array_of_string decision:string executable:string hash:string mode:string nonce:string payload:string reason:string requester_fp:string requester_pid:integer requester_uid:integer result:string short_code:string signatures:array_of_string signed:boolean
+approval_timeout item:string requester_fp:string requester_pid:integer requester_uid:integer wait_seconds:integer
+approver_denied approver_pid:integer approver_uid:integer reason:string
+audit_unavailable error:string path:string pid:integer
+bad_frame approver_pid:integer approver_uid:integer error:string requester_fp:string requester_pid:integer requester_uid:integer
+bad_request error:string requester_fp:string requester_pid:integer requester_uid:integer
+broker_start allowed_requester_keys:array_of_string allowed_requester_uids:array_of_integer host_id:string host_key:string mode:string pid:integer socket:string tls_addr:string ttl_seconds:integer
+broker_stop pid:integer
+claim executable:string hash:string nonce:string requester_fp:string requester_pid:integer requester_uid:integer result:string token:string
+claim_gc error:string removed:integer skipped:integer
+claim_gc_skipped error:string file:string
+decision_rejected approver_key:string approver_pid:integer approver_uid:integer item:string reason:string
+deny argv:array_of_string detail:string executable:string hash:string nonce:string reason:string requester_fp:string requester_pid:integer requester_uid:integer
+exec_exit client_gone:boolean duration_ms:integer executable:string exit_status:integer requester_fp:string requester_pid:integer requester_uid:integer token:string
+exec_fail error:string token:string
+exec_start argv:array_of_string cwd:string cwd_verified:boolean cwd_via_fd:boolean env_count:integer exe_dev:integer exe_ino:integer exe_via_fd:boolean executable:string requester_fp:string requester_pid:integer requester_uid:integer token:string uid:integer
+peercred_error error:string socket:string
+queue_list_failed approver_pid:integer approver_uid:integer error:string
+queued argv:array_of_string cwd:string executable:string hash:string item:string nonce:string requester_fp:string requester_pid:integer requester_uid:integer short_code:string
+reload changed:array_of_string ignored:array_of_string pid:integer
+reload_failed error:string pid:integer
+reload_ignored_field config:any field:string running:any
+request argv:array_of_string claim_token:string cwd:string env:object_of_string executable:string hash:string nonce:string requester_fp:string requester_pid:integer requester_uid:integer transport:string type:string uid:integer
+request_abandoned item:string requester_fp:string requester_pid:integer requester_uid:integer wait_seconds:integer
+requester_denied reason:string requester_fp:string requester_pid:integer requester_uid:integer
+signature_recorded approver_key:string approver_key_class:string approver_key_name:string approver_pid:integer approver_uid:integer item:string short_code:string signature:string signatures:integer signatures_required:integer
+tls_handshake_failed error:string remote:string
+tls_listen addr:string
+tls_no_client_cert remote:string
+`,
 }
 
 // formatSchemaLines renders a schema as one line per event, "event

@@ -68,6 +68,7 @@ var auditEvents = map[string]map[string]string{
 	"broker_start": {
 		"pid": tInt, "socket": tString, "mode": tString, "ttl_seconds": tInt,
 		"allowed_requester_uids": tInts, "allowed_requester_keys": tStrings, "tls_addr": tString,
+		"host_id": tString, "host_key": tString,
 	},
 	"broker_stop":          {"pid": tInt},
 	"tls_listen":           {"addr": tString},
@@ -88,15 +89,22 @@ var auditEvents = map[string]map[string]string{
 	}),
 	"queued": withRequester(map[string]string{
 		"item": tString, "hash": tString, "executable": tString, "argv": tStrings, "cwd": tString, "nonce": tString,
+		"short_code": tString,
 	}),
 	"approval_timeout":  withRequester(map[string]string{"item": tString, "wait_seconds": tInt}),
 	"request_abandoned": withRequester(map[string]string{"item": tString, "wait_seconds": tInt}),
 	"approver_denied":   withApprover(map[string]string{"reason": tString}),
-	"decision_rejected": withApprover(map[string]string{"item": tString, "reason": tString}),
+	"decision_rejected": withApprover(map[string]string{"item": tString, "reason": tString, "approver_key": tString}),
+	"signature_recorded": withApprover(map[string]string{
+		"item": tString, "short_code": tString, "approver_key": tString, "approver_key_class": tString,
+		"approver_key_name": tString, "signature": tString, "signatures": tInt, "signatures_required": tInt,
+	}),
 	"queue_list_failed": withApprover(map[string]string{"error": tString}),
 	"approval": withRequester(map[string]string{
 		"mode": tString, "approver": tString, "decision": tString, "result": tString, "reason": tString,
 		"executable": tString, "argv": tStrings, "nonce": tString, "hash": tString,
+		"short_code": tString, "payload": tString, "signed": tBool, "approver_keys": tStrings,
+		"approver_key_classes": tStrings, "approver_key_names": tStrings, "signatures": tStrings,
 	}),
 	"claim": withRequester(map[string]string{
 		"token": tString, "hash": tString, "nonce": tString, "executable": tString, "result": tString,

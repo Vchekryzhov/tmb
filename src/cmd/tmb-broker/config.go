@@ -2,10 +2,13 @@
 package main
 
 import (
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"tmb-poc/internal/proto"
 )
 
 // Config is broker-side configuration (loaded from JSON). The env allowlist,
@@ -43,6 +46,118 @@ type Config struct {
 	TLSCAFile   string `json:"tls_ca_file"`
 	TLSCertFile string `json:"tls_cert_file"`
 	TLSKeyFile  string `json:"tls_key_file"`
+	// Trusted signer (ADR 0006, ADR 0007). host_id names this host in every
+	// approval payload (default: the host name). approver_keys are the
+	// public keys whose signature over a payload counts as a decision; with
+	// require_signed_decision an unsigned approve is refused.
+	// required_signatures (default 1) is how many signatures by different
+	// keys approve an item (ADR 0007, R2). All four reload on SIGHUP.
+	HostID                string        `json:"host_id"`
+	ApproverKeys          []ApproverKey `json:"approver_keys"`
+	RequireSignedDecision bool          `json:"require_signed_decision"`
+	RequiredSignatures    int           `json:"required_signatures"`
+}
+
+// ApproverKey is one approver_keys entry (ADR 0007, R1): a name for the
+// journal, the key class and the base64 DER SubjectPublicKeyInfo of an
+// ECDSA P-256 key. A signed decide names the key by its fingerprint
+// (SHA-256 of that SPKI, ADR 0005).
+type ApproverKey struct {
+	Name      string `json:"name"`
+	Class     string `json:"class"`
+	PublicKey string `json:"public_key"`
+}
+
+// Approver key classes (ADR 0007, R1). Only mac-se is implemented; ios-se
+// and u2f are reserved, and a config that lists them is refused.
+const (
+	KeyClassMacSE = "mac-se"
+	KeyClassIOSSE = "ios-se"
+	KeyClassU2F   = "u2f"
+)
+
+// approverKey is a parsed approver_keys entry.
+type approverKey struct {
+	name, class, fp string
+	pub             *ecdsa.PublicKey
+}
+
+// parseApproverKeys checks approver_keys and indexes them by fingerprint:
+// only the implemented class (mac-se) is accepted, a reserved or unknown
+// class is an error, and every name and every key appears once.
+func parseApproverKeys(entries []ApproverKey) (map[string]approverKey, error) {
+	out := map[string]approverKey{}
+	names := map[string]bool{}
+	for i, e := range entries {
+		switch e.Class {
+		case KeyClassMacSE:
+		case KeyClassIOSSE, KeyClassU2F:
+			return nil, fmt.Errorf("config: approver_keys[%d] %q: class %s is reserved and not implemented", i, e.Name, e.Class)
+		default:
+			return nil, fmt.Errorf("config: approver_keys[%d] %q: unknown class %q (want %s)", i, e.Name, e.Class, KeyClassMacSE)
+		}
+		if e.Name == "" || names[e.Name] {
+			return nil, fmt.Errorf("config: approver_keys[%d]: name %q is empty or repeated", i, e.Name)
+		}
+		names[e.Name] = true
+		pub, fp, err := proto.ParseApproverPublicKey(e.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("config: approver_keys[%d] %q: %v", i, e.Name, err)
+		}
+		if _, dup := out[fp]; dup {
+			return nil, fmt.Errorf("config: approver_keys[%d] %q: the same key is listed twice", i, e.Name)
+		}
+		out[fp] = approverKey{name: e.Name, class: e.Class, fp: fp, pub: pub}
+	}
+	return out, nil
+}
+
+// defaultRequiredSignatures is required_signatures when the config leaves
+// it out.
+const defaultRequiredSignatures = 1
+
+// hostname is os.Hostname; tests replace it.
+var hostname = os.Hostname
+
+// defaultHostID is host_id when the config leaves it out: the host name. A
+// host name that cannot be read is an error (the broker does not start, a
+// reload fails), never an empty host_id.
+func defaultHostID() (string, error) {
+	h, err := hostname()
+	if err != nil || h == "" {
+		return "", fmt.Errorf("config: host_id is empty and the host name is unknown (%v)", err)
+	}
+	return h, nil
+}
+
+// checkThreshold applies the ADR 0007 R2 rules to required_signatures
+// (0 means the default 1): a threshold above 1 counts signatures, so it
+// needs require_signed_decision, and with signed decisions required the
+// threshold must be reachable with the listed keys.
+func checkThreshold(c *Config, keys int) error {
+	if c.RequiredSignatures < 0 {
+		return fmt.Errorf("config: required_signatures %d is negative", c.RequiredSignatures)
+	}
+	if c.RequiredSignatures == 0 {
+		c.RequiredSignatures = defaultRequiredSignatures
+	}
+	if c.RequiredSignatures > 1 && !c.RequireSignedDecision {
+		return fmt.Errorf("config: required_signatures %d needs require_signed_decision: an unsigned approve would bypass the threshold", c.RequiredSignatures)
+	}
+	if c.RequireSignedDecision && c.RequiredSignatures > keys {
+		return fmt.Errorf("config: require_signed_decision with required_signatures %d needs at least %d approver_keys entries, have %d: no approve could ever be accepted", c.RequiredSignatures, c.RequiredSignatures, keys)
+	}
+	return nil
+}
+
+// checkSignedMode refuses require_signed_decision with an approval mode
+// other than the queue: the bench modes approve without any signature, so
+// the setting would be silently ignored.
+func checkSignedMode(c *Config, mode string) error {
+	if c.RequireSignedDecision && mode != ModeQueue {
+		return fmt.Errorf("config: require_signed_decision needs approval mode %s, the broker runs %s: that mode approves without a signature", ModeQueue, mode)
+	}
+	return nil
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -85,6 +200,20 @@ func loadConfig(path string) (*Config, error) {
 		if k == "PATH" {
 			return nil, fmt.Errorf("config: allowed_env_keys must not contain PATH: the search path comes only from fixed_env")
 		}
+	}
+	if c.HostID == "" {
+		h, err := defaultHostID()
+		if err != nil {
+			return nil, err
+		}
+		c.HostID = h
+	}
+	keys, err := parseApproverKeys(c.ApproverKeys)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkThreshold(&c, len(keys)); err != nil {
+		return nil, err
 	}
 	roots, err := normalizeCwdRoots(c.AllowedCwdRoots)
 	if err != nil {

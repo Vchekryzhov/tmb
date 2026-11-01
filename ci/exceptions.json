@@ -224,6 +224,126 @@
     {
       "scanner": "gitleaks",
       "rule": "generic-api-key",
+      "location": "harness/last-run.log",
+      "match": "host_key\":\"REDACTED\"",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-run.log",
+      "match": "approver_key\":\"REDACTED\"",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-run.log",
+      "match": "host_key=REDACTED",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-run.log",
+      "match": "keys: REDACTED",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-pair-run.log",
+      "match": "host_key\":\"REDACTED\"",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-pair-run.log",
+      "match": "approver_key\":\"REDACTED\"",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-pair-run.log",
+      "match": "host_key=REDACTED",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-pair-run.log",
+      "match": "keys: REDACTED",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-full-run.log",
+      "match": "host_key\":\"REDACTED\"",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-full-run.log",
+      "match": "approver_key\":\"REDACTED\"",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-full-run.log",
+      "match": "host_key=REDACTED",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
+      "location": "harness/last-full-run.log",
+      "match": "keys: REDACTED",
+      "reason": "harness evidence log: SHA-256 fingerprints of public keys (broker identity key, fake signer keys from a disposable run), not credentials",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gitleaks",
+      "rule": "generic-api-key",
       "location": "prototype/openshell-wiring/ref/last-run.log",
       "match": "token\":\"REDACTED\"",
       "reason": "history of prototype branches: spent one-shot TMB token IDs (16 hex of the request hash) from disposable harness runs, not credentials; history is immutable, re-review on expiry",
@@ -596,6 +716,46 @@
       "location": "src/cmd/tmb-broker/tls_sec_test.go",
       "match": "MaxVersion: tls.VersionTLS12",
       "reason": "SEC-06 test: the TLS 1.2-only peer must be refused, so the test builds one on purpose",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/hostkey.go",
+      "match": "os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)",
+      "reason": "identity key path is the fixed file name under state_dir from the root-owned broker config; opened without following a symlink, owner and mode checked on the open file",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G304",
+      "location": "src/cmd/tmb-broker/hostkey_test.go",
+      "match": "os.ReadFile(",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G302",
+      "location": "src/cmd/tmb-broker/hostkey_test.go",
+      "match": "os.Chmod(",
+      "reason": "test gives its own t.TempDir() key file group or world bits, or makes its state_dir read-only, to provoke the identity key start errors",
+      "owner": "Vchekryzhov",
+      "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
+      "expires": "2027-04-14"
+    },
+    {
+      "scanner": "gosec",
+      "rule": "G703",
+      "location": "src/cmd/tmb-broker/hostkey_test.go",
+      "match": "os.WriteFile(path, []byte(content), mode)",
+      "reason": "test fixture under t.TempDir(): path built by the test itself",
       "owner": "Vchekryzhov",
       "issue": "https://github.com/Vchekryzhov/tmb/issues/29",
       "expires": "2027-04-14"

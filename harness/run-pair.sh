@@ -814,7 +814,8 @@ assert_out_eq "PAIR-KEY: stdout '0'" "0"
 # text files only (-I): the Go binaries carry the PEM type string itself
 docker exec "$HOST" sh -c 'grep -rlI -e "-----BEGIN [A-Z ]*PRIVATE KEY-----" / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null' >"$TD/pk-host.out"
 sed 's/^/  | /' "$TD/pk-host.out"
-if [ "$(grep -cv '^/etc/tmb/certs/server.key$' "$TD/pk-host.out")" = 0 ]; then ok "PAIR-KEY: host-sim holds no private key but the broker's own"; else bad "PAIR-KEY: host-sim holds other private key files"; fi
+# the broker's own keys: its TLS key and its identity key (ADR 0007, R6)
+if [ "$(grep -cvE '^(/etc/tmb/certs/server\.key|/var/lib/tmb-proto/identity\.key)$' "$TD/pk-host.out")" = 0 ]; then ok "PAIR-KEY: host-sim holds no private key but the broker's own"; else bad "PAIR-KEY: host-sim holds other private key files"; fi
 stop_broker
 state_dump
 
@@ -972,10 +973,10 @@ N_SUMMARY=$(sed -n 's/^PASS: \([0-9]*\)  FAIL: \([0-9]*\)$/\1 \2/p' last-run.log
 echo "run.sh summary: PASS/FAIL = ${N_SUMMARY:-<not parsed>}"
 N_PASS=${N_SUMMARY%% *}
 N_FAIL=${N_SUMMARY##* }
-if [ "${N_PASS:-x}" = "195" ] && [ "${N_FAIL:-x}" = "0" ]; then
-  ok "REGRESSION: N-series 195/195 green (77 of the OpenShell milestone + N13-N17 approval queue + N18 cwd roots + N19/N20 env policy + N22 held cwd fd + N21 claim GC + N24 removed config field and flags + N28 queue and pending approval across SIGHUP + N29 journal reopen and audit_unavailable)"
+if [ "${N_PASS:-x}" = "272" ] && [ "${N_FAIL:-x}" = "0" ]; then
+  ok "REGRESSION: N-series 272/272 green (77 of the OpenShell milestone + N13-N17 approval queue + N18 cwd roots + N19/N20 env policy + N22 held cwd fd + N21 claim GC + N24 removed config field and flags + N28 queue and pending approval across SIGHUP + N29 journal reopen and audit_unavailable + N31-N37 signed decision)"
 else
-  bad "REGRESSION: N-series PASS=${N_PASS:-?} FAIL=${N_FAIL:-?} (want 195/0)"
+  bad "REGRESSION: N-series PASS=${N_PASS:-?} FAIL=${N_FAIL:-?} (want 272/0)"
 fi
 
 # =============================================================================

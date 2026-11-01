@@ -1,0 +1,9 @@
+{
+  "args": [
+    "--decide"
+  ],
+  "exit": 0,
+  "stderr": "",
+  "stdin": "{\"item_id\":\"abababababababab\",\"item_hash\":\"abababababababababababababababababababababababababababababababab\",\"decision\":\"approve\",\"signature\":\"bm90LWEtcmVhbC1kZXItc2lnbmF0dXJl\",\"approver_key\":\"1111111111111111111111111111111111111111111111111111111111111111\"}",
+  "stdout": "{\"type\":\"recorded\",\"detail\":\"1 of 2\"}\n"
+}

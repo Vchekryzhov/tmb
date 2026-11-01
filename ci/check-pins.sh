@@ -36,6 +36,12 @@ for wf in "$ROOT"/.github/workflows/*.yml "$ROOT"/.github/actions/*/action.yml; 
     first=$(echo "$line" | sed -n 's/.*go: \["\([0-9.]*\)".*/\1/p')
     [ -z "$first" ] || [ "$first" = "$want" ] || { echo "$(basename "$wf"):$ln matrix starts with Go $first, want $want"; rc=1; }
   done < <(grep -n 'go: \["' "$wf" || true)
+  # Xcode is pinned by an explicit versioned path, never the moving Xcode.app
+  while IFS=: read -r ln line; do
+    echo "$line" | grep -qE 'DEVELOPER_DIR:[[:space:]]*/Applications/Xcode_[0-9]+(\.[0-9]+)+\.app/Contents/Developer[[:space:]]*$' \
+      || { echo "$(basename "$wf"):$ln DEVELOPER_DIR is not an explicit /Applications/Xcode_X.Y.app"; rc=1; }
+  done < <(grep -n 'DEVELOPER_DIR:' "$wf" || true)
+  grep -qn 'xcode-select -s\|xcode-select --switch\|setup-xcode' "$wf" && { echo "$(basename "$wf"): select Xcode through DEVELOPER_DIR only"; rc=1; }
   while IFS=: read -r ln line; do
     ref=$(echo "$line" | sed -n 's/.*uses:[[:space:]]*\([^[:space:]#]*\).*/\1/p')
     case "$ref" in ./*|'$/'*|'') continue ;; esac   # in-repo actions run at the tested commit
