@@ -20,7 +20,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -269,8 +268,8 @@ func readDecision(r io.Reader) (*proto.Request, error) {
 		return nil, errors.New("signature and approver_key go together")
 	}
 	if hasSig {
-		if der, err := base64.StdEncoding.Strict().DecodeString(req.Signature); err != nil || len(der) == 0 {
-			return nil, errors.New("signature must be non-empty standard base64")
+		if _, err := proto.DecodeSignature(req.Signature); err != nil {
+			return nil, err
 		}
 		if !isLowerHex(req.ApproverKey, 64) {
 			return nil, errors.New("approver_key must be 64 lowercase hex characters")

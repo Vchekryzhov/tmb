@@ -715,12 +715,12 @@ func checkDecide(pol *policy, req *proto.Request, granted bool, id RequesterID) 
 	switch {
 	case req.Signature != "" || req.ApproverKey != "":
 		k, known := pol.keys[req.ApproverKey]
-		sig, err := base64.StdEncoding.DecodeString(req.Signature)
+		sig, err := proto.DecodeSignature(req.Signature)
 		switch {
 		case !known:
 			return d, "approver_key_unknown", fmt.Sprintf("approver_key %q is not in approver_keys", req.ApproverKey)
-		case err != nil || len(sig) == 0:
-			return d, "signature_invalid", "the signature is not base64 DER"
+		case err != nil:
+			return d, "signature_invalid", err.Error()
 		}
 		d.vote = &approverSignature{key: k, der: sig, b64: req.Signature}
 	case granted && pol.cfg.RequireSignedDecision:

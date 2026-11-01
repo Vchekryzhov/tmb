@@ -305,6 +305,26 @@ func PayloadDigest(payload []byte) []byte {
 	return sum[:]
 }
 
+// MaxSignatureB64 bounds the signature field of a decide: an ECDSA P-256
+// DER signature is at most 72 bytes, 96 characters of base64.
+const MaxSignatureB64 = 128
+
+// DecodeSignature decodes the signature field of a decide. It accepts only
+// non-empty canonical standard base64 of at most MaxSignatureB64
+// characters: the decoder would skip line breaks and ignore spare bits, so
+// one signature would have many spellings and the journal could record a
+// bloated one.
+func DecodeSignature(s string) ([]byte, error) {
+	if len(s) > MaxSignatureB64 {
+		return nil, fmt.Errorf("signature is %d characters, limit %d", len(s), MaxSignatureB64)
+	}
+	der, err := base64.StdEncoding.DecodeString(s)
+	if err != nil || len(der) == 0 || base64.StdEncoding.EncodeToString(der) != s {
+		return nil, errors.New("signature is not non-empty canonical standard base64")
+	}
+	return der, nil
+}
+
 // VerifyPayloadSignature checks a DER (ASN.1) ECDSA signature over payload.
 // A nil key verifies nothing.
 func VerifyPayloadSignature(pub *ecdsa.PublicKey, payload, sigDER []byte) bool {
