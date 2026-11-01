@@ -912,6 +912,333 @@ start_broker mock-approve 10
 state_dump
 
 # -----------------------------------------------------------------------------
+# Signed decision (ADR 0006, ADR 0007): a fake trusted signer drives the
+# machine mode of `tmb approve` the way the Mac signer does over SSH. Its
+# P-256 keys are generated on the runner into $TD (wiped by the cleanup
+# trap): no private key enters an image, the broker config carries only the
+# public keys. The fake signer signs the base64-decoded `payload` of
+# `tmb approve --list --json` with openssl (DER ECDSA over SHA-256 of the raw
+# bytes) and sends the decision object on stdin to `tmb approve --decide`.
+SIG=$TD/signer
+SIG_HOST=tmb-n-host
+mkdir -p "$SIG"
+signer_key() { # signer_key NAME -> $SIG/NAME.pem (private), NAME.spki (base64 SPKI), NAME.fp
+  openssl ecparam -name prime256v1 -genkey -noout -out "$SIG/$1.pem" 2>/dev/null
+  openssl pkey -in "$SIG/$1.pem" -pubout -outform DER -out "$SIG/$1.der" 2>/dev/null
+  openssl base64 -A -in "$SIG/$1.der" >"$SIG/$1.spki"
+  openssl dgst -sha256 -hex "$SIG/$1.der" | awk '{print $NF}' >"$SIG/$1.fp"
+}
+fp_of() { cat "$SIG/$1.fp"; }
+signed_config() { # signed_config FILE REQUIRED WAIT KEY... -> broker config in host-sim with these approver keys
+  local f=$1 req=$2 wait=$3 keys="" n
+  shift 3
+  for n in "$@"; do keys+="${keys:+, }{\"name\": \"$n\", \"class\": \"mac-se\", \"public_key\": \"$(cat "$SIG/$n.spki")\"}"; done
+  docker exec "$HOST" cat /etc/tmb/config.json \
+    | sed -e "s#\"approval_wait_seconds\": 300#\"approval_wait_seconds\": $wait#" \
+          -e "s#\"approval_default\": \"queue\"#\"approval_default\": \"queue\", \"host_id\": \"$SIG_HOST\", \"require_signed_decision\": true, \"required_signatures\": $req, \"approver_keys\": [$keys]#" \
+    | docker exec -i "$HOST" sh -c "cat >$f"
+}
+start_signed_broker() { # start_signed_broker CONFIG
+  stop_broker
+  echo "-- starting tmb-broker (mode=queue, signed decisions, config $1)"
+  docker exec -d "$HOST" tmb-broker -config "$1" -approval queue -ttl 10
+  wait_socket
+}
+queue_json() { approve_as human --list --json >"$TD/queue.json" 2>"$TD/queue.json.err"; }
+wait_queue_json() { # wait_queue_json N -> at least N items in $TD/queue.json
+  local _
+  for _ in $(seq 1 150); do
+    queue_json
+    [ "$(jq '.items | length' "$TD/queue.json" 2>/dev/null)" -ge "$1" ] 2>/dev/null && return 0
+    sleep 0.1
+  done
+  return 1
+}
+item_by_argv() { # item_by_argv ARG1 -> id of the queued item whose argv[1] is ARG1
+  jq -r --arg a "$1" '.items[] | select(.argv[1] == $a) | .id' "$TD/queue.json" | head -1
+}
+item_field() { # item_field ID FIELD
+  jq -r --arg id "$1" --arg f "$2" '.items[] | select(.id == $id) | .[$f] | tostring' "$TD/queue.json"
+}
+save_payload() { # save_payload ID FILE -> the exact payload bytes of the item
+  item_field "$1" payload | openssl base64 -d -A >"$2"
+}
+forge_payload() { # forge_payload IN OUT PERL-SUBST -> the payload with its JSON part edited
+  { printf 'tmb-approval-v1\0'; tail -c +17 "$1" | perl -pe "$3"; } >"$2"
+}
+sign_file() { openssl dgst -sha256 -sign "$SIG/$1.pem" "$2" | openssl base64 -A; } # sign_file KEY FILE
+decision() { # decision OUT ID HASH approve|deny [SIGNATURE FP] -> the decide object on stdin of tmb approve
+  if [ $# -ge 6 ]; then
+    printf '{"item_id":"%s","item_hash":"%s","decision":"%s","signature":"%s","approver_key":"%s"}\n' "$2" "$3" "$4" "$5" "$6" >"$1"
+  else
+    printf '{"item_id":"%s","item_hash":"%s","decision":"%s"}\n' "$2" "$3" "$4" >"$1"
+  fi
+}
+signed_decision() { # signed_decision OUT ID KEY [PAYLOAD-FILE] -> approve of item ID signed by KEY over PAYLOAD-FILE (default: the item's own payload)
+  local pf=${4:-$TD/sd-$2.bin}
+  [ -n "${4:-}" ] || save_payload "$2" "$pf"
+  decision "$1" "$2" "$(item_field "$2" hash)" approve "$(sign_file "$3" "$pf")" "$(fp_of "$3")"
+}
+decide() { # decide FILE -> tmb approve --decide as the approver, decision object from FILE
+  echo "-- decide: $(sed 's/"signature":"[^"]*"/"signature":"<der>"/' "$1")"
+  docker exec -i -u human -e TMB_APPROVE_SOCK="$APPROVE_SOCK" "$HOST" tmb approve --decide <"$1" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+}
+journal_count() { # journal_count PATTERN... -> journal lines matching every pattern
+  local f=$TD/journal.jsonl p
+  docker exec "$HOST" cat /var/log/tmb/broker.log >"$f" 2>/dev/null
+  for p in "$@"; do grep -F -- "$p" "$f" >"$f.tmp"; mv "$f.tmp" "$f"; done
+  wc -l <"$f" | tr -d '[:space:]'
+}
+signer_key alice
+signer_key bob
+signer_key mallory
+echo "-- fake signer keys: alice=$(fp_of alice) bob=$(fp_of bob) mallory=$(fp_of mallory) (mallory is in no config)"
+signed_config /tmp/signed-1.json 1 30 alice bob
+signed_config /tmp/signed-short.json 1 2 alice
+signed_config /tmp/signed-2.json 2 30 alice bob
+
+log "SCENARIO N31: a valid signature over the item's payload runs the command"
+start_signed_broker /tmp/signed-1.json
+docker exec "$HOST" tmb-broker identity --config /tmp/signed-1.json >"$TD/identity.out" 2>&1
+sed 's/^/  | /' "$TD/identity.out"
+HOSTKEY31=$(sed -n 's/^host_key \([0-9a-f]\{64\}\)$/\1/p' "$TD/identity.out")
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/n31.out" 2>"$TD/n31.err" &
+CLI31=$!
+if wait_queue_json 1; then ok "N31: request waits in the queue"; else bad "N31: request never reached the queue"; fi
+jq -c '.items[] | {id, short_code, host_id, host_key, challenge, deadline, token_ttl_seconds}' "$TD/queue.json" | sed 's/^/  | /'
+ID31=$(item_by_argv -u)
+H31=$(item_field "$ID31" hash)
+save_payload "$ID31" "$TD/n31.bin"
+if [ "$(head -c 16 "$TD/n31.bin" | tr '\0' '@')" = "tmb-approval-v1@" ]; then ok "N31: payload carries the tmb-approval-v1 domain prefix"; else bad "N31: payload lacks the domain prefix"; fi
+P31=$(tail -c +17 "$TD/n31.bin")
+if [ "$(jq -r '.host_id' <<<"$P31")" = "$SIG_HOST" ] && [ "$(item_field "$ID31" host_id)" = "$SIG_HOST" ]; then ok "N31: payload and item name host_id $SIG_HOST"; else bad "N31: host_id in payload/item is not $SIG_HOST"; fi
+if [ -n "$HOSTKEY31" ] && [ "$(jq -r '.host_key' <<<"$P31")" = "$HOSTKEY31" ]; then ok "N31: payload host_key is the broker identity key (tmb-broker identity)"; else bad "N31: payload host_key '$(jq -r '.host_key' <<<"$P31")' differs from identity '$HOSTKEY31'"; fi
+if [ "$(jq -r '.item_id' <<<"$P31")" = "$ID31" ] && [ "$(jq -r '.challenge' <<<"$P31")" = "$(item_field "$ID31" challenge)" ]; then ok "N31: payload binds the item id and its challenge"; else bad "N31: payload item_id/challenge differ from the item"; fi
+if [ "$(item_field "$ID31" short_code)" != "null" ] && [ -n "$(item_field "$ID31" short_code)" ]; then ok "N31: item carries a short code"; else bad "N31: item has no short code"; fi
+signed_decision "$TD/n31.dec" "$ID31" alice "$TD/n31.bin"
+decide "$TD/n31.dec"
+assert_rc     "N31: signed approve by alice -> exit 0" 0
+assert_out_eq "N31: answer frame decided/approve" '{"type":"decided","detail":"approve"}'
+wait $CLI31; RUNC=$?
+OUT_FILE=$TD/n31.out; ERR_FILE=$TD/n31.err; show_io
+assert_rc     "N31: approved client -> exit 0" 0
+assert_out_eq "N31: approved client stdout '0'" "0"
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err
+if [ "$(journal_count '"event":"approval"' "\"hash\":\"$H31\"" '"decision":"approve"' "$(fp_of alice)")" = 1 ]; then ok "N31: JSONL approval names alice's key"; else bad "N31: JSONL approval with alice's key missing"; fi
+if [ "$(journal_count '"event":"exec_exit"' "\"token\":\"$ID31\"")" = 1 ]; then ok "N31: the command ran once (exec_exit for the item)"; else bad "N31: exec_exit for the item missing"; fi
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N32: a signature over another item, host or challenge is refused"
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/n32a.out" 2>"$TD/n32a.err" &
+CLI32A=$!
+wait_queue_json 1 || bad "N32: first request never queued"
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -G >"$TD/n32b.out" 2>"$TD/n32b.err" &
+CLI32B=$!
+if wait_queue_json 2; then ok "N32: two requests wait in the queue"; else bad "N32: the queue never listed two requests"; fi
+ID32A=$(item_by_argv -u)
+ID32B=$(item_by_argv -G)
+R32=$(journal_count '"event":"decision_rejected"' '"reason":"signature_invalid"')
+echo "-- foreign item: alice signs item A's payload, the decision names item B"
+save_payload "$ID32A" "$TD/n32a.bin"
+signed_decision "$TD/n32-item.dec" "$ID32B" alice "$TD/n32a.bin"
+decide "$TD/n32-item.dec"
+assert_rc      "N32: signature over another item -> exit 125" 125
+assert_out_has "N32: foreign item refused with signature_invalid" '"reason":"signature_invalid"'
+echo "-- foreign host: item B's payload with another host_id"
+save_payload "$ID32B" "$TD/n32b.bin"
+forge_payload "$TD/n32b.bin" "$TD/n32-host.bin" "s/\"host_id\":\"$SIG_HOST\"/\"host_id\":\"other-host\"/"
+if tail -c +17 "$TD/n32-host.bin" | grep -q '"host_id":"other-host"' && [ "$(wc -c <"$TD/n32-host.bin")" = "$(wc -c <"$TD/n32b.bin")" ]; then ok "N32: forged payload names host other-host"; else bad "N32: host forgery did not apply"; fi
+signed_decision "$TD/n32-host.dec" "$ID32B" alice "$TD/n32-host.bin"
+decide "$TD/n32-host.dec"
+assert_rc      "N32: signature for another host -> exit 125" 125
+assert_out_has "N32: foreign host refused with signature_invalid" '"reason":"signature_invalid"'
+echo "-- foreign challenge: item B's payload with item A's challenge"
+CH32A=$(item_field "$ID32A" challenge)
+CH32B=$(item_field "$ID32B" challenge)
+forge_payload "$TD/n32b.bin" "$TD/n32-ch.bin" "s/\"challenge\":\"$CH32B\"/\"challenge\":\"$CH32A\"/"
+if tail -c +17 "$TD/n32-ch.bin" | grep -q "\"challenge\":\"$CH32A\"" && [ "$(wc -c <"$TD/n32-ch.bin")" = "$(wc -c <"$TD/n32b.bin")" ]; then ok "N32: forged payload carries another challenge"; else bad "N32: challenge forgery did not apply"; fi
+signed_decision "$TD/n32-ch.dec" "$ID32B" alice "$TD/n32-ch.bin"
+decide "$TD/n32-ch.dec"
+assert_rc      "N32: signature over another challenge -> exit 125" 125
+assert_out_has "N32: foreign challenge refused with signature_invalid" '"reason":"signature_invalid"'
+if [ "$(journal_count '"event":"decision_rejected"' '"reason":"signature_invalid"')" -ge $((R32+3)) ]; then ok "N32: three JSONL decision_rejected with signature_invalid"; else bad "N32: JSONL decision_rejected signature_invalid missing"; fi
+queue_json
+if [ "$(jq '.items | length' "$TD/queue.json")" = 2 ]; then ok "N32: both items still wait after the refusals"; else bad "N32: refused decisions changed the queue"; fi
+signed_decision "$TD/n32-ok.dec" "$ID32B" alice
+decide "$TD/n32-ok.dec"
+assert_rc "N32: item B's own payload signed -> exit 0" 0
+wait $CLI32B; RUNC=$?
+OUT_FILE=$TD/n32b.out; ERR_FILE=$TD/n32b.err; show_io
+assert_rc "N32: item B ran after the valid signature" 0
+OUT_FILE=$TD/n32-no.out; ERR_FILE=$TD/n32-no.err
+approve_as human --no "$ID32A" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc "N32: unsigned deny is accepted under require_signed_decision" 0
+wait $CLI32A; RUNC=$?
+OUT_FILE=$TD/n32a.out; ERR_FILE=$TD/n32a.err; show_io
+assert_rc      "N32: item A denied -> exit 125" 125
+assert_err_has "N32: deny reason approval_denied_by_human" "approval_denied_by_human"
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N33: a signature presented after the item's deadline does not run anything"
+# approval_wait_seconds is 2 here, so the deadline in the payload is 2 s after
+# queueing. The fake signer signs in time and presents the signature after
+# the deadline: the item has left the queue and the command never runs. A
+# decision that reaches an item still queued past its deadline
+# (decision_expired) is covered by TestSignedDecideRejections.
+start_signed_broker /tmp/signed-short.json
+docker exec "$HOST" rm -f /tmp/n33-marker
+docker exec "$SBX" tmb exec --root -- /usr/bin/touch /tmp/n33-marker >"$TD/n33.out" 2>"$TD/n33.err" &
+CLI33=$!
+if wait_queue_json 1; then ok "N33: request waits in the queue"; else bad "N33: request never reached the queue"; fi
+ID33=$(item_by_argv /tmp/n33-marker)
+H33=$(item_field "$ID33" hash)
+save_payload "$ID33" "$TD/n33.bin"
+D33=$(tail -c +17 "$TD/n33.bin" | jq -r '.deadline - .queued_at')
+if [ "$D33" = 2000 ]; then ok "N33: payload deadline is queued_at + 2000 ms"; else bad "N33: payload deadline - queued_at = $D33 ms, want 2000"; fi
+signed_decision "$TD/n33.dec" "$ID33" alice "$TD/n33.bin"
+wait $CLI33; RUNC=$?
+OUT_FILE=$TD/n33.out; ERR_FILE=$TD/n33.err; show_io
+assert_rc      "N33: undecided until the deadline -> exit 125" 125
+assert_err_has "N33: deny reason approval_timeout" "approval_timeout"
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err
+decide "$TD/n33.dec"
+assert_rc      "N33: signature presented after the deadline -> exit 1" 1
+assert_out_has "N33: the item is gone (no_such_item)" '"reason":"no_such_item"'
+host_absent    "N33: marker never created" /tmp/n33-marker
+if [ "$(journal_count '"event":"approval"' "\"hash\":\"$H33\"" '"decision":"approve"')" = 0 ]; then ok "N33: no JSONL approve for the expired item"; else bad "N33: JSONL approve logged for the expired item"; fi
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N34: a key not in approver_keys is refused"
+start_signed_broker /tmp/signed-1.json
+docker exec "$HOST" rm -f /tmp/n34-marker
+docker exec "$SBX" tmb exec --root -- /usr/bin/touch /tmp/n34-marker >"$TD/n34.out" 2>"$TD/n34.err" &
+CLI34=$!
+wait_queue_json 1 || bad "N34: request never reached the queue"
+ID34=$(item_by_argv /tmp/n34-marker)
+signed_decision "$TD/n34.dec" "$ID34" mallory
+decide "$TD/n34.dec"
+assert_rc      "N34: signature by mallory (no config entry) -> exit 125" 125
+assert_out_has "N34: refused with approver_key_unknown" '"reason":"approver_key_unknown"'
+echo "-- mallory's signature under alice's key fingerprint"
+decision "$TD/n34-claim.dec" "$ID34" "$(item_field "$ID34" hash)" approve "$(sign_file mallory "$TD/sd-$ID34.bin")" "$(fp_of alice)"
+decide "$TD/n34-claim.dec"
+assert_rc      "N34: mallory's signature claiming alice's key -> exit 125" 125
+assert_out_has "N34: refused with signature_invalid" '"reason":"signature_invalid"'
+if [ "$(journal_count '"event":"decision_rejected"' '"reason":"approver_key_unknown"' "$(fp_of mallory)")" -ge 1 ]; then ok "N34: JSONL decision_rejected names mallory's key"; else bad "N34: JSONL decision_rejected approver_key_unknown missing"; fi
+approve_as human --no "$ID34" >/dev/null 2>&1
+wait $CLI34; RUNC=$?
+OUT_FILE=$TD/n34.out; ERR_FILE=$TD/n34.err; show_io
+assert_rc   "N34: request denied afterwards -> exit 125" 125
+host_absent "N34: marker never created" /tmp/n34-marker
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N35: an unsigned approve under require_signed_decision is refused"
+docker exec "$HOST" rm -f /tmp/n35-marker
+docker exec "$SBX" tmb exec --root -- /usr/bin/touch /tmp/n35-marker >"$TD/n35.out" 2>"$TD/n35.err" &
+CLI35=$!
+wait_queue_json 1 || bad "N35: request never reached the queue"
+ID35=$(item_by_argv /tmp/n35-marker)
+OUT_FILE=$TD/n35y.out; ERR_FILE=$TD/n35y.err
+approve_as human --yes "$ID35" >"$OUT_FILE" 2>"$ERR_FILE"; RUNC=$?; show_io
+assert_rc      "N35: tmb approve --yes (unsigned) -> exit 125" 125
+assert_err_has "N35: refused with signature_required" "signature_required"
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err
+decision "$TD/n35.dec" "$ID35" "$(item_field "$ID35" hash)" approve
+decide "$TD/n35.dec"
+assert_rc      "N35: machine-mode approve without a signature -> exit 125" 125
+assert_out_has "N35: refused with signature_required" '"reason":"signature_required"'
+queue_json
+if [ "$(item_field "$ID35" id)" = "$ID35" ]; then ok "N35: the item still waits after the refusals"; else bad "N35: the item left the queue"; fi
+decision "$TD/n35-deny.dec" "$ID35" "$(item_field "$ID35" hash)" deny
+decide "$TD/n35-deny.dec"
+assert_rc     "N35: machine-mode unsigned deny -> exit 0" 0
+assert_out_eq "N35: answer frame decided/deny" '{"type":"decided","detail":"deny"}'
+wait $CLI35; RUNC=$?
+OUT_FILE=$TD/n35.out; ERR_FILE=$TD/n35.err; show_io
+assert_rc      "N35: denied client -> exit 125" 125
+assert_err_has "N35: deny reason approval_denied_by_human" "approval_denied_by_human"
+host_absent    "N35: marker never created" /tmp/n35-marker
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err
+if [ "$(journal_count '"event":"decision_rejected"' "\"item\":\"$ID35\"" '"reason":"signature_required"')" = 2 ]; then ok "N35: two JSONL decision_rejected with signature_required"; else bad "N35: JSONL decision_rejected signature_required count wrong"; fi
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N36: a used signature does not approve again"
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/n36a.out" 2>"$TD/n36a.err" &
+CLI36A=$!
+wait_queue_json 1 || bad "N36: first request never queued"
+ID36=$(item_by_argv -u)
+signed_decision "$TD/n36.dec" "$ID36" alice
+decide "$TD/n36.dec"
+assert_rc "N36: first signed approve -> exit 0" 0
+wait $CLI36A; RUNC=$?
+OUT_FILE=$TD/n36a.out; ERR_FILE=$TD/n36a.err; show_io
+assert_rc "N36: first request ran" 0
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err
+decide "$TD/n36.dec"
+assert_rc      "N36: the same decision again -> exit 1" 1
+assert_out_has "N36: replay refused, the item is already decided" '"reason":"already_decided"'
+echo "-- the same command again: a new item with a new challenge"
+docker exec "$HOST" rm -f /tmp/n36-marker
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/n36b.out" 2>"$TD/n36b.err" &
+CLI36B=$!
+wait_queue_json 1 || bad "N36: second request never queued"
+ID36B=$(item_by_argv -u)
+if [ -n "$ID36B" ] && [ "$ID36B" != "$ID36" ]; then ok "N36: the repeated command is a new item ($ID36B)"; else bad "N36: no new item for the repeated command"; fi
+decision "$TD/n36-replay.dec" "$ID36B" "$(item_field "$ID36B" hash)" approve "$(jq -r .signature "$TD/n36.dec")" "$(fp_of alice)"
+decide "$TD/n36-replay.dec"
+assert_rc      "N36: the old signature on the new item -> exit 125" 125
+assert_out_has "N36: refused with signature_invalid" '"reason":"signature_invalid"'
+approve_as human --no "$ID36B" >/dev/null 2>&1
+wait $CLI36B; RUNC=$?
+OUT_FILE=$TD/n36b.out; ERR_FILE=$TD/n36b.err; show_io
+assert_rc "N36: the new item was not approved by the replay (denied, exit 125)" 125
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err
+if [ "$(journal_count '"event":"exec_start"' "\"token\":\"$ID36\"")" = 1 ] && [ "$(journal_count '"event":"exec_start"' "\"token\":\"$ID36B\"")" = 0 ]; then ok "N36: exactly one exec_start, for the first item only"; else bad "N36: exec_start counts wrong"; fi
+state_dump
+
+# -----------------------------------------------------------------------------
+log "SCENARIO N37: required_signatures 2 needs two different keys"
+start_signed_broker /tmp/signed-2.json
+docker exec "$SBX" tmb exec --root -- /usr/bin/id -u >"$TD/n37.out" 2>"$TD/n37.err" &
+CLI37=$!
+wait_queue_json 1 || bad "N37: request never reached the queue"
+ID37=$(item_by_argv -u)
+H37=$(item_field "$ID37" hash)
+if [ "$(item_field "$ID37" signatures_required)" = 2 ]; then ok "N37: the item asks for 2 signatures"; else bad "N37: signatures_required '$(item_field "$ID37" signatures_required)', want 2"; fi
+signed_decision "$TD/n37-a.dec" "$ID37" alice
+decide "$TD/n37-a.dec"
+assert_rc      "N37: alice signs -> exit 0" 0
+assert_out_has "N37: answer frame recorded" '"type":"recorded"'
+assert_out_has "N37: 1 of 2 signatures" "1 of 2"
+queue_json
+if [ "$(item_field "$ID37" signatures)" = 1 ]; then ok "N37: the item still waits with 1 signature"; else bad "N37: queue shows signatures '$(item_field "$ID37" signatures)', want 1"; fi
+if kill -0 "$CLI37" 2>/dev/null; then ok "N37: the client still waits after one signature"; else bad "N37: the client finished after one signature"; fi
+decide "$TD/n37-a.dec"
+assert_rc      "N37: alice signs again -> exit 125" 125
+assert_out_has "N37: refused with signature_duplicate" '"reason":"signature_duplicate"'
+signed_decision "$TD/n37-b.dec" "$ID37" bob
+decide "$TD/n37-b.dec"
+assert_rc     "N37: bob signs -> exit 0" 0
+assert_out_eq "N37: answer frame decided/approve" '{"type":"decided","detail":"approve"}'
+wait $CLI37; RUNC=$?
+OUT_FILE=$TD/n37.out; ERR_FILE=$TD/n37.err; show_io
+assert_rc     "N37: approved client -> exit 0" 0
+assert_out_eq "N37: approved client stdout '0'" "0"
+OUT_FILE=$TD/last.out; ERR_FILE=$TD/last.err
+if [ "$(journal_count '"event":"signature_recorded"' "\"item\":\"$ID37\"" "$(fp_of alice)")" = 1 ]; then ok "N37: JSONL signature_recorded for alice"; else bad "N37: JSONL signature_recorded for alice missing"; fi
+if [ "$(journal_count '"event":"approval"' "\"hash\":\"$H37\"" "$(fp_of alice)" "$(fp_of bob)")" = 1 ]; then ok "N37: JSONL approval lists both keys"; else bad "N37: JSONL approval lacks one of the keys"; fi
+stop_broker
+start_broker mock-approve 10
+state_dump
+
+# -----------------------------------------------------------------------------
 log "SCENARIO N3a: mock-deny -> deny, nothing runs"
 stop_broker
 start_broker mock-deny "$TTL"
