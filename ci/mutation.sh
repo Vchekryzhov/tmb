@@ -18,7 +18,7 @@ MUTANTS=(
   "M4-requester-binding|cmd/tmb-broker/broker.go|has && !p.Requester.Equal(id) {|has && false {|another requester may redeem an approval"
   "M5-request-binding|cmd/tmb-broker/broker.go|if req.ClaimToken != tokenID {|if false {|token no longer binds to the exact request"
   "M6-one-shot|cmd/tmb-broker/store.go|os.O_CREATE\|os.O_EXCL\|os.O_WRONLY, 0o600|os.O_CREATE\|os.O_TRUNC\|os.O_WRONLY, 0o600|claim file no longer exclusive: replay possible"
-  "M7-signature-check|cmd/tmb-broker/queue.go|if e.payload == nil \|\| !proto.VerifyPayloadSignature(v.key.pub, e.payload, v.der) {|if e.payload == nil {|a signed decide is accepted without verifying the signature"
+  "M7-signature-check|cmd/tmb-broker/queue.go|if v != nil && (e.payload == nil \|\| !proto.VerifyPayloadSignature(v.key.pub, e.payload, v.der)) {|if v != nil && e.payload == nil {|a signed decide is accepted without verifying the signature"
   "M8-signed-required|cmd/tmb-broker/queue.go|case granted && pol.cfg.RequireSignedDecision:|case false:|an unsigned approve passes require_signed_decision"
   "M9-approver-key-lookup|cmd/tmb-broker/queue.go|case !known:|case !known && false:|a decide signed by a key outside approver_keys is not refused as unknown"
 )
