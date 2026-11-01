@@ -203,7 +203,7 @@ func (b *Broker) Reload(path string) {
 		fmt.Fprintf(os.Stderr, "tmb-broker: reload: %s changed, ignored until restart\n", f.field)
 		b.log.Event("reload_ignored_field", map[string]any{"field": f.field, "running": f.running, "config": f.config})
 	}
-	b.pol.Store(newPolicy(next, ttl))
+	b.storePolicy(newPolicy(next, ttl))
 	if nextTLS != nil {
 		b.tlsCfg.Store(nextTLS)
 	}
@@ -214,6 +214,19 @@ func (b *Broker) Reload(path string) {
 		ignored = []string{}
 	}
 	b.log.Event("reload", map[string]any{"pid": os.Getpid(), "changed": changed, "ignored": ignored})
+}
+
+// storePolicy swaps the policy under the queue lock, so a vote in the
+// queue counts either wholly before the reload or wholly after it
+// (serveDecide re-checks a decide whose policy was replaced).
+func (b *Broker) storePolicy(p *policy) {
+	if b.queue == nil {
+		b.pol.Store(p)
+		return
+	}
+	b.queue.mu.Lock()
+	defer b.queue.mu.Unlock()
+	b.pol.Store(p)
 }
 
 func (b *Broker) reloadFailed(err error) {
