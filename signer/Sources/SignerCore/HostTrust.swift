@@ -1,7 +1,7 @@
 import Foundation
 
 /// A pinned host: `host_id` from the broker config and `host_key`, the
-/// fingerprint of the broker identity key (ADR 0007 Р6).
+/// fingerprint of the broker identity key (ADR 0007 R6).
 public struct PinnedHost: Equatable, Sendable, Codable {
     public let hostID: String
     public let hostKey: String
@@ -63,7 +63,7 @@ public enum HostCheck: Equatable, Sendable {
     case mismatch(pinned: String)
 }
 
-/// TOFU for hosts, like SSH known_hosts (ADR 0006 В10): the first key seen
+/// TOFU for hosts, like SSH known_hosts (ADR 0006 V10): the first key seen
 /// for a host id is pinned; a different key later is a mismatch, and the
 /// pin is never updated silently. Only `forget`, an explicit action of the
 /// person, removes a pin. Host ids and keys compare by UTF-8 bytes.

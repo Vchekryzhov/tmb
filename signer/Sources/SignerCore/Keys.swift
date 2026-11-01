@@ -21,7 +21,7 @@ public enum SigningError: Error, Equatable, Sendable {
     case failed(String)
 
     /// Maps LocalAuthentication and key errors to the deny reasons of
-    /// ADR 0006 В7. `appCancel` is the app cancelling the sheet on its own
+    /// ADR 0006 V7. `appCancel` is the app cancelling the sheet on its own
     /// timer, so it counts as a timeout. Anything that is not an
     /// authentication outcome (CryptoKit, Security, a blob made unusable by
     /// a changed fingerprint set) means the key cannot be used.
@@ -70,9 +70,9 @@ public enum KeyError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-/// An `approver_keys` entry (ADR 0007 Р1) for the broker config:
+/// An `approver_keys` entry (ADR 0007 R1) for the broker config:
 /// `{"name":..,"class":"mac-se","public_key":<base64 DER SPKI>}`. The
-/// person copies it to the host by hand (ADR 0006 В11).
+/// person copies it to the host by hand (ADR 0006 V11).
 public struct ApproverKeyEntry: Equatable, Sendable {
     public static let macSE = "mac-se"
     public let name: String
@@ -161,7 +161,7 @@ public enum PrivateFile {
 }
 
 /// The production signer: a Secure Enclave P-256 key created with
-/// `privateKeyUsage` and `biometryCurrentSet` (ADR 0006 В2, В5), kept as its
+/// `privateKeyUsage` and `biometryCurrentSet` (ADR 0006 V2, V5), kept as its
 /// `dataRepresentation` blob in an owner-only file. Every `sign` builds a
 /// fresh `LAContext`, signs once and invalidates the context, so one touch
 /// gives one signature. A changed fingerprint set makes the key unusable.

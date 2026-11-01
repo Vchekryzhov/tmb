@@ -8,7 +8,7 @@ public struct PayloadError: Error, Equatable, CustomStringConvertible {
     init(_ d: String) { description = "approval payload: " + d }
 }
 
-/// The approval payload (ADR 0006, В12): the exact bytes a broker builds per
+/// The approval payload (ADR 0006, V12): the exact bytes a broker builds per
 /// queue item and a signer shows and signs. The Go side is
 /// `src/internal/proto/payload.go`; both follow the same canonical form and
 /// field rules and are tested against signer/Tests/vectors/approval-v1.json.

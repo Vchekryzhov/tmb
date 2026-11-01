@@ -14,7 +14,7 @@ public struct QueueEntry: Equatable, Sendable {
     }
 }
 
-/// Why the signer denies (ADR 0006 В7). Every one is an unsigned `deny`.
+/// Why the signer denies (ADR 0006 V7). Every one is an unsigned `deny`.
 public enum DenyReason: Equatable, Sendable {
     case invalidPayload(String)
     case undisplayable(field: String)
@@ -125,7 +125,7 @@ public struct SignerCore: Sendable {
     let preSignCheck: @Sendable () -> SigningError?
 
     /// `preSignCheck` runs right before each signature: the app passes its
-    /// `SecCodeCheckValidity` and GUI-session checks (ADR 0007 Р5); a
+    /// `SecCodeCheckValidity` and GUI-session checks (ADR 0007 R5); a
     /// non-nil result denies without touching the key.
     public init(signer: any PayloadSigner, hosts: HostTrust, limits: DisplayLimits = .standard,
                 preSignCheck: @escaping @Sendable () -> SigningError? = { nil }) {

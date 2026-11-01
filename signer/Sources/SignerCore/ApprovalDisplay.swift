@@ -96,7 +96,7 @@ public struct DisplayEntry: Equatable, Sendable {
 }
 
 /// Size limits past which the signer refuses instead of showing a value
-/// it cannot show whole (ADR 0006, В7). Long values are shown in full with
+/// it cannot show whole (ADR 0006, V7). Long values are shown in full with
 /// scrolling up to these limits, never truncated.
 public struct DisplayLimits: Sendable, Equatable {
     /// Longest `shown` text of one value, escapes included.
@@ -169,7 +169,7 @@ public struct ApprovalDisplay: Sendable {
     }
 
     /// UTC ISO 8601 with milliseconds. Formatting only: the Mac clock takes
-    /// no part in any check (ADR 0006, В6).
+    /// no part in any check (ADR 0006, V6).
     static func utc(_ ms: Int64) -> String {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

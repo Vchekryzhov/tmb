@@ -2,7 +2,7 @@ import Foundation
 import Security
 import SignerCore
 
-/// The signer's own code signature (ADR 0007 Р5): checked at start and
+/// The signer's own code signature (ADR 0007 R5): checked at start and
 /// before each signature. The process must carry a valid signature with
 /// the hardened runtime flag and none of the entitlements that let another
 /// process of this user attach or inject code. This stops careless bundle
