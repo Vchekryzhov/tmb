@@ -262,6 +262,36 @@ func TestSignedDecideRejections(t *testing.T) {
 	}
 }
 
+// A signed deny is verified like a signed approve: a deny naming a listed
+// key with a signature that does not verify is refused
+// (signature_invalid) and never journaled as signed by that key; the item
+// keeps waiting. Without the check a forged deny would put the key
+// holder's name on a decision they never took.
+func TestForgedSignedDenyRefused(t *testing.T) {
+	alice, mallory := newFakeSigner(t, "alice"), newFakeSigner(t, "mallory")
+	for _, required := range []bool{true, false} {
+		b := newSignedBroker(t, required, alice)
+		item, done := queueRequest(t, b, testReq(t, "forged-deny"), UIDRequester(4242, 7))
+		forged := alice.decide(t, item, "deny")
+		forged.Signature = mallory.sign(t, item)
+		if f := approverDo(t, b, human(), forged); f.Type != "denied" || f.Reason != "signature_invalid" {
+			t.Fatalf("require_signed_decision=%v: forged signed deny: %+v, want denied signature_invalid", required, f)
+		}
+		if n := len(b.queue.list(signatureRule{})); n != 1 {
+			t.Fatalf("require_signed_decision=%v: %d items queued, want the item still waiting", required, n)
+		}
+		if len(logEvents(t, b, "approval")) != 0 {
+			t.Fatalf("require_signed_decision=%v: the forged deny decided the item", required)
+		}
+		if f := approverDo(t, b, human(), alice.decide(t, item, "deny")); f.Type != "decided" {
+			t.Fatalf("genuine signed deny: %+v", f)
+		}
+		if f := <-done; f.Reason != "approval_denied_by_human" {
+			t.Fatalf("requester got %+v", f)
+		}
+	}
+}
+
 // One signature decides one item once: replayed on the decided item it is
 // already_decided, replayed on the same request queued again (a new
 // challenge) it does not verify.
