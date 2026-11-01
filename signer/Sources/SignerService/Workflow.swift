@@ -31,7 +31,11 @@ public struct PollReport: Sendable {
 /// it stays out of later polls while its window is open and, after its
 /// answer was delivered, for as long as the host still lists it (a
 /// signature below the threshold keeps it queued). A decision that did not
-/// reach the host lets the item come back. Safe to call from any thread.
+/// reach the host lets the item come back, unless it failed on a protocol
+/// error (`TransportError.isProtocolError`): then the item stays out like
+/// an answered one and the error is reported, since showing it again would
+/// only ask for another touch with the same result. Safe to call from any
+/// thread.
 public final class SignerWorkflow: @unchecked Sendable {
     let core: SignerCore
     let transport: any ApproveTransport
@@ -93,7 +97,11 @@ public final class SignerWorkflow: @unchecked Sendable {
         }
         lock.withLock {
             open.remove(key)
-            if case .success = outcome { answered.insert(key) }
+            switch outcome {
+            case .success: answered.insert(key)
+            case .failure(let e) where e.isProtocolError: answered.insert(key)
+            case .failure: break
+            }
         }
         return SentDecision(host: host, decision: d, outcome: outcome)
     }

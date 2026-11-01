@@ -140,4 +140,27 @@ import Testing
         // the decision did not arrive: the item is still pending on the host
         #expect(w.poll(host).show.count == 1)
     }
+
+    @Test func aProtocolErrorDoesNotBringTheItemBackEveryPoll() throws {
+        // the client refused our message (exit 2) or answered with something
+        // that is not its machine output: retrying would only ask for
+        // another touch with the same result
+        let rejected = CommandResult(status: 2, stdout: Data(), stderr: Data("tmb approve: decision on stdin: unknown field x\n".utf8))
+        let junk = CommandResult(status: 0, stdout: Data("not json".utf8), stderr: Data())
+        for (bad, want) in [(rejected, TransportError.remote(2, "tmb approve: decision on stdin: unknown field x")),
+                            (junk, .badOutput("answer is not one JSON object"))] {
+            let r = ScriptedRunner([.success(try Recording.load("list-sample").result), .success(bad),
+                                    .success(try Recording.load("list-sample").result), .success(try Recording.load("list-empty").result),
+                                    .success(try Recording.load("list-sample").result)])
+            let w = workflow(r)
+            let res = w.answer(try #require(w.poll(host).show.first), .cancel)
+            #expect(res.outcome == .failure(want))
+            #expect(want.isProtocolError)
+            #expect(w.poll(host).show.isEmpty)
+            #expect(w.poll(host).show.isEmpty)
+            // gone from the queue once, so a later listing is a new item
+            #expect(w.poll(host).show.count == 1)
+        }
+        #expect(!TransportError.unreachable("x").isProtocolError && !TransportError.remote(127, "x").isProtocolError)
+    }
 }

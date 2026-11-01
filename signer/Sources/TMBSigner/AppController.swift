@@ -132,6 +132,8 @@ import SignerService
         case .success(.recorded(let s)): return "recorded \(s)"
         case .success(.gone(let s)): return "gone: \(s)"
         case .success(.refused(let s)): return "refused: \(s)"
+        case .failure(let e) where e.isProtocolError:
+            return "not delivered: \(e); not shown again while the host lists it (signer and tmb on the host disagree on the protocol)"
         case .failure(let e): return "not delivered: \(e)"
         }
     }
