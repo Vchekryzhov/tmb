@@ -814,7 +814,8 @@ assert_out_eq "PAIR-KEY: stdout '0'" "0"
 # text files only (-I): the Go binaries carry the PEM type string itself
 docker exec "$HOST" sh -c 'grep -rlI -e "-----BEGIN [A-Z ]*PRIVATE KEY-----" / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null' >"$TD/pk-host.out"
 sed 's/^/  | /' "$TD/pk-host.out"
-if [ "$(grep -cv '^/etc/tmb/certs/server.key$' "$TD/pk-host.out")" = 0 ]; then ok "PAIR-KEY: host-sim holds no private key but the broker's own"; else bad "PAIR-KEY: host-sim holds other private key files"; fi
+# the broker's own keys: its TLS key and its identity key (ADR 0007, R6)
+if [ "$(grep -cvE '^(/etc/tmb/certs/server\.key|/var/lib/tmb-proto/identity\.key)$' "$TD/pk-host.out")" = 0 ]; then ok "PAIR-KEY: host-sim holds no private key but the broker's own"; else bad "PAIR-KEY: host-sim holds other private key files"; fi
 stop_broker
 state_dump
 
