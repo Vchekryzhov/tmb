@@ -93,7 +93,7 @@ type queueEntry struct {
 }
 
 // signatureRule is the threshold and the approver keys a decision is
-// counted against (ADR 0007, Р2): the policy at the time of the decide or
+// counted against (ADR 0007, R2): the policy at the time of the decide or
 // list, so a reload applies to items already waiting. A recorded signature
 // counts only while its key is still in keys: a key removed by a reload no
 // longer helps any item reach the threshold.

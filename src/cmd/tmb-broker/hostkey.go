@@ -1,7 +1,7 @@
 // PROTOTYPE CODE - throwaway PoC, not production.
 package main
 
-// The broker identity key (ADR 0007, Р6): a P-256 key the broker keeps in
+// The broker identity key (ADR 0007, R6): a P-256 key the broker keeps in
 // state_dir and creates on its first start. Its SPKI fingerprint is the
 // host_key of every approval payload, the value a trusted signer pins for
 // this host. The broker signs nothing with it in this stage; the TLS key is

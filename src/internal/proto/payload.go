@@ -56,10 +56,10 @@ const shortCodePrefix = "tmb-approval-code-v1\x00"
 // ShortCodeLen is the number of base32 characters in a short code.
 const ShortCodeLen = 8
 
-// ApprovalPayload is everything one approval binds to (ADR 0006, В12): the
+// ApprovalPayload is everything one approval binds to (ADR 0006, V12): the
 // host, the queue item, the broker challenge, who asked, what runs as whom
 // and where (as the broker resolved it), and the broker's deadlines. The
-// field order is the canonical order. ExeDev and ExeIno are not in the В12
+// field order is the canonical order. ExeDev and ExeIno are not in the V12
 // list: they bind the signature to the executable pin the broker keeps
 // anyway, and a signer shows them as service fields.
 type ApprovalPayload struct {

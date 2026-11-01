@@ -88,7 +88,7 @@ type Broker struct {
 	console io.Writer     // broker console output (manual approval)
 
 	queue *approvalQueue // queue mode: requests waiting for an approver
-	// hostKey is the fingerprint of the broker identity key (ADR 0007, Р6),
+	// hostKey is the fingerprint of the broker identity key (ADR 0007, R6),
 	// the host_key of every approval payload. Empty refuses every queued
 	// request (approval_payload_invalid).
 	hostKey string
