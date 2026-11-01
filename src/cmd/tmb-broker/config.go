@@ -131,6 +131,16 @@ func checkThreshold(c *Config, keys int) error {
 	return nil
 }
 
+// checkSignedMode refuses require_signed_decision with an approval mode
+// other than the queue: the bench modes approve without any signature, so
+// the setting would be silently ignored.
+func checkSignedMode(c *Config, mode string) error {
+	if c.RequireSignedDecision && mode != ModeQueue {
+		return fmt.Errorf("config: require_signed_decision needs approval mode %s, the broker runs %s: that mode approves without a signature", ModeQueue, mode)
+	}
+	return nil
+}
+
 func loadConfig(path string) (*Config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {

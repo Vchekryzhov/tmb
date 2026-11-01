@@ -70,6 +70,9 @@ func run(args []string, stdout, stderr io.Writer, stop, hup <-chan os.Signal) in
 	default:
 		return fail("unknown approval mode %q", mode)
 	}
+	if err := checkSignedMode(cfg, mode); err != nil {
+		return fail("%v", err)
+	}
 	ttl := time.Duration(cfg.TokenTTLSeconds) * time.Second
 	if *ttlSec > 0 {
 		ttl = time.Duration(*ttlSec) * time.Second

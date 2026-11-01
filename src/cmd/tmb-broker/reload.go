@@ -157,6 +157,9 @@ func (b *Broker) Reload(path string) {
 	// config says, and before this reload's events, so they land in the new
 	// file; a failed reopen makes the journal unavailable (log.go)
 	_ = b.log.Reopen()
+	if err == nil {
+		err = checkSignedMode(next, b.mode)
+	}
 	if err != nil {
 		b.reloadFailed(err)
 		return
