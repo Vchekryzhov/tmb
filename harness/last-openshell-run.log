@@ -1,9 +1,9 @@
 
 ================================================================
-== TMB OPENSHELL RUNNER: tickets #8 + #9 + #10 (2026-10-18T07:11:00Z)
+== TMB OPENSHELL RUNNER: tickets #8 + #9 + #10 (2026-10-31T21:51:54Z)
 ================================================================
 docker 29.6.1 (linux/arm64)
-workdir: /Users/chekryhov.viktor/projects/tmb/.claude/worktrees/review-fixes/harness, cert dir: /tmp/tmb-osh.x55ROb (temp, never committed), run id: 1792307460-46894
+workdir: /Users/chekryhov.viktor/projects/tmb/.claude/worktrees/dazzling-euclid-996234/harness, cert dir: /tmp/tmb-osh.qhrQPb (temp, never committed), run id: 1793483514-16757
 
 ================================================================
 == STAGE 0: pre-clean leftovers from previous runs
@@ -18,7 +18,7 @@ CHECK PASS: O0: openshell version == 0.1.3
 settings ok: HostNetworkingEnabled=true, EnhancedContainerIsolation=false
 CHECK PASS: O0: Docker Desktop host networking ON, ECI OFF
 -- O0: opencode base image pinned by digest, present locally
-CHECK PASS: O0: local image matches ghcr.io/anomalyco/opencode@sha256:6911572e4a9b3ead5e4086b40e2c98bd82075dae617aff679767f358cf8f374e
+CHECK PASS: O0: local image matches ghcr.io/anomalyco/opencode@sha256:f4cfe16d91efbbfca01a51c44094fba4cf82e15c7fa17de5f11f9059699b1e6e
   | base: linux/arm64
 -- O0: stdlib-only dependency surface (go list -m all in src/)
   | tmb-poc
@@ -30,19 +30,19 @@ CHECK PASS: O0: go list -m all -> only tmb-poc (stdlib only)
 CHECK PASS: GW: gateway Connected via https://127.0.0.1:17671 (forwarder tmb-osh-gwreach up)
 
 ================================================================
-== STAGE 3: harness CA + server + client certs into /tmp/tmb-osh.x55ROb (run-pair recipe)
+== STAGE 3: harness CA + server + client certs into /tmp/tmb-osh.qhrQPb (run-pair recipe)
 ================================================================
--- fp1=4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2 (the ONLY allowlisted requester identity)
+-- fp1=ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873 (the ONLY allowlisted requester identity)
 
 ================================================================
 == STAGE 4: images
 ================================================================
 -- host-sim image (existing images/Dockerfile.host, context: repo root)
-sha256:d1556b9ebe509ff0694a5168ef8cee54dfae475dcd42199af1304b2d78d1c544
--- sandbox base image (opencode@ghcr.io/anomalyco/opencode@sha256:6911572e4a9b3ead5e4086b40e2c98bd82075dae617aff679767f358cf8f374e + openssl + tmb)
-sha256:e1bce893bd766e553911d20533074e675391057b850edb2265d1927f276d6c10
--- per-run cert layer (context: /tmp/tmb-osh.x55ROb; the ONLY place certs enter an image)
-sha256:8073c61136a30692c27b2653dc146bdfcc1fdd7b917fd8922f78c45cf9f57c46
+sha256:79808d86c8467e14d164d056a57e7b29a60e43f4141cc1d6c34705d2c3431920
+-- sandbox base image (opencode@ghcr.io/anomalyco/opencode@sha256:f4cfe16d91efbbfca01a51c44094fba4cf82e15c7fa17de5f11f9059699b1e6e + openssl + tmb)
+sha256:0fa3cb99675f7d64a4d7cf37e68ab5d8668d196327e31f2d943350069a3d9b2b
+-- per-run cert layer (context: /tmp/tmb-osh.qhrQPb; the ONLY place certs enter an image)
+sha256:755428a7c168844948a30b65dbe636c82daabc2deeeb1427f41ccfdacc4075cd
 -- O0: sandbox image has sh, id, test, openssl (run refuses to start without them)
 CHECK PASS: O0: sandbox image has sh
 CHECK PASS: O0: sandbox image has id
@@ -56,10 +56,10 @@ CHECK PASS: O0: sandbox image has openssl
 -- host-sim: broker host, TLS port 17600 + O1 control port 19999 published on ALL VM interfaces
 -- broker: TLS listener (mock-approve, ttl=3s)
 CHECK PASS: TOP: broker logged tls_listen on :17600
-  | {"addr":":17600","event":"tls_listen","schema":2,"ts":"2026-10-18T07:11:07.607138626Z"}
+  | {"addr":":17600","event":"tls_listen","schema":2,"ts":"2026-10-31T21:51:58.948232762Z"}
 -- sandbox: create (block mode; the single rule is hot-added next - see README deviations)
--- create attempt: tmb8-tn3dacp106m
-CHECK PASS: TOP: sandbox tmb8-tn3dacp106m Ready (opencode image, uid 1000, NET=none)
+-- create attempt: tmb8-tnskqipcxh
+CHECK PASS: TOP: sandbox tmb8-tnskqipcxh Ready (opencode image, uid 1000, NET=none)
   | uid=1000(sandbox) gid=1000(sandbox) groups=1000(sandbox)
 -- sandbox policy: hot-add the SINGLE rule (protocol: tcp + tls: skip)
 -- verify effective policy: exactly one rule, tcp + tls skip, binary tmb
@@ -89,19 +89,19 @@ CHECK PASS: TOP: effective policy = single rule tcp+tls:skip -> host.openshell.i
 ================================================================
 -- rc=0
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"9b7c6b7a158c4e35c216d0a438ca8981"}
-  | TOK: 6760a589ff1c35a7 (one-shot token, ttl=3s)
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"49ffdaea5de908dc35f1734154b0afea"}
+  | TOK: 7fcb66128572a52b (one-shot token, ttl=3s)
   | EXIT: 0
 -- stdout --
   | 0
 CHECK PASS: O2a: exit code 0 (rc=0)
 CHECK PASS: O2a: stdout is exactly '0' (stdout='0')
 -- broker JSONL (request..exec_exit) for the O2a call:
-  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","hash":"6760a589ff1c35a7708ba177d7b4b4648877af22f776f8502ef704afdbf29147","nonce":"9b7c6b7a158c4e35c216d0a438ca8981","requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","schema":2,"transport":"tls","ts":"2026-10-18T07:11:19.568320923Z","type":"exec","uid":0}
-  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","hash":"6760a589ff1c35a7708ba177d7b4b4648877af22f776f8502ef704afdbf29147","mode":"mock-approve","nonce":"9b7c6b7a158c4e35c216d0a438ca8981","reason":"","requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","result":"granted","schema":2,"ts":"2026-10-18T07:11:19.572407965Z"}
-  | {"event":"claim","executable":"/usr/bin/id","hash":"6760a589ff1c35a7708ba177d7b4b4648877af22f776f8502ef704afdbf29147","nonce":"9b7c6b7a158c4e35c216d0a438ca8981","requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","result":"ok","schema":2,"token":"6760a589ff1c35a7","ts":"2026-10-18T07:11:19.579337132Z"}
-  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","schema":2,"token":"6760a589ff1c35a7","ts":"2026-10-18T07:11:19.581512173Z","uid":0}
-  | {"client_gone":false,"duration_ms":4,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","schema":2,"token":"6760a589ff1c35a7","ts":"2026-10-18T07:11:19.585455923Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","hash":"7fcb66128572a52b0bec3f461778876f19bec0a45cd3288e918dd77b678cca8a","nonce":"49ffdaea5de908dc35f1734154b0afea","requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","schema":2,"transport":"tls","ts":"2026-10-31T21:52:10.621705837Z","type":"exec","uid":0}
+  | {"approver":"mode:mock-approve","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","hash":"7fcb66128572a52b0bec3f461778876f19bec0a45cd3288e918dd77b678cca8a","mode":"mock-approve","nonce":"49ffdaea5de908dc35f1734154b0afea","reason":"","requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","result":"granted","schema":2,"ts":"2026-10-31T21:52:10.623352379Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"7fcb66128572a52b0bec3f461778876f19bec0a45cd3288e918dd77b678cca8a","nonce":"49ffdaea5de908dc35f1734154b0afea","requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","result":"ok","schema":2,"token":"7fcb66128572a52b","ts":"2026-10-31T21:52:10.628246587Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":65,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","schema":2,"token":"7fcb66128572a52b","ts":"2026-10-31T21:52:10.628682337Z","uid":0}
+  | {"client_gone":false,"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","schema":2,"token":"7fcb66128572a52b","ts":"2026-10-31T21:52:10.630680045Z"}
 
 ================================================================
 == SCENARIO O3: host isolation from inside the sandbox
@@ -130,7 +130,7 @@ CHECK PASS: O3: no /run/tmb mount inside the sandbox (mount|grep -c -> 0)
 ================================================================
 -- rc=3
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"5cce7a3fb94069c18dfaaf1f3212463c"}
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"38b4ff638df93d4518372f2cecef1f60"}
   | tmb: broker unreachable at host.openshell.internal:19999: dial tcp 198.18.0.2:19999: connect: permission denied - FAIL CLOSED, nothing executed
 -- stdout --
 CHECK PASS: O1a: tmb exec --addr :19999 (no rule) -> exit 3 (rc=3)
@@ -143,8 +143,8 @@ CHECK PASS: O1a: nc received ZERO bytes (no connection reached host-sim)
 -- live policy now: broker rule + host.openshell.internal:19999 (same tmb rule, two endpoints)
 -- rc=3
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"11a020697890bf23508468de96c249be"}
-  | tmb: TLS handshake with host.openshell.internal:19999 failed: read tcp 127.0.0.1:47340->127.0.0.1:36631: i/o timeout - FAIL CLOSED, nothing executed
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"71274e569b81322acf39fe71a331de94"}
+  | tmb: TLS handshake with host.openshell.internal:19999 failed: read tcp 127.0.0.1:47130->127.0.0.1:46653: i/o timeout - FAIL CLOSED, nothing executed
 -- stdout --
 CHECK PASS: O1b: same call under the temporary rule -> still exit 3 (nc is not the broker: TLS handshake dies = transport error) (rc=3)
 CHECK PASS: O1b: stderr carries FAIL CLOSED
@@ -155,7 +155,7 @@ CHECK PASS: O1b: nc received 273 bytes (TLS ClientHello passed the rule)
 ================================================================
 -- rc=3
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"d9a20cb137da88b70d21653fb1af38a8"}
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"7a19b9d060fbee560e82a2d988f10691"}
   | tmb: broker unreachable at host.openshell.internal:19999: dial tcp 198.18.0.2:19999: connect: permission denied - FAIL CLOSED, nothing executed
 -- stdout --
 CHECK PASS: O1c: same call after rule removal -> exit 3 again (rc=3)
@@ -169,7 +169,7 @@ CHECK PASS: O1c: nc received ZERO bytes again
 -- live policy now: network_policies empty (fs section intact)
 -- rc=3
 -- stderr --
-  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/o2-marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"2c16178139f4fffdef496eb64a024374"}
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/o2-marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"ac93048ca5186edc4ab405d7ab34c4ef"}
   | tmb: broker unreachable at host.openshell.internal:17600: dial tcp: lookup host.openshell.internal on 127.0.0.53:53: server misbehaving - FAIL CLOSED, nothing executed
 -- stdout --
 CHECK PASS: O2b: tmb exec with the rule removed -> exit 3 (rc=3)
@@ -182,8 +182,8 @@ CHECK PASS: O2b: broker JSONL gained no request event (1 -> 1)
 ================================================================
 -- rc=0
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"7e86d58343a0099b3f2831b7223ac259"}
-  | TOK: bbc7fd2679a395db (one-shot token, ttl=3s)
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"8d0c9362b744876bf0784b66a39a9b02"}
+  | TOK: c76a9ad56d20487d (one-shot token, ttl=3s)
   | EXIT: 0
 -- stdout --
   | 0
@@ -195,12 +195,12 @@ CHECK PASS: O2c: stdout is exactly '0' (stdout='0')
 ================================================================
 -- restarting the gateway the clean way (brew service, no kill -9)
 CHECK PASS: O4: gateway re-Connected after brew services restart (forwarder tmb-osh-gwreach kept)
-CHECK PASS: O4: sandbox tmb8-tn3dacp106m still Ready after the gateway restart
+CHECK PASS: O4: sandbox tmb8-tnskqipcxh still Ready after the gateway restart
 -- observed gateway-restart behavior: sandbox survived; policy source of truth = gateway-side sandbox state
 -- O4: O1a repeat - a port without a rule stays denied after the restart
 -- rc=3
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"2fecd9de430957a064a98a9266dd7f68"}
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"31091697a35120e70089d4ef39df1dcb"}
   | tmb: broker unreachable at host.openshell.internal:19999: dial tcp 198.18.0.2:19999: connect: permission denied - FAIL CLOSED, nothing executed
 -- stdout --
 CHECK PASS: O4: O1a repeat after restart -> exit 3 (rc=3)
@@ -209,8 +209,8 @@ CHECK PASS: O4: O1a repeat - nc received ZERO bytes
 -- O4: O2a repeat - the single rule still carries exec
 -- rc=0
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"7672d6107c6c69047f3a5cdfbb1b8611"}
-  | TOK: 539dc1b5df42c8fc (one-shot token, ttl=3s)
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"9c9bb2e877b976f8127e880370a0aad4"}
+  | TOK: 52634fe1e98170f6 (one-shot token, ttl=3s)
   | EXIT: 0
 -- stdout --
   | 0
@@ -219,7 +219,7 @@ CHECK PASS: O4: O2a repeat stdout is exactly '0' (stdout='0')
 -- O4: rule removal still closes the entry point
 -- rc=3
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"af9b502f6607401a0890e4f3701a688d"}
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"402f2255994fb0c4ee4ac58adf7174ed"}
   | tmb: broker unreachable at host.openshell.internal:17600: dial tcp: lookup host.openshell.internal on 127.0.0.53:53: server misbehaving - FAIL CLOSED, nothing executed
 -- stdout --
 CHECK PASS: O4: rule removed after restart -> exit 3 again (rc=3)
@@ -230,8 +230,8 @@ CHECK PASS: O4: rule removed after restart -> exit 3 again (rc=3)
 -- O5: restore the single rule (O4 ended with the rule removed)
 -- rc=0
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"bfca6e059eb34d7af75fbb47e931f717"}
-  | TOK: abd664b95d607ddc (one-shot token, ttl=3s)
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"f929bbf78c2d3c014577994a5a4b97b9"}
+  | TOK: 267c79628b9fd7eb (one-shot token, ttl=3s)
   | EXIT: 0
 -- stdout --
   | 0
@@ -241,7 +241,7 @@ CHECK PASS: O5: pre-kill smoke - stdout exactly '0' (stdout='0')
 CHECK PASS: O5: broker process dead (SIGKILL via pidfile)
 -- rc=3
 -- stderr --
-  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"53147708638643afd9ce94849379486f"}
+  | REQ: {"executable":"/usr/bin/touch","argv":["/usr/bin/touch","/tmp/marker"],"cwd":"/tmp","uid":0,"env":{},"nonce":"b533e0211f7aed8f44814a12453b0692"}
   | tmb: TLS handshake with host.openshell.internal:17600 failed: EOF - FAIL CLOSED, nothing executed
 -- stdout --
 CHECK PASS: O5: broker dead -> client exits 3 (fail closed) (rc=3)
@@ -261,7 +261,7 @@ CHECK PASS: O5: /etc/sudo.conf has ZERO Plugin lines (no TMB sudo plugin)
 == SCENARIO O6: live manual approval - pty drives y/n, no human involved
 ================================================================
 -- O6: JSONL lines before the manual broker: 23
--- O6 driver: manual broker up (approval manual, ttl=15s), console -> /tmp/tmb-osh.x55ROb/o6-console.log
+-- O6 driver: manual broker up (approval manual, ttl=15s), console -> /tmp/tmb-osh.qhrQPb/o6-console.log
 -- O6 driver: request 1 (id -u) answered y, client rc=0
 -- O6 driver: request 2 (id -G) answered n, client rc=125
 -- O6 driver: done (console captured, manual broker stopped)
@@ -270,29 +270,29 @@ CHECK PASS: O6: pty driver completed unattended (broker manual, y then n fed thr
   | tmb-broker: listening on /run/tmb/tmb.sock (mode=manual ttl=15s pid=247)
   | tmb-broker: tls listening on :17600 (client certificates required, no plaintext)
   | === TMB APPROVAL REQUIRED ===
-  |   requester : key fp=4283cd9c0c607f48
-  |   executable: /usr/bin/id (realpath /usr/bin/id, dev=69 ino=3025125)
+  |   requester : key fp=ca275b735f44b6f3
+  |   executable: /usr/bin/id (realpath /usr/bin/id, dev=65 ino=3025125)
   |   argv      : ["/usr/bin/id","-u"]
-  |   cwd       : /tmp
+  |   cwd       : /tmp (realpath /tmp)
   |   run as uid: 0
   |   env       : ["LANG=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
-  |   nonce     : adb35939b9416f5ee7bb4de1592af340
+  |   nonce     : 1a6217d6f43a073d44c8d18115b061d1
   | Approve exactly this command? [y/N]: y
   | HUMAN ANSWER: "y" -> APPROVED
   | === TMB APPROVAL REQUIRED ===
-  |   requester : key fp=4283cd9c0c607f48
-  |   executable: /usr/bin/id (realpath /usr/bin/id, dev=69 ino=3025125)
+  |   requester : key fp=ca275b735f44b6f3
+  |   executable: /usr/bin/id (realpath /usr/bin/id, dev=65 ino=3025125)
   |   argv      : ["/usr/bin/id","-G"]
-  |   cwd       : /tmp
+  |   cwd       : /tmp (realpath /tmp)
   |   run as uid: 0
   |   env       : ["LANG=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
-  |   nonce     : 7f28e2f7c63b433b2901823675b728c8
+  |   nonce     : 139d98a037f68244a507c157f43cef13
   | Approve exactly this command? [y/N]: n
   | HUMAN ANSWER: "n" -> DENIED
 -- rc=0
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"adb35939b9416f5ee7bb4de1592af340"}
-  | TOK: a2f2a905d0699e25 (one-shot token, ttl=15s)
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-u"],"cwd":"/tmp","uid":0,"env":{},"nonce":"1a6217d6f43a073d44c8d18115b061d1"}
+  | TOK: f48939597b59642f (one-shot token, ttl=15s)
   | EXIT: 0
 -- stdout --
   | 0
@@ -300,28 +300,28 @@ CHECK PASS: O6: answered y -> command executed, exit 0 (rc=0)
 CHECK PASS: O6: answered y -> stdout is exactly '0' (streamed back to the sandbox) (stdout='0')
 -- rc=125
 -- stderr --
-  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-G"],"cwd":"/tmp","uid":0,"env":{},"nonce":"7f28e2f7c63b433b2901823675b728c8"}
+  | REQ: {"executable":"/usr/bin/id","argv":["/usr/bin/id","-G"],"cwd":"/tmp","uid":0,"env":{},"nonce":"139d98a037f68244a507c157f43cef13"}
   | tmb: DENIED: approval_denied_by_human (nothing was executed)
 -- stdout --
 CHECK PASS: O6: answered n -> exit 125 (rc=125)
 CHECK PASS: O6: deny reason approval_denied_by_human
-CHECK PASS: O6: console shows the requester identity line key fp=4283cd9c0c607f48
+CHECK PASS: O6: console shows the requester identity line key fp=ca275b735f44b6f3
 CHECK PASS: O6: console shows EXACT argv of the y-request
 CHECK PASS: O6: console shows EXACT argv of the n-request
 CHECK PASS: O6: console shows the approval prompt
 -- O6: JSONL events in the O6 window (12 lines):
-  | {"event":"claim_gc","removed":0,"schema":2,"skipped":0,"ts":"2026-10-18T07:12:27.791556719Z"}
-  | {"allowed_requester_keys":["4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2"],"allowed_requester_uids":[4242],"event":"broker_start","mode":"manual","pid":247,"schema":2,"socket":"/run/tmb/tmb.sock","tls_addr":":17600","ts":"2026-10-18T07:12:27.795021261Z","ttl_seconds":15}
-  | {"addr":":17600","event":"tls_listen","schema":2,"ts":"2026-10-18T07:12:27.796519344Z"}
-  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","hash":"a2f2a905d0699e25d42b97d19d3578b552c9c6357733242d9ebc72aecb0d7f6b","nonce":"adb35939b9416f5ee7bb4de1592af340","requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","schema":2,"transport":"tls","ts":"2026-10-18T07:12:28.172929344Z","type":"exec","uid":0}
-  | {"approver":"mode:manual","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","hash":"a2f2a905d0699e25d42b97d19d3578b552c9c6357733242d9ebc72aecb0d7f6b","mode":"manual","nonce":"adb35939b9416f5ee7bb4de1592af340","reason":"","requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","result":"granted","schema":2,"ts":"2026-10-18T07:12:28.220476219Z"}
-  | {"event":"claim","executable":"/usr/bin/id","hash":"a2f2a905d0699e25d42b97d19d3578b552c9c6357733242d9ebc72aecb0d7f6b","nonce":"adb35939b9416f5ee7bb4de1592af340","requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","result":"ok","schema":2,"token":"a2f2a905d0699e25","ts":"2026-10-18T07:12:28.227446511Z"}
-  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":69,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","schema":2,"token":"a2f2a905d0699e25","ts":"2026-10-18T07:12:28.228763177Z","uid":0}
-  | {"client_gone":false,"duration_ms":2,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","schema":2,"token":"a2f2a905d0699e25","ts":"2026-10-18T07:12:28.231189677Z"}
-  | {"argv":["/usr/bin/id","-G"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","hash":"e7b6ebfb29718608971563b383d04d19c84603b3a3d9316e3bf7d168c31bc907","nonce":"7f28e2f7c63b433b2901823675b728c8","requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","schema":2,"transport":"tls","ts":"2026-10-18T07:12:28.353502344Z","type":"exec","uid":0}
-  | {"approver":"mode:manual","argv":["/usr/bin/id","-G"],"decision":"deny","event":"approval","executable":"/usr/bin/id","hash":"e7b6ebfb29718608971563b383d04d19c84603b3a3d9316e3bf7d168c31bc907","mode":"manual","nonce":"7f28e2f7c63b433b2901823675b728c8","reason":"approval_denied_by_human","requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","result":"denied","schema":2,"ts":"2026-10-18T07:12:28.401729886Z"}
-  | {"argv":["/usr/bin/id","-G"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/id","hash":"e7b6ebfb29718608971563b383d04d19c84603b3a3d9316e3bf7d168c31bc907","nonce":"7f28e2f7c63b433b2901823675b728c8","reason":"approval_denied_by_human","requester_fp":"4283cd9c0c607f482d770a51dae1a4bec315e194c3133fc0f1870aceda191af2","schema":2,"ts":"2026-10-18T07:12:28.408209219Z"}
-  | {"event":"broker_stop","pid":247,"schema":2,"ts":"2026-10-18T07:12:28.483224344Z"}
+  | {"event":"claim_gc","removed":0,"schema":2,"skipped":0,"ts":"2026-10-31T21:53:17.80091609Z"}
+  | {"allowed_requester_keys":["ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873"],"allowed_requester_uids":[4242],"event":"broker_start","mode":"manual","pid":247,"schema":2,"socket":"/run/tmb/tmb.sock","tls_addr":":17600","ts":"2026-10-31T21:53:17.803456382Z","ttl_seconds":15}
+  | {"addr":":17600","event":"tls_listen","schema":2,"ts":"2026-10-31T21:53:17.804357799Z"}
+  | {"argv":["/usr/bin/id","-u"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","hash":"f48939597b59642f2f5997625fa31e849ca467186261c8b722fbb8be1f3eb687","nonce":"1a6217d6f43a073d44c8d18115b061d1","requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","schema":2,"transport":"tls","ts":"2026-10-31T21:53:18.171145382Z","type":"exec","uid":0}
+  | {"approver":"mode:manual","argv":["/usr/bin/id","-u"],"decision":"approve","event":"approval","executable":"/usr/bin/id","hash":"f48939597b59642f2f5997625fa31e849ca467186261c8b722fbb8be1f3eb687","mode":"manual","nonce":"1a6217d6f43a073d44c8d18115b061d1","reason":"","requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","result":"granted","schema":2,"ts":"2026-10-31T21:53:18.176311341Z"}
+  | {"event":"claim","executable":"/usr/bin/id","hash":"f48939597b59642f2f5997625fa31e849ca467186261c8b722fbb8be1f3eb687","nonce":"1a6217d6f43a073d44c8d18115b061d1","requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","result":"ok","schema":2,"token":"f48939597b59642f","ts":"2026-10-31T21:53:18.179044466Z"}
+  | {"argv":["/usr/bin/id","-u"],"cwd":"/tmp","cwd_verified":true,"cwd_via_fd":true,"env_count":2,"event":"exec_start","exe_dev":65,"exe_ino":3025125,"exe_via_fd":true,"executable":"/usr/bin/id","requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","schema":2,"token":"f48939597b59642f","ts":"2026-10-31T21:53:18.179424049Z","uid":0}
+  | {"client_gone":false,"duration_ms":1,"event":"exec_exit","executable":"/usr/bin/id","exit_status":0,"requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","schema":2,"token":"f48939597b59642f","ts":"2026-10-31T21:53:18.180788632Z"}
+  | {"argv":["/usr/bin/id","-G"],"claim_token":"","cwd":"/tmp","env":null,"event":"request","executable":"/usr/bin/id","hash":"1cfe4e462cb349820bf8b601582aff44b36b14da4c11561952d8f13753250d38","nonce":"139d98a037f68244a507c157f43cef13","requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","schema":2,"transport":"tls","ts":"2026-10-31T21:53:18.275448591Z","type":"exec","uid":0}
+  | {"approver":"mode:manual","argv":["/usr/bin/id","-G"],"decision":"deny","event":"approval","executable":"/usr/bin/id","hash":"1cfe4e462cb349820bf8b601582aff44b36b14da4c11561952d8f13753250d38","mode":"manual","nonce":"139d98a037f68244a507c157f43cef13","reason":"approval_denied_by_human","requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","result":"denied","schema":2,"ts":"2026-10-31T21:53:18.292569966Z"}
+  | {"argv":["/usr/bin/id","-G"],"detail":"nothing was executed","event":"deny","executable":"/usr/bin/id","hash":"1cfe4e462cb349820bf8b601582aff44b36b14da4c11561952d8f13753250d38","nonce":"139d98a037f68244a507c157f43cef13","reason":"approval_denied_by_human","requester_fp":"ca275b735f44b6f3fd20323ea850de9844dd2dd1ce83981a810782ed3398f873","schema":2,"ts":"2026-10-31T21:53:18.293221007Z"}
+  | {"event":"broker_stop","pid":247,"schema":2,"ts":"2026-10-31T21:53:18.347724966Z"}
 CHECK PASS: O6: JSONL request events (2) all carry requester_fp=fp1
 CHECK PASS: O6: JSONL approval events (2) all carry requester_fp=fp1
 CHECK PASS: O6: JSONL claim events (1) all carry requester_fp=fp1
@@ -334,7 +334,7 @@ CHECK PASS: O6: JSONL exec_exit events (1) all carry requester_fp=fp1
 ------------------------------------------------------------------
 PASS | O0: openshell version == 0.1.3
 PASS | O0: Docker Desktop host networking ON, ECI OFF
-PASS | O0: local image matches ghcr.io/anomalyco/opencode@sha256:6911572e4a9b3ead5e4086b40e2c98bd82075dae617aff679767f358cf8f374e
+PASS | O0: local image matches ghcr.io/anomalyco/opencode@sha256:f4cfe16d91efbbfca01a51c44094fba4cf82e15c7fa17de5f11f9059699b1e6e
 PASS | O0: go list -m all -> only tmb-poc (stdlib only)
 PASS | GW: gateway Connected via https://127.0.0.1:17671 (forwarder tmb-osh-gwreach up)
 PASS | O0: sandbox image has sh
@@ -342,7 +342,7 @@ PASS | O0: sandbox image has id
 PASS | O0: sandbox image has test
 PASS | O0: sandbox image has openssl
 PASS | TOP: broker logged tls_listen on :17600
-PASS | TOP: sandbox tmb8-tn3dacp106m Ready (opencode image, uid 1000, NET=none)
+PASS | TOP: sandbox tmb8-tnskqipcxh Ready (opencode image, uid 1000, NET=none)
 PASS | TOP: effective policy = single rule tcp+tls:skip -> host.openshell.internal:17600 (binary /usr/local/bin/tmb)
 PASS | O2a: exit code 0 (rc=0)
 PASS | O2a: stdout is exactly '0' (stdout='0')
@@ -366,7 +366,7 @@ PASS | O2b: broker JSONL gained no request event (1 -> 1)
 PASS | O2c: tmb exec --root id -u -> exit 0 (rule restored without recreation) (rc=0)
 PASS | O2c: stdout is exactly '0' (stdout='0')
 PASS | O4: gateway re-Connected after brew services restart (forwarder tmb-osh-gwreach kept)
-PASS | O4: sandbox tmb8-tn3dacp106m still Ready after the gateway restart
+PASS | O4: sandbox tmb8-tnskqipcxh still Ready after the gateway restart
 PASS | O4: O1a repeat after restart -> exit 3 (rc=3)
 PASS | O4: O1a repeat stderr carries FAIL CLOSED
 PASS | O4: O1a repeat - nc received ZERO bytes
@@ -388,7 +388,7 @@ PASS | O6: answered y -> command executed, exit 0 (rc=0)
 PASS | O6: answered y -> stdout is exactly '0' (streamed back to the sandbox) (stdout='0')
 PASS | O6: answered n -> exit 125 (rc=125)
 PASS | O6: deny reason approval_denied_by_human
-PASS | O6: console shows the requester identity line key fp=4283cd9c0c607f48
+PASS | O6: console shows the requester identity line key fp=ca275b735f44b6f3
 PASS | O6: console shows EXACT argv of the y-request
 PASS | O6: console shows EXACT argv of the n-request
 PASS | O6: console shows the approval prompt
@@ -400,9 +400,9 @@ PASS | O6: JSONL exec_exit events (1) all carry requester_fp=fp1
 ------------------------------------------------------------------
 PASS: 65  FAIL: 0
 RESULT: GREEN - sandbox reaches the broker through exactly one rule; host stays isolated
-(certs were generated into /tmp/tmb-osh.x55ROb and wiped by the cleanup trap; per-run image removed; CA key never entered any image)
+(certs were generated into /tmp/tmb-osh.qhrQPb and wiped by the cleanup trap; per-run image removed; CA key never entered any image)
 === cleanup ===
--- sandbox tmb8-tn3dacp106m deleted
+-- sandbox tmb8-tnskqipcxh deleted
 -- container tmb-osh-host removed
--- image tmb-osh-sbx:1792307460-46894 removed (per-run certs gone)
+-- image tmb-osh-sbx:1793483514-16757 removed (per-run certs gone)
 -- forwarder tmb-osh-gwreach removed

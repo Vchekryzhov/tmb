@@ -842,7 +842,7 @@ start_broker mock-approve 10
 state_dump
 
 # -----------------------------------------------------------------------------
-log "SCENARIO N29: the journal reopens on SIGHUP, an unwritable journal closes the agent path, schema 1 on every line"
+log "SCENARIO N29: the journal reopens on SIGHUP, an unwritable journal closes the agent path, schema 2 on every line"
 # logrotate renames the file and sends SIGHUP: the broker opens a new file
 # at log_path. Then the log directory becomes unwritable and the file is
 # gone: the reopen fails, new requests get audit_unavailable and nothing
