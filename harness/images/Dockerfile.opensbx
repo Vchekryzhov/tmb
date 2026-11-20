@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/tmb ./cmd/tmb
 
 # The opencode digest below is the single source of OPENCODE_IMAGE_REF:
 # run-openshell.sh reads it from this FROM line.
-FROM ghcr.io/anomalyco/opencode@sha256:f4cfe16d91efbbfca01a51c44094fba4cf82e15c7fa17de5f11f9059699b1e6e
+FROM ghcr.io/anomalyco/opencode@sha256:de0dcdfb45b47080f9c01770cdd1c7af514cc2fb3dcd6cc3253b792fadb92dfa
 # base is Alpine; openssl is present for the O-series probes (s_client etc.)
 # hadolint ignore=DL3018 # base is digest-pinned; apk repository versions roll, the O-series needs only openssl
 RUN apk add --no-cache openssl
